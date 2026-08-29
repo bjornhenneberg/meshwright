@@ -14,7 +14,15 @@ Status: **early design.** See [SPECIFICATION.md](SPECIFICATION.md).
 
 ## Planned stack
 
-C# / .NET 9, Avalonia UI, Silk.NET (OpenGL) viewport.
+C# / .NET 10 (LTS), Avalonia UI, Silk.NET (OpenGL) viewport.
+
+## Development setup
+
+Ubuntu 24.04 / Linux Mint 22.x:
+
+```bash
+sudo apt install dotnet-sdk-10.0
+```
 
 ## Licence
 

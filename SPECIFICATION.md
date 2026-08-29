@@ -61,8 +61,11 @@ slicer. Scope discipline is the main risk to this project.
 The smallest set that makes someone uninstall Meshmixer.
 
 **Import / export**
-- Import: STL (binary + ASCII), OBJ, 3MF, PLY
-- Export: STL (binary), 3MF, OBJ
+- Import: STL (binary + ASCII), OBJ
+- Export: STL (binary), OBJ
+- 3MF and PLY are deferred to v1.x. STL covers the overwhelming majority of real
+  files; OBJ covers the rest. The importer interface is designed for more formats
+  from the start, but none are implemented in 1.0.
 - Unit handling: detect/assign mm vs inch, scale on import
 - Drag-and-drop, recent files list
 
@@ -109,6 +112,7 @@ The smallest set that makes someone uninstall Meshmixer.
 
 ### 5.2 v1.x — Follow-up
 
+- 3MF import/export (with colour and multi-object support) and PLY import
 - Auto-orientation for minimum support / best strength
 - Registration pins and dowel/puzzle joints on cut faces
 - Measurement tools (distance, wall thickness heat map)
@@ -134,7 +138,7 @@ The second product described in the plan, sharing the same geometry core:
 
 | Concern | Choice | Notes |
 | --- | --- | --- |
-| Language | C# / .NET 9 | Requested; strong desktop story, good perf with `Span<T>` and SIMD |
+| Language | C# / .NET 10 (LTS) | Requested; strong desktop story, good perf with `Span<T>` and SIMD. LTS matters for a tool users keep for years |
 | UI | Avalonia UI 11 | True cross-platform (Linux/Windows/macOS), MVVM, native-feeling |
 | 3D viewport | Silk.NET (OpenGL 3.3 core) | Embedded in Avalonia via a native control; OpenGL 3.3 for maximum hardware reach |
 | Math | System.Numerics + custom double-precision types | Single precision for rendering, double for geometry |
@@ -156,10 +160,23 @@ The realistic options:
   engine. Strong candidate for the boolean and hollowing operations specifically, via
   a thin C interop layer.
 
-**Plan:** fork g3Sharp as the base mesh representation and repair toolkit, add
-Manifold via interop for booleans, and write the printing-specific operations
-(drain holes, cut-and-cap, shell removal heuristics, diagnostics) in-house. Avoid
-any GPL dependency so the licence in §8 stays possible.
+**Plan (decided):** *vendor* selected parts of g3Sharp rather than forking it
+wholesale. A full fork means owning ~100k lines of unmaintained code, most of which
+(solvers, curve tooling, implicit surfaces, its own I/O) this project will never use.
+Instead, copy into `Meshwright.Geometry/Vendor/g3/` only what is needed, with the
+Boost licence header retained and provenance recorded in a `VENDOR.md`:
+
+- `DMesh3` and its index/attribute structures
+- `MeshNormals`, `MeshConnectedComponents`, `MeshBoundaryLoops`
+- `Reducer` (quadric decimation) and `Remesher`
+- `DMeshAABBTree3` (spatial queries, ray casts, self-intersection detection)
+- `MarchingCubes` and `MeshSignedDistanceGrid` (voxel remesh / solidify / hollow)
+
+Booleans come from **Manifold** (MIT) through a thin C interop layer, not from
+g3Sharp's voxel booleans, which are lossy. Printing-specific operations (drain holes,
+cut-and-cap, shell-removal heuristics, the diagnostics report) are written in-house.
+
+No GPL dependency, so the licence in §8 remains possible.
 
 ### 6.3 Architecture
 
@@ -220,7 +237,10 @@ v1.x features, then the resin module.
   build it themselves.
 - Prebuilt, signed, auto-updating binaries are sold: **one-time ~€30, includes all
   1.x updates.** Not a subscription.
-- Free prebuilt binaries for the Inspect-only feature set, as the funnel.
+- The free and paid downloads are the **same binary**. Editing and export features
+  are gated behind a licence key; inspection, diagnostics and the repair report are
+  always available. One build to produce, test and ship; upgrading is entering a key,
+  not reinstalling.
 - GitHub Sponsors and a donate button as a secondary channel.
 - Consider a separate commercial support/batch-CLI tier later, aimed at print shops.
 
@@ -235,26 +255,71 @@ source, and matches how this audience already buys tools.
 | **Scope creep into "another Blender"** | The non-goals in §2 are binding. Every feature must answer "does this get a mesh to the slicer?" |
 | Robust booleans and self-intersection repair are genuinely hard | Use Manifold rather than writing one; voxel remesh as the always-works fallback |
 | Avalonia + OpenGL interop friction | Tackled in M0, before anything else is built |
-| g3Sharp is unmaintained | It is permissively licensed — fork it and own the fork |
+| g3Sharp is unmaintained | Vendor only the needed parts under Boost licence and own them outright — see §6.2 |
+| Licence gating in a single open-source binary is trivially patched out | Accepted. The paid build sells convenience and support, not DRM. Keep the check simple and unobtrusive |
 | No users notice the release | Build in public from M1; the "Meshmixer is dead" story is the marketing hook |
 | macOS notarisation cost/hassle | Linux + Windows first; macOS once there is revenue |
 
 ## 10. Open questions
 
-- Name and domain availability — "Meshwright" is a placeholder.
-- Fork g3Sharp wholesale, or vendor only the parts needed?
-- Is 3MF import worth full support in v1, or is STL + OBJ enough to start?
-- Should the Inspect tier be a genuinely separate free download, or the same binary
-  with editing disabled?
+- Name and domain availability — "Meshwright" is a placeholder, deferred until later.
+- Which permissive licence: MPL-2.0 (file-level copyleft, keeps improvements public)
+  or Apache-2.0 (maximum adoption)?
+- Ship Manifold as a prebuilt native binary per platform, or build it from source in
+  CI? Affects release complexity considerably.
+
+## 11. Decision log
+
+| Date | Decision |
+| --- | --- |
+| 2026-08-29 | STL + OBJ only for 1.0; 3MF and PLY deferred to v1.x |
+| 2026-08-29 | Free tier is the same binary with editing disabled, not a separate build |
+| 2026-08-29 | Vendor selected g3Sharp components rather than forking the whole project |
+| 2026-08-29 | Removed the mis-targeted Debian trixie apt repo |
+| 2026-08-29 | Target .NET 10 (LTS), installed system-wide via apt. .NET 9 was briefly used and discarded: it is STS and went out of support in May 2026 |
+
+## 12. Development environment
+
+Development host: Linux Mint 22.3 (Ubuntu 24.04 "noble" base), x86-64.
+
+The SDK is installed **system-wide via apt**:
+
+```bash
+sudo apt install dotnet-sdk-10.0
+```
+
+This comes from Ubuntu's own `noble-updates/main` and `noble-security/main`, not a
+PPA or a third-party feed, so security patches arrive automatically with normal
+system updates. Currently 10.0.111.
+
+### Runtime version policy
+
+Target **.NET 10, which is LTS**. Do not target .NET 9: it is an STS release that
+reached end of support in May 2026, and Ubuntu only offers it through a lagging
+backports PPA. For a desktop tool that users install once and keep for years, staying
+on LTS is worth more than early access to language features.
+
+A prior setup on this machine used a user-local install at `~/.dotnet` via
+`dotnet-install.sh`, as a workaround for a broken apt configuration (Microsoft's
+Debian 13 repository enabled against an Ubuntu base). Both the broken repository and
+the user-local SDK have been removed. If a future need arises for a second SDK
+version side by side, `dotnet-install.sh` into `~/.dotnet` remains the way to do it
+without touching the system install.
+
+### SDK pinning
+
+The repository should carry a `global.json` pinning the SDK feature band with
+`rollForward: latestFeature`, so contributors and CI build against a known toolchain
+rather than whatever happens to be on PATH. To be added with the solution skeleton in
+M0.
 
 ---
 
 ## Immediate next steps
 
-1. Install the .NET 9 SDK (not currently present on this machine).
-2. Validate M0: Avalonia window with a Silk.NET OpenGL control rendering a triangle,
+1. Validate M0: Avalonia window with a Silk.NET OpenGL control rendering a triangle,
    then an STL. If this is painful, reconsider the UI stack now rather than later.
-3. Collect a test corpus: 20-30 real broken meshes from Thingiverse/Printables plus
+2. Collect a test corpus: 20-30 real broken meshes from Thingiverse/Printables plus
    scanner output, kept as regression fixtures.
-4. Read a week of "Meshmixer alternative" threads and turn them into a prioritised
+3. Read a week of "Meshmixer alternative" threads and turn them into a prioritised
    feature list to check against §5.1.
