@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Meshwright.Geometry\Meshwright.Geometry.csproj" />
+    <ProjectReference Include="..\Meshwright.IO\Meshwright.IO.csproj" />
+  </ItemGroup>
+
+</Project>
