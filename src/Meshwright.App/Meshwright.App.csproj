@@ -6,6 +6,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <None Remove="Assets\SampleMesh.stl" />
+    <EmbeddedResource Include="Assets\SampleMesh.stl" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Meshwright.Core\Meshwright.Core.csproj" />
     <ProjectReference Include="..\Meshwright.IO\Meshwright.IO.csproj" />
     <ProjectReference Include="..\Meshwright.Rendering\Meshwright.Rendering.csproj" />
@@ -16,6 +21,7 @@
     <PackageReference Include="Avalonia.Desktop" Version="11.3.20" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.20" />
     <PackageReference Include="Avalonia.Diagnostics" Version="11.3.20" Condition="'$(Configuration)' == 'Debug'" />
+    <PackageReference Include="Silk.NET.OpenGL" Version="2.23.0" />
   </ItemGroup>
 
 </Project>

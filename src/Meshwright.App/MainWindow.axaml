@@ -1,7 +1,17 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:views="using:Meshwright.App.Views"
         x:Class="Meshwright.App.MainWindow"
         Title="Meshwright"
         Width="1024"
         Height="768">
+  <DockPanel>
+    <Border DockPanel.Dock="Top" Padding="8" Background="{DynamicResource SystemAltHighColor}">
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <Button Name="OpenFileButton" Content="Open STL..." Click="OnOpenFileClick" />
+        <TextBlock Name="StatusText" VerticalAlignment="Center" Text="Loaded sample tetrahedron" />
+      </StackPanel>
+    </Border>
+    <views:MeshViewportControl Name="Viewport" />
+  </DockPanel>
 </Window>
