@@ -1,0 +1,11 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "type": "command",
+        "command": "./.github/hooks/scripts/build-on-edit.sh",
+        "timeout": 180
+      }
+    ]
+  }
+}
