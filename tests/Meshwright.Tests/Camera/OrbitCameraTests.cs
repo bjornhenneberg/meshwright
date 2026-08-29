@@ -181,4 +181,22 @@ public class OrbitCameraTests
         Assert.True(camera.NearPlane > 0f);
         Assert.True(camera.FarPlane > camera.NearPlane);
     }
+
+    [Theory]
+    [InlineData(0.01f)]
+    [InlineData(1f)]
+    [InlineData(100f)]
+    [InlineData(10000f)]
+    public void Frame_ClipPlanes_NeverClipObjectAtDistanceBounds(float radius)
+    {
+        var camera = new OrbitCamera();
+
+        camera.Frame(Vector3.Zero, radius);
+
+        // FarPlane must clear the object even when fully zoomed out to MaxDistance.
+        Assert.True(camera.FarPlane > camera.MaxDistance + radius);
+
+        // NearPlane must stay comfortably inside MinDistance so zooming all the way in doesn't clip.
+        Assert.True(camera.NearPlane < camera.MinDistance);
+    }
 }

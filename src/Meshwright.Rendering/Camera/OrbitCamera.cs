@@ -88,8 +88,8 @@ public sealed class OrbitCamera
         MaxDistance = MathF.Max(radius * 200f, MinDistance * 10f);
         Distance = Math.Clamp(Distance, MinDistance, MaxDistance);
 
-        NearPlane = MathF.Max(radius * 0.001f, 0.0001f);
-        FarPlane = MathF.Max(radius * 100f, NearPlane * 10f);
+        NearPlane = MathF.Max(MinDistance * 0.1f, 0.0001f);
+        FarPlane = (MaxDistance + radius) * 1.5f;
     }
 
     public Matrix4x4 GetViewMatrix()
