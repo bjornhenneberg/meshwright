@@ -1,0 +1,22 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+artifacts/
+publish/
+[Dd]ebug/
+[Rr]elease/
+*.nupkg
+
+## Editors
+.vs/
+.idea/
+*.swp
+
+## OS
+.DS_Store
+Thumbs.db
+
+## Project
+/testdata/local/
