@@ -37,17 +37,7 @@ public sealed class MeshViewportControl : OpenGlControlBase
         set
         {
             _mesh = value;
-            if (_renderer is not null)
-            {
-                if (value is not null)
-                {
-                    _renderer.UploadMesh(value);
-                }
-            }
-            else
-            {
-                _pendingMesh = value;
-            }
+            _pendingMesh = value;
 
             if (value is not null)
             {
@@ -64,12 +54,6 @@ public sealed class MeshViewportControl : OpenGlControlBase
         _gl = Silk.NET.OpenGL.GL.GetApi(gl.GetProcAddress);
         _renderer = new MeshRenderer(_gl);
         _renderer.Initialize();
-
-        if (_pendingMesh is not null)
-        {
-            _renderer.UploadMesh(_pendingMesh);
-            _pendingMesh = null;
-        }
     }
 
     protected override void OnOpenGlRender(GlInterface gl, int fb)
@@ -77,6 +61,13 @@ public sealed class MeshViewportControl : OpenGlControlBase
         if (_gl is null || _renderer is null)
         {
             return;
+        }
+
+        // Uploads must happen here (not in the Mesh setter) because only Avalonia's GL callbacks guarantee a current GL context.
+        if (_pendingMesh is not null)
+        {
+            _renderer.UploadMesh(_pendingMesh);
+            _pendingMesh = null;
         }
 
         // OpenGlControlBase does not bind the target framebuffer for us; it hands back the
