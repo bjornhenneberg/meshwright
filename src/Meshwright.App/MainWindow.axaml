@@ -12,6 +12,16 @@
         <TextBlock Name="StatusText" VerticalAlignment="Center" Text="Loaded sample tetrahedron" />
       </StackPanel>
     </Border>
-    <views:MeshViewportControl Name="Viewport" />
+    <Panel>
+      <views:MeshViewportControl Name="Viewport" />
+      <!-- Transparent hit-test overlay: on Linux the GL surface doesn't reliably participate in
+           Avalonia's input routing, so pointer events are forwarded through this overlay instead. -->
+      <Border Name="ViewportInputOverlay"
+              Background="Transparent"
+              PointerPressed="OnViewportPointerPressed"
+              PointerMoved="OnViewportPointerMoved"
+              PointerReleased="OnViewportPointerReleased"
+              PointerWheelChanged="OnViewportPointerWheelChanged" />
+    </Panel>
   </DockPanel>
 </Window>

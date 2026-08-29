@@ -102,7 +102,45 @@ public sealed class MeshViewportControl : OpenGlControlBase
     protected override void OnPointerPressed(PointerPressedEventArgs e)
     {
         base.OnPointerPressed(e);
+        HandlePointerPressed(e);
+    }
 
+    protected override void OnPointerMoved(PointerEventArgs e)
+    {
+        base.OnPointerMoved(e);
+        HandlePointerMoved(e);
+    }
+
+    protected override void OnPointerReleased(PointerReleasedEventArgs e)
+    {
+        base.OnPointerReleased(e);
+        HandlePointerReleased(e);
+    }
+
+    protected override void OnPointerWheelChanged(PointerWheelEventArgs e)
+    {
+        base.OnPointerWheelChanged(e);
+        HandlePointerWheelChanged(e);
+    }
+
+    /// <summary>
+    /// Entry point for pointer input arriving via the transparent overlay control that sits on
+    /// top of this control in <c>MainWindow.axaml</c> (workaround for GL surfaces not always
+    /// participating in Avalonia's normal input routing on Linux). <paramref name="e"/> is
+    /// targeted at the overlay, but since the overlay occupies the same layout cell and is
+    /// stretched identically, <c>e.GetPosition(this)</c> yields the same coordinates as if the
+    /// event had targeted this control directly.
+    /// </summary>
+    public void HandleExternalPointerPressed(PointerPressedEventArgs e) => HandlePointerPressed(e);
+
+    public void HandleExternalPointerMoved(PointerEventArgs e) => HandlePointerMoved(e);
+
+    public void HandleExternalPointerReleased(PointerReleasedEventArgs e) => HandlePointerReleased(e);
+
+    public void HandleExternalPointerWheelChanged(PointerWheelEventArgs e) => HandlePointerWheelChanged(e);
+
+    private void HandlePointerPressed(PointerPressedEventArgs e)
+    {
         var point = e.GetCurrentPoint(this);
         if (point.Properties.IsLeftButtonPressed)
         {
@@ -119,10 +157,8 @@ public sealed class MeshViewportControl : OpenGlControlBase
         e.Pointer.Capture(this);
     }
 
-    protected override void OnPointerMoved(PointerEventArgs e)
+    private void HandlePointerMoved(PointerEventArgs e)
     {
-        base.OnPointerMoved(e);
-
         if (!_isOrbiting && !_isPanning)
         {
             return;
@@ -145,18 +181,15 @@ public sealed class MeshViewportControl : OpenGlControlBase
         RequestNextFrameRendering();
     }
 
-    protected override void OnPointerReleased(PointerReleasedEventArgs e)
+    private void HandlePointerReleased(PointerReleasedEventArgs e)
     {
-        base.OnPointerReleased(e);
         _isOrbiting = false;
         _isPanning = false;
         e.Pointer.Capture(null);
     }
 
-    protected override void OnPointerWheelChanged(PointerWheelEventArgs e)
+    private void HandlePointerWheelChanged(PointerWheelEventArgs e)
     {
-        base.OnPointerWheelChanged(e);
-
         // Scale the zoom step by current distance so it feels consistent whether zoomed in or out.
         _camera.Zoom((float)(-e.Delta.Y) * _camera.Distance * ZoomSensitivity * 100f);
         RequestNextFrameRendering();

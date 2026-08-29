@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Reflection;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using Meshwright.IO.Stl;
@@ -68,4 +69,16 @@ public partial class MainWindow : Window
             StatusText.Text = $"Failed to load {files[0].Name}: {ex.Message}";
         }
     }
+
+    private void OnViewportPointerPressed(object? sender, PointerPressedEventArgs e) =>
+        Viewport.HandleExternalPointerPressed(e);
+
+    private void OnViewportPointerMoved(object? sender, PointerEventArgs e) =>
+        Viewport.HandleExternalPointerMoved(e);
+
+    private void OnViewportPointerReleased(object? sender, PointerReleasedEventArgs e) =>
+        Viewport.HandleExternalPointerReleased(e);
+
+    private void OnViewportPointerWheelChanged(object? sender, PointerWheelEventArgs e) =>
+        Viewport.HandleExternalPointerWheelChanged(e);
 }
