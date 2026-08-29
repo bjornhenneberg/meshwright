@@ -71,6 +71,27 @@ public sealed class OrbitCamera
         Distance = Math.Clamp(Distance + delta, MinDistance, MaxDistance);
     }
 
+    /// <summary>
+    /// Frames the camera on a bounding sphere: centers the target, sets Distance so the sphere
+    /// fits within the vertical FOV, and rescales the distance/clip-plane ranges to the mesh's
+    /// scale so wildly different sized meshes (millimeters to meters) don't clip or feel wrong.
+    /// </summary>
+    public void Frame(Vector3 center, float radius)
+    {
+        radius = MathF.Max(radius, 0.001f);
+        Target = center;
+
+        const float marginFactor = 1.25f;
+        Distance = radius / MathF.Sin(FovRadians / 2f) * marginFactor;
+
+        MinDistance = MathF.Max(radius * 0.02f, 0.0001f);
+        MaxDistance = MathF.Max(radius * 200f, MinDistance * 10f);
+        Distance = Math.Clamp(Distance, MinDistance, MaxDistance);
+
+        NearPlane = MathF.Max(radius * 0.001f, 0.0001f);
+        FarPlane = MathF.Max(radius * 100f, NearPlane * 10f);
+    }
+
     public Matrix4x4 GetViewMatrix()
     {
         return Matrix4x4.CreateLookAt(Position, Target, Vector3.UnitY);

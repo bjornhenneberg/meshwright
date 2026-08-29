@@ -49,6 +49,12 @@ public sealed class MeshViewportControl : OpenGlControlBase
                 _pendingMesh = value;
             }
 
+            if (value is not null)
+            {
+                (System.Numerics.Vector3 center, float radius) = value.GetBounds();
+                _camera.Frame(center, radius);
+            }
+
             RequestNextFrameRendering();
         }
     }

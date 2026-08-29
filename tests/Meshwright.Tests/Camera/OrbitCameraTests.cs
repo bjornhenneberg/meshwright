@@ -135,4 +135,50 @@ public class OrbitCameraTests
         Assert.True(camera.NearPlane > 0f);
         Assert.True(camera.FarPlane > camera.NearPlane);
     }
+
+    [Fact]
+    public void Frame_SetsTargetToGivenCenter()
+    {
+        var camera = new OrbitCamera();
+        var center = new Vector3(1f, 2f, 3f);
+
+        camera.Frame(center, 5f);
+
+        Assert.Equal(center, camera.Target);
+    }
+
+    [Fact]
+    public void Frame_DistanceIsPositiveAndProportionalToRadius()
+    {
+        var camera = new OrbitCamera();
+
+        camera.Frame(Vector3.Zero, 2f);
+        float distanceSmall = camera.Distance;
+
+        camera.Frame(Vector3.Zero, 20f);
+        float distanceLarge = camera.Distance;
+
+        Assert.True(distanceSmall > 0f);
+        Assert.True(distanceLarge > 0f);
+        Assert.True(distanceLarge > distanceSmall);
+    }
+
+    [Theory]
+    [InlineData(10000f)]
+    [InlineData(0.01f)]
+    public void Frame_ExtremeRadii_ProduceValidNonDegenerateCamera(float radius)
+    {
+        var camera = new OrbitCamera();
+
+        camera.Frame(Vector3.Zero, radius);
+
+        Assert.False(float.IsNaN(camera.Distance));
+        Assert.False(float.IsNaN(camera.NearPlane));
+        Assert.False(float.IsNaN(camera.FarPlane));
+        Assert.True(camera.Distance > 0f);
+        Assert.True(camera.MinDistance < camera.Distance);
+        Assert.True(camera.Distance < camera.MaxDistance);
+        Assert.True(camera.NearPlane > 0f);
+        Assert.True(camera.FarPlane > camera.NearPlane);
+    }
 }
