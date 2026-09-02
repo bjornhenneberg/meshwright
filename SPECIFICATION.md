@@ -2,8 +2,9 @@
 
 **Status:** Draft v0.2 — living document, updated as milestones land
 **Working name:** Meshwright (placeholder — rename freely)
-**Progress:** M0 (Skeleton) and M1 (Inspect) complete and verified; see
-`reports/M0/SUMMARY.md` and `reports/M1/SUMMARY.md`. M2 (Repair) is next.
+**Progress:** M0 (Skeleton), M1 (Inspect), and M2 (Repair) complete and
+verified; see `reports/M0/SUMMARY.md`, `reports/M1/SUMMARY.md`, and
+`reports/M2/SUMMARY.md`. M3 (Edit) is next.
 
 ---
 
@@ -231,10 +232,24 @@ plain-language summary, per-issue list); and GL highlighting of flagged geometry
 verified with GPU pixel-diff tests against a real broken sample mesh. 75/75 tests
 passing (69 unit + 6 GPU).
 
-**M2 — Repair** ← next
+**M2 — Repair** ✅ Complete (`reports/M2/SUMMARY.md`)
 Auto Repair plus the individual repair operations. Undo stack. Export.
+Delivered: an `IMeshOperation` contract (`Preview`/`Apply` per §6.3) with a
+snapshot-based undo stack wired into `MeshDocument`; the six individually-
+runnable repair operations from §5.1 (degenerate-triangle/duplicate-vertex
+removal, normal unification, small-shell removal, hole filling in flat/
+planar/smooth variants, self-intersection resolution, and voxel remesh/
+solidify — the last requiring new vendoring of `MarchingCubes` and
+`MeshSignedDistanceGrid` from g3Sharp); an `AutoRepairPipeline` composing five
+of the six into one undoable step (voxel remesh stays manual-only by design,
+per its "sledgehammer fallback" framing); and binary STL / ASCII OBJ export
+writers. End-to-end verified by running the real default pipeline against
+M1's `BrokenSample.stl` fixture and confirming its issues clear, then undo
+restores them. 119/119 tests passing. No UI wiring (Repair panel, export
+dialog) yet — flagged as a known gap for M3/M4, not built in this pass since
+this milestone's scope didn't call for it.
 
-**M3 — Edit**
+**M3 — Edit** ← next
 Plane cut, booleans, transforms, hollow, drain holes, decimation.
 
 **M4 — Polish and release**
@@ -295,6 +310,9 @@ source, and matches how this audience already buys tools.
 | 2026-08-29 | M0 (Skeleton) complete: solution scaffolding, STL import, orbit camera, Silk.NET renderer, Avalonia integration. GPU pixel output unverified on the headless dev host — flagged for a manual smoke test |
 | 2026-08-31 | M1 (Inspect) complete: real vendored g3Sharp tree (not a handwritten subset — an earlier attempt at this was rejected on review), all 7 v1.0 detectors, diagnostics UI, and GPU pixel-diff-verified error highlighting |
 | 2026-08-31 | Every vendored g3Sharp file carries its own per-file Boost Software License 1.0 header, beyond upstream's repo-root-only licensing, to keep provenance unambiguous file-by-file |
+| 2026-09-02 | M2 (Repair) complete: `IMeshOperation` contract + snapshot undo stack, all six repair operations, `AutoRepairPipeline`, and STL/OBJ export |
+| 2026-09-02 | Voxel remesh/solidify is intentionally excluded from the default `AutoRepairPipeline` sequence — it discards fine detail, so it stays a manual, individually-runnable fallback rather than something every Auto Repair run pays for |
+| 2026-09-02 | M2 shipped without UI wiring (no Repair panel or export dialog) — the milestone's task scope named pipeline/operations/undo/export without a UI requirement, so it was treated as out of scope rather than assumed; deferred to M3/M4 |
 
 ## 12. Development environment
 
@@ -338,13 +356,14 @@ M0.
 1. ~~Validate M0~~ — done; see `reports/M0/SUMMARY.md`. Outstanding: a manual smoke
    test of actual GPU pixel output on a machine with a display/GPU, since the dev
    host is headless.
-2. Start M2 — Repair: Auto Repair pipeline plus the individual operations in §5.1
-   (hole filling, normal unification, degenerate/duplicate cleanup, small-shell
-   removal, self-intersection resolution, voxel remesh fallback), the undo stack,
-   and STL/OBJ export.
-3. Collect a real test corpus: 20-30 broken meshes from Thingiverse/Printables plus
-   scanner output, kept as regression fixtures. M1's acceptance testing used one
+2. ~~Start M2 — Repair~~ — done; see `reports/M2/SUMMARY.md`. Outstanding: no UI
+   wiring yet (Repair panel, export dialog) — everything is usable
+   programmatically and tested end-to-end, but not yet exposed in `MainWindow`.
+3. Start M3 — Edit: plane cut, booleans (via Manifold), transforms, hollow, drain
+   holes, decimation, per §5.1/§7.
+4. Collect a real test corpus: 20-30 broken meshes from Thingiverse/Printables plus
+   scanner output, kept as regression fixtures. M1 and M2's testing used one
    synthetic `BrokenSample.stl`; real-world meshes are still needed, and matter more
-   once M2's repair operations need something to repair.
-4. Read a week of "Meshmixer alternative" threads and turn them into a prioritised
+   now that M2's repair operations exist to run against them.
+5. Read a week of "Meshmixer alternative" threads and turn them into a prioritised
    feature list to check against §5.1.
