@@ -1,7 +1,9 @@
 # Meshwright — Specification
 
-**Status:** Draft v0.1
+**Status:** Draft v0.2 — living document, updated as milestones land
 **Working name:** Meshwright (placeholder — rename freely)
+**Progress:** M0 (Skeleton) and M1 (Inspect) complete and verified; see
+`reports/M0/SUMMARY.md` and `reports/M1/SUMMARY.md`. M2 (Repair) is next.
 
 ---
 
@@ -208,15 +210,28 @@ reporting and cancellation.
 
 ## 7. Milestones
 
-**M0 — Skeleton**
+**M0 — Skeleton** ✅ Complete (`reports/M0/SUMMARY.md`)
 Solution structure, Avalonia window, Silk.NET viewport rendering a loaded STL with
 orbit/pan/zoom. Proves the hardest integration risk first.
+Delivered: `global.json` + solution scaffolding for all six projects in §6.3; binary/
+ASCII STL autodetection; `OrbitCamera` math; a Silk.NET `MeshRenderer`; and
+`MainWindow`/`MeshViewportControl` wiring with pointer/scroll input. 22/22 tests
+passing. Actual GPU pixel output could not be verified on the headless dev host and
+is flagged for a manual smoke test on a machine with a GPU.
 
-**M1 — Inspect**
+**M1 — Inspect** ✅ Complete (`reports/M1/SUMMARY.md`)
 Full mesh analysis and error highlighting. Shippable alone as a free "why won't this
 print?" tool — and a cheap way to find the first users.
+Delivered: a real vendored g3Sharp tree (92 files, see §6.2/`VENDOR.md`) replacing the
+M0 `TriangleMesh` stopgap; all 7 v1.0 detectors (non-manifold, boundary holes,
+self-intersections, inverted normals, degenerate triangles, duplicate vertices,
+disconnected shells) behind a shared `IMeshDetector`/`MeshDiagnosticsRunner`
+contract; `MeshDocument` wiring and a `MainWindow` diagnostics panel (statistics,
+plain-language summary, per-issue list); and GL highlighting of flagged geometry,
+verified with GPU pixel-diff tests against a real broken sample mesh. 75/75 tests
+passing (69 unit + 6 GPU).
 
-**M2 — Repair**
+**M2 — Repair** ← next
 Auto Repair plus the individual repair operations. Undo stack. Export.
 
 **M3 — Edit**
@@ -277,6 +292,9 @@ source, and matches how this audience already buys tools.
 | 2026-08-29 | Vendor selected g3Sharp components rather than forking the whole project |
 | 2026-08-29 | Removed the mis-targeted Debian trixie apt repo |
 | 2026-08-29 | Target .NET 10 (LTS), installed system-wide via apt. .NET 9 was briefly used and discarded: it is STS and went out of support in May 2026 |
+| 2026-08-29 | M0 (Skeleton) complete: solution scaffolding, STL import, orbit camera, Silk.NET renderer, Avalonia integration. GPU pixel output unverified on the headless dev host — flagged for a manual smoke test |
+| 2026-08-31 | M1 (Inspect) complete: real vendored g3Sharp tree (not a handwritten subset — an earlier attempt at this was rejected on review), all 7 v1.0 detectors, diagnostics UI, and GPU pixel-diff-verified error highlighting |
+| 2026-08-31 | Every vendored g3Sharp file carries its own per-file Boost Software License 1.0 header, beyond upstream's repo-root-only licensing, to keep provenance unambiguous file-by-file |
 
 ## 12. Development environment
 
@@ -317,9 +335,16 @@ M0.
 
 ## Immediate next steps
 
-1. Validate M0: Avalonia window with a Silk.NET OpenGL control rendering a triangle,
-   then an STL. If this is painful, reconsider the UI stack now rather than later.
-2. Collect a test corpus: 20-30 real broken meshes from Thingiverse/Printables plus
-   scanner output, kept as regression fixtures.
-3. Read a week of "Meshmixer alternative" threads and turn them into a prioritised
+1. ~~Validate M0~~ — done; see `reports/M0/SUMMARY.md`. Outstanding: a manual smoke
+   test of actual GPU pixel output on a machine with a display/GPU, since the dev
+   host is headless.
+2. Start M2 — Repair: Auto Repair pipeline plus the individual operations in §5.1
+   (hole filling, normal unification, degenerate/duplicate cleanup, small-shell
+   removal, self-intersection resolution, voxel remesh fallback), the undo stack,
+   and STL/OBJ export.
+3. Collect a real test corpus: 20-30 broken meshes from Thingiverse/Printables plus
+   scanner output, kept as regression fixtures. M1's acceptance testing used one
+   synthetic `BrokenSample.stl`; real-world meshes are still needed, and matter more
+   once M2's repair operations need something to repair.
+4. Read a week of "Meshmixer alternative" threads and turn them into a prioritised
    feature list to check against §5.1.

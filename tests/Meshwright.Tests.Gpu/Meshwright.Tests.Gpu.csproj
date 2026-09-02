@@ -9,6 +9,7 @@
     <ProjectReference Include="..\..\src\Meshwright.Geometry\Meshwright.Geometry.csproj" />
     <ProjectReference Include="..\..\src\Meshwright.IO\Meshwright.IO.csproj" />
     <ProjectReference Include="..\..\src\Meshwright.Rendering\Meshwright.Rendering.csproj" />
+    <ProjectReference Include="..\..\src\Meshwright.Core\Meshwright.Core.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -48,14 +48,18 @@ public sealed class MeshRendererGpuTests : IClassFixture<GpuTestFixture>, IDispo
 
         TriangleMeshFixtures.SingleTriangle single = TriangleMeshFixtures.BuildSingleTriangle();
         _renderer.UploadMesh(single.Mesh);
-        (Vector3 singleCenter, float singleRadius) = single.Mesh.GetBounds();
-        camera.Frame(singleCenter, singleRadius);
+        g3.AxisAlignedBox3d singleBounds = single.Mesh.CachedBounds;
+        g3.Vector3d singleCenter = singleBounds.Center;
+        double singleRadius = singleBounds.DiagonalLength / 2.0;
+        camera.Frame(new Vector3((float)singleCenter.x, (float)singleCenter.y, (float)singleCenter.z), (float)singleRadius);
         byte[] firstFrame = RenderAndReadPixels(camera);
 
         TriangleMeshFixtures.Cube cube = TriangleMeshFixtures.BuildCube();
         _renderer.UploadMesh(cube.Mesh);
-        (Vector3 cubeCenter, float cubeRadius) = cube.Mesh.GetBounds();
-        camera.Frame(cubeCenter, cubeRadius);
+        g3.AxisAlignedBox3d cubeBounds = cube.Mesh.CachedBounds;
+        g3.Vector3d cubeCenter = cubeBounds.Center;
+        double cubeRadius = cubeBounds.DiagonalLength / 2.0;
+        camera.Frame(new Vector3((float)cubeCenter.x, (float)cubeCenter.y, (float)cubeCenter.z), (float)cubeRadius);
         byte[] secondFrame = RenderAndReadPixels(camera);
 
         Assert.False(firstFrame.AsSpan().SequenceEqual(secondFrame), "Switching meshes did not change the rendered output.");
@@ -73,8 +77,10 @@ public sealed class MeshRendererGpuTests : IClassFixture<GpuTestFixture>, IDispo
         _renderer.UploadMesh(cube.Mesh);
 
         var camera = new OrbitCamera();
-        (Vector3 center, float radius) = cube.Mesh.GetBounds();
-        camera.Frame(center, radius);
+        g3.AxisAlignedBox3d bounds = cube.Mesh.CachedBounds;
+        g3.Vector3d center = bounds.Center;
+        double radius = bounds.DiagonalLength / 2.0;
+        camera.Frame(new Vector3((float)center.x, (float)center.y, (float)center.z), (float)radius);
 
         // Frame() sets MaxDistance to ~200x the mesh radius, at which the mesh would subtend
         // well under a pixel at the default FOV and 64x64 resolution regardless of clipping.
@@ -101,6 +107,66 @@ public sealed class MeshRendererGpuTests : IClassFixture<GpuTestFixture>, IDispo
         }
 
         Assert.True(anyNonBackgroundPixel, "The mesh was fully clipped out of view at MaxDistance (far-plane regression).");
+    }
+
+    [SkippableFact]
+    public void UploadMesh_WithFlaggedTriangle_ChangesRenderedPixelsVersusUnflagged()
+    {
+        Skip.IfNot(_fixture.IsAvailable, _fixture.UnavailableReason ?? "No real GL context available.");
+
+        _renderer = new MeshRenderer(_fixture.GL!);
+        _renderer.Initialize();
+
+        var camera = new OrbitCamera();
+        TriangleMeshFixtures.Cube cube = TriangleMeshFixtures.BuildCube();
+        g3.AxisAlignedBox3d bounds = cube.Mesh.CachedBounds;
+        g3.Vector3d center = bounds.Center;
+        double radius = bounds.DiagonalLength / 2.0;
+        camera.Frame(new Vector3((float)center.x, (float)center.y, (float)center.z), (float)radius);
+
+        _renderer.UploadMesh(cube.Mesh);
+        byte[] unflaggedFrame = RenderAndReadPixels(camera);
+
+        // Triangle 2 is on the +z "front" face, which faces the default camera (yaw=45°,
+        // pitch=30°); triangle 0 is on the occluded -z "back" face and wouldn't show any
+        // visible pixel difference regardless of highlighting.
+        _renderer.UploadMesh(cube.Mesh, flaggedTriangleIds: new[] { 2 });
+        byte[] flaggedFrame = RenderAndReadPixels(camera);
+
+        Assert.False(
+            unflaggedFrame.AsSpan().SequenceEqual(flaggedFrame),
+            "Flagging a triangle for highlighting did not change the rendered output.");
+    }
+
+    [SkippableFact]
+    public void UploadMesh_WithFlaggedEdge_ChangesRenderedPixelsVersusUnflagged()
+    {
+        Skip.IfNot(_fixture.IsAvailable, _fixture.UnavailableReason ?? "No real GL context available.");
+
+        _renderer = new MeshRenderer(_fixture.GL!);
+        _renderer.Initialize();
+
+        var camera = new OrbitCamera();
+        TriangleMeshFixtures.Cube cube = TriangleMeshFixtures.BuildCube();
+        g3.AxisAlignedBox3d bounds = cube.Mesh.CachedBounds;
+        g3.Vector3d center = bounds.Center;
+        double radius = bounds.DiagonalLength / 2.0;
+        camera.Frame(new Vector3((float)center.x, (float)center.y, (float)center.z), (float)radius);
+
+        // Triangle 2 is on the +z "front" face, which faces the default camera; an edge on
+        // the occluded -z "back" face wouldn't show any visible pixel difference.
+        g3.Index3i frontTriangle = cube.Mesh.GetTriangle(2);
+        var flaggedEdges = new[] { new g3.Index2i(frontTriangle.a, frontTriangle.b) };
+
+        _renderer.UploadMesh(cube.Mesh);
+        byte[] unflaggedFrame = RenderAndReadPixels(camera);
+
+        _renderer.UploadMesh(cube.Mesh, flaggedEdges: flaggedEdges);
+        byte[] flaggedFrame = RenderAndReadPixels(camera);
+
+        Assert.False(
+            unflaggedFrame.AsSpan().SequenceEqual(flaggedFrame),
+            "Flagging an edge for highlighting did not change the rendered output.");
     }
 
     private unsafe byte[] RenderAndReadPixels(OrbitCamera camera)

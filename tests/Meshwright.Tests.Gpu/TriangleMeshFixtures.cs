@@ -1,27 +1,22 @@
 using System.Numerics;
-using Meshwright.Geometry;
-
 namespace Meshwright.Tests.Gpu;
 
-/// <summary>Small, hand-built <see cref="TriangleMesh"/> fixtures for GPU regression tests.</summary>
+/// <summary>Small, hand-built indexed mesh fixtures for GPU regression tests.</summary>
 internal static class TriangleMeshFixtures
 {
-    internal readonly record struct SingleTriangle(TriangleMesh Mesh);
+    internal readonly record struct SingleTriangle(g3.DMesh3 Mesh);
 
-    internal readonly record struct Cube(TriangleMesh Mesh);
+    internal readonly record struct Cube(g3.DMesh3 Mesh);
 
     /// <summary>A single flat triangle facing the default camera, centered near the origin.</summary>
     internal static SingleTriangle BuildSingleTriangle()
     {
-        var positions = new[]
-        {
-            new Vector3(-0.5f, -0.5f, 0f),
-            new Vector3(0.5f, -0.5f, 0f),
-            new Vector3(0f, 0.5f, 0f),
-        };
-        var normals = new[] { Vector3.UnitZ };
-
-        return new SingleTriangle(new TriangleMesh(positions, normals));
+        var mesh = new g3.DMesh3();
+        int a = mesh.AppendVertex(new g3.Vector3d(-0.5, -0.5, 0));
+        int b = mesh.AppendVertex(new g3.Vector3d(0.5, -0.5, 0));
+        int c = mesh.AppendVertex(new g3.Vector3d(0, 0.5, 0));
+        mesh.AppendTriangle(a, b, c);
+        return new SingleTriangle(mesh);
     }
 
     /// <summary>A larger, multi-triangle unit cube (12 triangles, one flat normal each), centered at the origin.</summary>
@@ -43,21 +38,18 @@ internal static class TriangleMeshFixtures
             (4, 5, 1), (4, 1, 0), // bottom
         };
 
-        var positions = new Vector3[faces.Length * 3];
-        var normals = new Vector3[faces.Length];
+        var mesh = new g3.DMesh3();
+        var vertexIds = new int[corners.Length];
+        for (int corner = 0; corner < corners.Length; corner++)
+        {
+            vertexIds[corner] = mesh.AppendVertex(new g3.Vector3d(corners[corner].X, corners[corner].Y, corners[corner].Z));
+        }
 
         for (int i = 0; i < faces.Length; i++)
         {
-            Vector3 a = corners[faces[i].A];
-            Vector3 b = corners[faces[i].B];
-            Vector3 c = corners[faces[i].C];
-
-            positions[i * 3] = a;
-            positions[i * 3 + 1] = b;
-            positions[i * 3 + 2] = c;
-            normals[i] = Vector3.Normalize(Vector3.Cross(b - a, c - a));
+            mesh.AppendTriangle(vertexIds[faces[i].A], vertexIds[faces[i].B], vertexIds[faces[i].C]);
         }
 
-        return new Cube(new TriangleMesh(positions, normals));
+        return new Cube(mesh);
     }
 }

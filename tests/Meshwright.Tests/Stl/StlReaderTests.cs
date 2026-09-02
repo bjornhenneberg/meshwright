@@ -61,19 +61,21 @@ public class StlReaderTests
         Assert.Throws<InvalidDataException>(() => StlReader.Read(stream));
     }
 
-    private static void AssertMatchesCube(Meshwright.Geometry.TriangleMesh mesh)
+    private static void AssertMatchesCube(g3.DMesh3 mesh)
     {
         Assert.Equal(CubeTriangles.Length, mesh.TriangleCount);
-        Assert.Equal(CubeTriangles.Length * 3, mesh.Positions.Length);
+        Assert.Equal(8, mesh.VertexCount);
 
         for (int i = 0; i < CubeTriangles.Length; i++)
         {
-            AssertClose(CubeTriangles[i].Normal, mesh.Normals[i]);
-            AssertClose(CubeTriangles[i].A, mesh.Positions[i * 3 + 0]);
-            AssertClose(CubeTriangles[i].B, mesh.Positions[i * 3 + 1]);
-            AssertClose(CubeTriangles[i].C, mesh.Positions[i * 3 + 2]);
+            g3.Index3i triangle = mesh.GetTriangle(i);
+            AssertClose(CubeTriangles[i].A, ToVector3(mesh.GetVertex(triangle.a)));
+            AssertClose(CubeTriangles[i].B, ToVector3(mesh.GetVertex(triangle.b)));
+            AssertClose(CubeTriangles[i].C, ToVector3(mesh.GetVertex(triangle.c)));
         }
     }
+
+    private static Vector3 ToVector3(g3.Vector3d vector) => new((float)vector.x, (float)vector.y, (float)vector.z);
 
     private static void AssertClose(Vector3 expected, Vector3 actual)
     {

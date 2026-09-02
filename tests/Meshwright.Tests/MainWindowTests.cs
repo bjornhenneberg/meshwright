@@ -26,4 +26,21 @@ public class MainWindowTests
         var mesh = StlReader.Read(stream!);
         Assert.Equal(4, mesh.TriangleCount);
     }
+
+    [AvaloniaFact]
+    public void Constructing_MainWindow_RunsDiagnosticsOnSampleMeshAndPopulatesReport()
+    {
+        var window = new MainWindow();
+
+        Assert.NotNull(window.CurrentReport);
+        Assert.Equal(4, window.CurrentReport!.Statistics.TriangleCount);
+    }
+
+    [AvaloniaFact]
+    public void Constructing_MainWindow_StatusTextReflectsIssueCount()
+    {
+        var window = new MainWindow();
+
+        Assert.Contains($"{window.CurrentReport!.Issues.Count} issues found", window.StatusMessage);
+    }
 }

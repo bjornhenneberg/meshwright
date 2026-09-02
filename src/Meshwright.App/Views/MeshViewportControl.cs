@@ -1,9 +1,10 @@
 using System;
+using System.Collections.Generic;
 using Avalonia;
 using Avalonia.Input;
 using Avalonia.OpenGL;
 using Avalonia.OpenGL.Controls;
-using Meshwright.Geometry;
+using Meshwright.Geometry.Diagnostics;
 using Meshwright.Rendering.Camera;
 using Meshwright.Rendering.GL;
 using Silk.NET.OpenGL;
@@ -11,7 +12,7 @@ using Silk.NET.OpenGL;
 namespace Meshwright.App.Views;
 
 /// <summary>
-/// Avalonia control that hosts an OpenGL viewport rendering a <see cref="TriangleMesh"/> via
+/// Avalonia control that hosts an OpenGL viewport rendering a <see cref="g3.DMesh3"/> via
 /// <see cref="MeshRenderer"/>, with mouse-driven orbit/pan/zoom through an <see cref="OrbitCamera"/>.
 /// </summary>
 public sealed class MeshViewportControl : OpenGlControlBase
@@ -24,14 +25,16 @@ public sealed class MeshViewportControl : OpenGlControlBase
 
     private Silk.NET.OpenGL.GL? _gl;
     private MeshRenderer? _renderer;
-    private TriangleMesh? _pendingMesh;
-    private TriangleMesh? _mesh;
+    private g3.DMesh3? _pendingMesh;
+    private g3.DMesh3? _mesh;
+    private MeshDiagnosticsReport? _report;
+    private bool _highlightsDirty;
 
     private bool _isOrbiting;
     private bool _isPanning;
     private Point _lastPointerPosition;
 
-    public TriangleMesh? Mesh
+    public g3.DMesh3? Mesh
     {
         get => _mesh;
         set
@@ -41,10 +44,28 @@ public sealed class MeshViewportControl : OpenGlControlBase
 
             if (value is not null)
             {
-                (System.Numerics.Vector3 center, float radius) = value.GetBounds();
-                _camera.Frame(center, radius);
+                g3.AxisAlignedBox3d bounds = value.CachedBounds;
+                g3.Vector3d center = bounds.Center;
+                double radius = bounds.DiagonalLength / 2.0;
+                _camera.Frame(new System.Numerics.Vector3((float)center.x, (float)center.y, (float)center.z), (float)radius);
             }
 
+            RequestNextFrameRendering();
+        }
+    }
+
+    /// <summary>
+    /// Diagnostics report for the current <see cref="Mesh"/>; its flagged triangles/edges are
+    /// highlighted in the viewport on the next render. Set to null (or a report with no issues)
+    /// to fall back to plain shaded rendering.
+    /// </summary>
+    public MeshDiagnosticsReport? Report
+    {
+        get => _report;
+        set
+        {
+            _report = value;
+            _highlightsDirty = true;
             RequestNextFrameRendering();
         }
     }
@@ -63,11 +84,18 @@ public sealed class MeshViewportControl : OpenGlControlBase
             return;
         }
 
-        // Uploads must happen here (not in the Mesh setter) because only Avalonia's GL callbacks guarantee a current GL context.
+        // Uploads must happen here (not in the Mesh/Report setters) because only Avalonia's GL
+        // callbacks guarantee a current GL context.
         if (_pendingMesh is not null)
         {
-            _renderer.UploadMesh(_pendingMesh);
+            UploadCurrentMesh(_pendingMesh);
             _pendingMesh = null;
+            _highlightsDirty = false;
+        }
+        else if (_highlightsDirty && _mesh is not null)
+        {
+            UploadCurrentMesh(_mesh);
+            _highlightsDirty = false;
         }
 
         // OpenGlControlBase does not bind the target framebuffer for us; it hands back the
@@ -87,6 +115,23 @@ public sealed class MeshViewportControl : OpenGlControlBase
 
         float aspect = pixelHeight == 0 ? 1f : (float)pixelWidth / pixelHeight;
         _renderer.Render(_camera.GetViewMatrix(), _camera.GetProjectionMatrix(aspect), System.Numerics.Matrix4x4.Identity);
+    }
+
+    private void UploadCurrentMesh(g3.DMesh3 mesh)
+    {
+        var flaggedTriangleIds = new HashSet<int>();
+        var flaggedEdges = new List<g3.Index2i>();
+        foreach (MeshIssue issue in _report?.Issues ?? Array.Empty<MeshIssue>())
+        {
+            foreach (int triangleId in issue.TriangleIds)
+            {
+                flaggedTriangleIds.Add(triangleId);
+            }
+
+            flaggedEdges.AddRange(issue.EdgeIds);
+        }
+
+        _renderer!.UploadMesh(mesh, flaggedTriangleIds, flaggedEdges);
     }
 
     protected override void OnOpenGlDeinit(GlInterface gl)

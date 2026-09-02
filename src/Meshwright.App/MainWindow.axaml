@@ -12,6 +12,22 @@
         <TextBlock Name="StatusText" VerticalAlignment="Center" Text="Loaded sample tetrahedron" />
       </StackPanel>
     </Border>
+    <Border DockPanel.Dock="Right" Width="300" Padding="8" Background="{DynamicResource SystemAltHighColor}">
+      <ScrollViewer>
+        <StackPanel Spacing="8">
+          <TextBlock Text="Diagnostics" FontWeight="Bold" />
+          <TextBlock Name="StatisticsText" TextWrapping="Wrap" />
+          <TextBlock Name="SummaryText" TextWrapping="Wrap" FontStyle="Italic" />
+          <ItemsControl Name="IssuesList">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:CompileBindings="False">
+                <TextBlock Text="{Binding}" TextWrapping="Wrap" Margin="0,0,0,4" />
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </ScrollViewer>
+    </Border>
     <Panel>
       <views:MeshViewportControl Name="Viewport" />
       <!-- Transparent hit-test overlay: on Linux the GL surface doesn't reliably participate in
@@ -25,3 +41,4 @@
     </Panel>
   </DockPanel>
 </Window>
+

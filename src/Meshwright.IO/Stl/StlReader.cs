@@ -1,24 +1,22 @@
 using System.Globalization;
 using System.Numerics;
 using System.Text;
-using Meshwright.Geometry;
-
 namespace Meshwright.IO.Stl;
 
-/// <summary>Reads binary and ASCII STL streams into a <see cref="TriangleMesh"/>.</summary>
+/// <summary>Reads binary and ASCII STL streams into indexed <see cref="g3.DMesh3"/> meshes.</summary>
 public static class StlReader
 {
     private const int HeaderSize = 80;
     private const int TriangleCountSize = sizeof(uint);
     private const int BinaryTriangleRecordSize = 12 * sizeof(float) + 2; // normal + 3 vertices + attribute bytes
 
-    public static TriangleMesh ReadFile(string path)
+    public static g3.DMesh3 ReadFile(string path)
     {
         using var stream = File.OpenRead(path);
         return Read(stream);
     }
 
-    public static TriangleMesh Read(Stream stream)
+    public static g3.DMesh3 Read(Stream stream)
     {
         byte[] buffer = ReadAllBytes(stream);
 
@@ -57,7 +55,7 @@ public static class StlReader
         return expectedBinaryLength == buffer.Length;
     }
 
-    private static TriangleMesh ReadBinary(byte[] buffer)
+    private static g3.DMesh3 ReadBinary(byte[] buffer)
     {
         if (buffer.Length < HeaderSize + TriangleCountSize)
         {
@@ -73,12 +71,9 @@ public static class StlReader
         }
 
         var positions = new Vector3[triangleCount * 3];
-        var normals = new Vector3[triangleCount];
-
         int offset = HeaderSize + TriangleCountSize;
         for (int i = 0; i < triangleCount; i++)
         {
-            normals[i] = ReadVector3(buffer, offset);
             offset += 12;
 
             positions[i * 3 + 0] = ReadVector3(buffer, offset);
@@ -91,7 +86,7 @@ public static class StlReader
             offset += 2; // attribute byte count, unused
         }
 
-        return new TriangleMesh(positions, normals);
+        return BuildIndexedMesh(positions);
     }
 
     private static Vector3 ReadVector3(byte[] buffer, int offset)
@@ -102,13 +97,12 @@ public static class StlReader
         return new Vector3(x, y, z);
     }
 
-    private static TriangleMesh ReadAscii(byte[] buffer)
+    private static g3.DMesh3 ReadAscii(byte[] buffer)
     {
         string text = Encoding.ASCII.GetString(buffer);
         string[] tokens = text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
 
         var positions = new List<Vector3>();
-        var normals = new List<Vector3>();
 
         int i = 0;
         bool sawSolid = false;
@@ -131,7 +125,7 @@ public static class StlReader
 
             if (token.Equals("facet", StringComparison.OrdinalIgnoreCase))
             {
-                i = ParseFacet(tokens, i, positions, normals);
+                i = ParseFacet(tokens, i, positions);
                 continue;
             }
 
@@ -155,14 +149,14 @@ public static class StlReader
             throw new InvalidDataException("Input is neither a valid binary STL nor a valid ASCII STL (missing 'solid' keyword).");
         }
 
-        return new TriangleMesh(positions.ToArray(), normals.ToArray());
+        return BuildIndexedMesh(positions);
     }
 
-    private static int ParseFacet(string[] tokens, int i, List<Vector3> positions, List<Vector3> normals)
+    private static int ParseFacet(string[] tokens, int i, List<Vector3> positions)
     {
         i = Expect(tokens, i, "facet");
         i = Expect(tokens, i, "normal");
-        Vector3 normal = ParseVector3(tokens, ref i);
+        _ = ParseVector3(tokens, ref i);
 
         i = Expect(tokens, i, "outer");
         i = Expect(tokens, i, "loop");
@@ -189,12 +183,37 @@ public static class StlReader
         i = Expect(tokens, i, "endloop");
         i = Expect(tokens, i, "endfacet");
 
-        normals.Add(normal);
         positions.Add(triangleVerts[0]);
         positions.Add(triangleVerts[1]);
         positions.Add(triangleVerts[2]);
 
         return i;
+    }
+
+    private static g3.DMesh3 BuildIndexedMesh(IReadOnlyList<Vector3> positions)
+    {
+        var mesh = new g3.DMesh3();
+        var vertexIds = new Dictionary<g3.Vector3d, int>();
+        for (int positionIndex = 0; positionIndex < positions.Count; positionIndex += 3)
+        {
+            int[] triangle = new int[3];
+            for (int corner = 0; corner < 3; corner++)
+            {
+                Vector3 position = positions[positionIndex + corner];
+                var vertex = new g3.Vector3d(position.X, position.Y, position.Z);
+                if (!vertexIds.TryGetValue(vertex, out int vertexId))
+                {
+                    vertexId = mesh.AppendVertex(vertex);
+                    vertexIds.Add(vertex, vertexId);
+                }
+
+                triangle[corner] = vertexId;
+            }
+
+            mesh.AppendTriangle(triangle[0], triangle[1], triangle[2]);
+        }
+
+        return mesh;
     }
 
     private static int Expect(string[] tokens, int i, string expected)
