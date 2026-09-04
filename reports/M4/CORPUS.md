@@ -82,6 +82,56 @@ deliberately far tighter than that detector's scale-relative sliver threshold: t
 job is only to exclude what the predicate cannot process, so thin-but-real
 triangles are still tested. Pinned by unit tests that do not need the corpus.
 
+## Ground truth
+
+`CorpusGroundTruthTests` checks Meshwright's detectors against Thingi10K's independent
+analysis of the same files, recorded per file in the manifest's notes column. Exact
+counts are deliberately not asserted: two implementations legitimately disagree about
+how to count one defect (a self-intersection can be one face pair or many; a hole's
+size in edges depends on how the boundary is walked). What is asserted is the direction
+that actually harms a user — **a mesh the reference calls clean in a category must not
+be reported as defective in that category**. False positives are the dangerous class for
+a repair tool, because they push a user into "repairing" geometry that was fine. A
+weaker converse guard catches wholesale misses: a file with 50+ reference defects in a
+category must not come back silent.
+
+Assertions run only on losslessly-imported meshes — see below for why that qualifier is
+load-bearing.
+
+## The import was silently discarding geometry
+
+The ground-truth comparison immediately found the most serious bug of the corpus work.
+`DMesh3` is an indexed mesh and cannot represent a non-manifold edge, so
+`DMesh3.AppendTriangle` refuses such a triangle and returns `NonManifoldID`; it likewise
+refuses a triangle whose corners have welded together. **Both readers discarded that
+return value**, so importing silently dropped exactly the geometry Meshwright exists to
+diagnose, and every detector then reported on a mutilated remainder.
+
+Across the 24 real print files, 14 lost triangles and two lost about 73%:
+
+| file | in file | loaded | dropped |
+| --- | --- | --- | --- |
+| thingi10k-204394 | 34,752 | 9,516 | 25,236 (72.6%) |
+| thingi10k-92067 | 1,386 | 368 | 1,018 (73.4%) |
+| thingi10k-96639 | 116,289 | 115,370 | 919 (0.8%) |
+| thingi10k-237741 | 134,658 | 134,320 | 338 (0.3%) |
+| …10 more | | | 3.7% of the corpus overall |
+
+That is why 204394's reference count of 34,905 self-intersections came back as 16: most
+of the mesh was never there.
+
+Properly representing non-manifold geometry is a change to the mesh data structure and
+was not attempted. Making the loss visible was: `MeshImportResult` now travels with every
+import carrying per-cause counts, and `MainWindow` appends a plain-language warning to the
+status line. A user told "no problems found" about a mesh a quarter of which failed to
+load has been actively misled, and that is now impossible. `ImportAccountsForEveryTriangleInTheFile`
+additionally checks our triangle count against the reference's, so a parser bug cannot
+hide behind a representation limit.
+
+**Still open**: the geometry is reported but still not loaded. Deciding what Meshwright
+should do with meshes `DMesh3` cannot hold — repair on import, keep a parallel soup, or
+change structure — is a real design question and belongs in a milestone of its own.
+
 ## Census
 
 All seven v1.0 detector categories fire. The 53-file corpus loads and diagnoses in

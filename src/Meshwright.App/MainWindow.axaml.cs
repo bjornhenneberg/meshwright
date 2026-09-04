@@ -150,8 +150,22 @@ public partial class MainWindow : Window
     /// picker dialog; used by integration tests that can't drive an OS file picker headlessly.</summary>
     public void LoadFileForTesting(string path)
     {
-        var mesh = MeshImporter.ImportFile(path);
-        ApplyLoadedMesh(mesh, $"Loaded {Path.GetFileName(path)}");
+        MeshImportResult import = MeshImporter.ImportFileWithDiagnostics(path);
+        ApplyLoadedMesh(import.Mesh, StatusFor($"Loaded {Path.GetFileName(path)}", import));
+    }
+
+    /// <summary>Most recent import's warning about triangles the mesh could not hold, or null.</summary>
+    public string? ImportWarning { get; private set; }
+
+    /// <summary>
+    /// Appends an import warning to the status line when part of the file could not be loaded.
+    /// Silence here would tell a user "no problems found" about a mesh a quarter of which never
+    /// made it in — see <see cref="MeshImportResult"/>.
+    /// </summary>
+    private string StatusFor(string prefix, MeshImportResult import)
+    {
+        ImportWarning = import.Warning;
+        return import.Warning is null ? prefix : $"{prefix} — warning: {import.Warning}";
     }
 
     private void LoadSampleMesh()
@@ -164,8 +178,8 @@ public partial class MainWindow : Window
             return;
         }
 
-        var mesh = StlReader.Read(stream);
-        ApplyLoadedMesh(mesh, "Loaded sample tetrahedron");
+        MeshImportResult import = StlReader.ReadWithDiagnostics(stream);
+        ApplyLoadedMesh(import.Mesh, StatusFor("Loaded sample tetrahedron", import));
     }
 
     private async void OnOpenFileClick(object? sender, RoutedEventArgs e)
@@ -196,8 +210,8 @@ public partial class MainWindow : Window
         try
         {
             await using Stream stream = await files[0].OpenReadAsync();
-            var mesh = MeshImporter.Import(stream, files[0].Name);
-            ApplyLoadedMesh(mesh, $"Loaded {files[0].Name}");
+            MeshImportResult import = MeshImporter.ImportWithDiagnostics(stream, files[0].Name);
+            ApplyLoadedMesh(import.Mesh, StatusFor($"Loaded {files[0].Name}", import));
         }
         catch (Exception ex)
         {

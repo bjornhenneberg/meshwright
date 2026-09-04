@@ -373,8 +373,28 @@ tests had never run while the suite reported green — M2 recorded ASCII OBJ
 export as delivered, and it has never existed in a build. Fixed at the root by
 renaming both directories to `Wavefront/`.
 
+Batch M4-6 (corpus ground truth) complete: `CorpusGroundTruthTests` checks the
+detectors against Thingi10K's independent per-file analysis, recorded in the
+manifest. Exact counts are deliberately not asserted — two implementations
+legitimately count one defect differently — but the direction that harms users
+is: a mesh the reference calls clean in a category must not be reported as
+defective in it, since false positives push users into "repairing" good
+geometry. That comparison immediately found the most serious defect of this
+work: **import was silently discarding geometry**. `DMesh3` cannot represent a
+non-manifold edge, so `AppendTriangle` refuses such triangles and returns
+`NonManifoldID` — and both readers discarded the return value. 14 of the 24
+real print files lost triangles, two of them ~73%, after which every detector
+was describing a different mesh from the one the user opened (204394's
+reference count of 34,905 self-intersections came back as 16 because most of
+the mesh was never loaded). Representing that geometry is a data-structure
+change and was not attempted; making the loss visible was —
+`MeshImportResult` now carries per-cause counts through every import and
+`MainWindow` appends a plain-language warning, so "no problems found" can no
+longer be said about a mesh a quarter of which failed to load. See
+`reports/M4/CORPUS.md`.
+
 Remaining M4 batches (packaging & CI — M4-3; docs/release — M4-4) are not yet
-started — see `reports/M4/` as they land. 389 unit tests + 8 GPU tests passing.
+started — see `reports/M4/` as they land. 404 unit tests + 8 GPU tests passing.
 
 **M5+**
 v1.x features, then the resin module.
@@ -445,6 +465,8 @@ source, and matches how this audience already buys tools.
 | 2026-09-04 | The test corpus is fetched, never committed: a manifest of checksums plus `scripts/fetch-corpus.sh`. Keeps licensing with the upstream projects, keeps ~170MB of binaries out of git history permanently, and keeps the set reproducible. Corpus meshes are restricted to CC-BY/CC0/public-domain so the set stays usable if it is ever redistributed — NC and ND models are excluded because §8 sells binaries |
 | 2026-09-04 | Thingi10K via Hugging Face is the source for real print files. Thingiverse and Printables both refuse automated download (403) and bulk fetching breaks Thingiverse's terms; the research mirror is both legitimate and strictly better, adding per-file licence and per-file defect ground truth. Epic's Sketchfab/Fab were checked and rejected: OAuth-gated, and art assets rather than print files |
 | 2026-09-04 | `SelfIntersectionDetector` and `SelfIntersectionRepair` share one `SelfIntersectionSearch`, so detection and repair cannot disagree about what a self-intersection is. The detector's former O(n^2) all-pairs scan was a documented M1 shortcut that the corpus made untenable |
+| 2026-09-04 | The corpus asserts *direction*, not exact counts, against Thingi10K's ground truth: a mesh the reference calls clean must not be reported defective. Two implementations legitimately count one defect differently, but a false positive pushes a user into "repairing" good geometry, so that direction is the one worth pinning |
+| 2026-09-04 | Import reports the geometry it cannot represent rather than dropping it silently (`MeshImportResult`). `DMesh3` cannot hold a non-manifold edge and `AppendTriangle` refuses those triangles; ignoring that return value made 14 of 24 real print files load incomplete, two at ~73% loss, with every downstream diagnostic then describing a different mesh. Loading such geometry properly is a data-structure decision deferred to its own milestone; misreporting it is not acceptable in the meantime |
 
 ## 12. Development environment
 
@@ -504,13 +526,16 @@ M0.
    & CI for Linux/Windows/macOS (M4-3) and docs/release (M4-4) are still ahead, per
    the M4 kickoff plan.
 7. ~~Known follow-up from M4-2: `Viewport.Gizmo` single-slot arbitration~~ — done.
-8. ~~Collect a real test corpus (M4-1)~~ — done; see `reports/M4/CORPUS.md`.
-   Outstanding: the corpus only *smoke-tests* that nothing throws. Thingi10K
-   publishes per-file defect ground truth (boundary edges, self-intersections,
-   manifoldness, orientation, component count) which the manifest already
-   records — asserting Meshwright's detector output against it would turn the
-   smoke test into a true regression corpus, and is the single highest-value
-   follow-up here.
+8. ~~Collect a real test corpus (M4-1)~~ and ~~assert detectors against its
+   ground truth (M4-6)~~ — both done; see `reports/M4/CORPUS.md`.
+   **Outstanding and significant**: import still cannot load non-manifold
+   geometry — the loss is now reported, but 14 of 24 real print files still
+   load incomplete and two lose ~73% of their triangles. Deciding what
+   Meshwright should do about meshes `DMesh3` cannot hold (repair on import,
+   keep a parallel triangle soup, or change the mesh structure) is a real
+   design question and the biggest known correctness gap in the product: a
+   repair tool that cannot load the broken geometry it exists to fix is
+   limited in exactly its core use case. Worth a milestone of its own.
 9. Packaging & CI (M4-3) and docs/release (M4-4) remain. Note for CI: the corpus
    is fetched, not committed, so a CI job must run `scripts/fetch-corpus.sh`
    (and should cache it) to get corpus coverage; without it those tests pass

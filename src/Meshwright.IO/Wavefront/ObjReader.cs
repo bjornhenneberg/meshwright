@@ -1,5 +1,6 @@
 using System.Globalization;
 using g3;
+using Meshwright.IO;
 
 namespace Meshwright.IO.Wavefront;
 
@@ -18,19 +19,31 @@ namespace Meshwright.IO.Wavefront;
 /// </summary>
 public static class ObjReader
 {
-    public static DMesh3 ReadFile(string path)
+    public static DMesh3 ReadFile(string path) => ReadFileWithDiagnostics(path).Mesh;
+
+    public static DMesh3 Read(Stream stream) => ReadWithDiagnostics(stream).Mesh;
+
+    public static DMesh3 Read(TextReader reader) => ReadWithDiagnostics(reader).Mesh;
+
+    /// <summary>
+    /// Reads the mesh and reports how many of the file's triangles <see cref="DMesh3"/> could not
+    /// represent. See <see cref="MeshImportResult"/>.
+    /// </summary>
+    public static MeshImportResult ReadFileWithDiagnostics(string path)
     {
         using var stream = File.OpenRead(path);
-        return Read(stream);
+        return ReadWithDiagnostics(stream);
     }
 
-    public static DMesh3 Read(Stream stream)
+    /// <inheritdoc cref="ReadFileWithDiagnostics"/>
+    public static MeshImportResult ReadWithDiagnostics(Stream stream)
     {
         using var reader = new StreamReader(stream, System.Text.Encoding.UTF8, detectEncodingFromByteOrderMarks: true, leaveOpen: true);
-        return Read(reader);
+        return ReadWithDiagnostics(reader);
     }
 
-    public static DMesh3 Read(TextReader reader)
+    /// <inheritdoc cref="ReadFileWithDiagnostics"/>
+    public static MeshImportResult ReadWithDiagnostics(TextReader reader)
     {
         var mesh = new DMesh3();
 
@@ -39,6 +52,9 @@ public static class ObjReader
         int vertexCount = 0;
         bool sawFace = false;
         int lineNumber = 0;
+        int triangleCount = 0;
+        int nonManifoldDropped = 0;
+        int degenerateDropped = 0;
 
         var corners = new List<int>();
 
@@ -68,7 +84,19 @@ public static class ObjReader
                 // orientation defects an inverted-normal detector looks for survive import.
                 for (int i = 1; i + 1 < corners.Count; i++)
                 {
-                    mesh.AppendTriangle(corners[0], corners[i], corners[i + 1]);
+                    triangleCount++;
+
+                    // AppendTriangle refuses rather than throws; see MeshImportResult for why a
+                    // silent drop here would misreport the whole mesh.
+                    int appended = mesh.AppendTriangle(corners[0], corners[i], corners[i + 1]);
+                    if (appended == DMesh3.NonManifoldID)
+                    {
+                        nonManifoldDropped++;
+                    }
+                    else if (appended < 0)
+                    {
+                        degenerateDropped++;
+                    }
                 }
 
                 sawFace = true;
@@ -90,7 +118,7 @@ public static class ObjReader
             throw new InvalidDataException("OBJ contains vertices but no faces; Meshwright imports surface meshes, not point clouds.");
         }
 
-        return mesh;
+        return new MeshImportResult(mesh, triangleCount, nonManifoldDropped, degenerateDropped);
     }
 
     /// <summary>True when <paramref name="span"/> begins with <paramref name="keyword"/> as a whole token.</summary>

@@ -3,6 +3,7 @@ using System.Numerics;
 using System.Text;
 namespace Meshwright.IO.Stl;
 
+
 /// <summary>Reads binary and ASCII STL streams into indexed <see cref="g3.DMesh3"/> meshes.</summary>
 public static class StlReader
 {
@@ -10,22 +11,27 @@ public static class StlReader
     private const int TriangleCountSize = sizeof(uint);
     private const int BinaryTriangleRecordSize = 12 * sizeof(float) + 2; // normal + 3 vertices + attribute bytes
 
-    public static g3.DMesh3 ReadFile(string path)
+    public static g3.DMesh3 ReadFile(string path) => ReadFileWithDiagnostics(path).Mesh;
+
+    public static g3.DMesh3 Read(Stream stream) => ReadWithDiagnostics(stream).Mesh;
+
+    /// <summary>
+    /// Reads the mesh and reports how many triangles the file contained that
+    /// <see cref="g3.DMesh3"/> could not represent. See <see cref="MeshImportResult"/> — a silent
+    /// drop here makes every downstream diagnostic a statement about a different mesh.
+    /// </summary>
+    public static MeshImportResult ReadFileWithDiagnostics(string path)
     {
         using var stream = File.OpenRead(path);
-        return Read(stream);
+        return ReadWithDiagnostics(stream);
     }
 
-    public static g3.DMesh3 Read(Stream stream)
+    /// <inheritdoc cref="ReadFileWithDiagnostics"/>
+    public static MeshImportResult ReadWithDiagnostics(Stream stream)
     {
         byte[] buffer = ReadAllBytes(stream);
 
-        if (LooksBinary(buffer))
-        {
-            return ReadBinary(buffer);
-        }
-
-        return ReadAscii(buffer);
+        return LooksBinary(buffer) ? ReadBinary(buffer) : ReadAscii(buffer);
     }
 
     private static byte[] ReadAllBytes(Stream stream)
@@ -55,7 +61,7 @@ public static class StlReader
         return expectedBinaryLength == buffer.Length;
     }
 
-    private static g3.DMesh3 ReadBinary(byte[] buffer)
+    private static MeshImportResult ReadBinary(byte[] buffer)
     {
         if (buffer.Length < HeaderSize + TriangleCountSize)
         {
@@ -97,7 +103,7 @@ public static class StlReader
         return new Vector3(x, y, z);
     }
 
-    private static g3.DMesh3 ReadAscii(byte[] buffer)
+    private static MeshImportResult ReadAscii(byte[] buffer)
     {
         string text = Encoding.ASCII.GetString(buffer);
         string[] tokens = text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
@@ -190,10 +196,14 @@ public static class StlReader
         return i;
     }
 
-    private static g3.DMesh3 BuildIndexedMesh(IReadOnlyList<Vector3> positions)
+    private static MeshImportResult BuildIndexedMesh(IReadOnlyList<Vector3> positions)
     {
         var mesh = new g3.DMesh3();
         var vertexIds = new Dictionary<g3.Vector3d, int>();
+        int triangleCount = 0;
+        int nonManifoldDropped = 0;
+        int degenerateDropped = 0;
+
         for (int positionIndex = 0; positionIndex < positions.Count; positionIndex += 3)
         {
             int[] triangle = new int[3];
@@ -210,10 +220,24 @@ public static class StlReader
                 triangle[corner] = vertexId;
             }
 
-            mesh.AppendTriangle(triangle[0], triangle[1], triangle[2]);
+            triangleCount++;
+
+            // AppendTriangle refuses rather than throws: NonManifoldID when the triangle would give
+            // an edge a third face, InvalidID when welding has collapsed two corners onto one
+            // vertex. Ignoring the result silently discards precisely the broken geometry this tool
+            // exists to report, so count both.
+            int appended = mesh.AppendTriangle(triangle[0], triangle[1], triangle[2]);
+            if (appended == g3.DMesh3.NonManifoldID)
+            {
+                nonManifoldDropped++;
+            }
+            else if (appended < 0)
+            {
+                degenerateDropped++;
+            }
         }
 
-        return mesh;
+        return new MeshImportResult(mesh, triangleCount, nonManifoldDropped, degenerateDropped);
     }
 
     private static int Expect(string[] tokens, int i, string expected)

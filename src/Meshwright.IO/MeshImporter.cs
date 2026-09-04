@@ -20,21 +20,30 @@ public static class MeshImporter
     public static bool CanImport(string fileName) =>
         SupportedExtensions.Contains(Path.GetExtension(fileName).ToLowerInvariant());
 
-    public static DMesh3 ImportFile(string path)
+    public static DMesh3 ImportFile(string path) => ImportFileWithDiagnostics(path).Mesh;
+
+    /// <summary>
+    /// Imports and reports what the mesh representation could not hold. Prefer this wherever the
+    /// result is shown to a user: see <see cref="MeshImportResult"/>.
+    /// </summary>
+    public static MeshImportResult ImportFileWithDiagnostics(string path)
     {
         using Stream stream = File.OpenRead(path);
-        return Import(stream, path);
+        return ImportWithDiagnostics(stream, path);
     }
 
     /// <summary>
     /// Imports from an already-open stream. <paramref name="fileName"/> supplies the extension and
     /// need not be a real path — a picker's display name is enough.
     /// </summary>
-    public static DMesh3 Import(Stream stream, string fileName) =>
+    public static DMesh3 Import(Stream stream, string fileName) => ImportWithDiagnostics(stream, fileName).Mesh;
+
+    /// <inheritdoc cref="ImportFileWithDiagnostics"/>
+    public static MeshImportResult ImportWithDiagnostics(Stream stream, string fileName) =>
         Path.GetExtension(fileName).ToLowerInvariant() switch
         {
-            ".stl" => StlReader.Read(stream),
-            ".obj" => ObjReader.Read(stream),
+            ".stl" => StlReader.ReadWithDiagnostics(stream),
+            ".obj" => ObjReader.ReadWithDiagnostics(stream),
             var other => throw new NotSupportedException(
                 string.IsNullOrEmpty(other)
                     ? $"'{fileName}' has no file extension, so Meshwright cannot tell which format it is."
