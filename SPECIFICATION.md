@@ -5,8 +5,9 @@
 **Progress:** M0 (Skeleton), M1 (Inspect), M2 (Repair), and M3 (Edit) complete
 and verified; see `reports/M0/SUMMARY.md`, `reports/M1/SUMMARY.md`,
 `reports/M2/SUMMARY.md`, and `reports/M3/`. M4 (Polish and release) is
-underway — the Manifold RPATH/interop blocker is fixed (204/204 tests
-passing); see the M4 entry in §11 and §7.
+underway — batches M4-0 (Manifold RPATH/interop fix) and M4-2 (gizmo wiring
++ menu/undo-redo UI) are complete, 220/220 tests + 8/8 GPU passing; see the
+M4 entry in §11 and §7.
 
 ---
 
@@ -255,14 +256,18 @@ this milestone's scope didn't call for it.
 Plane cut, booleans, transforms, hollow, drain holes, decimation.
 Delivered: all six v1.0 edit operations, wired into `MainWindow` as a tabbed
 sidebar, each panel bound to the shared `MeshDocument` for undo/redo; a
-plane-cut gizmo and a transform gizmo in the viewport; and a Manifold C API
-native-interop layer (`ManifoldInterop`/native `libmanifoldc`) backing the
-boolean union/difference/intersection operations. Shipped with a known gap:
-the boolean/Manifold P/Invoke path had a broken native-library RUNPATH plus
-two memory-lifetime bugs in the interop layer, so all 18 boolean-related
-tests failed at merge time (documented, not silently ignored) — fixed in M4,
-see below. 185/203 tests passing at merge (18 known Manifold failures);
-204/204 + 8/8 GPU passing after the M4 fix.
+plane-cut gizmo and a transform gizmo built as complete `IViewportGizmo`
+implementations; and a Manifold C API native-interop layer
+(`ManifoldInterop`/native `libmanifoldc`) backing the boolean
+union/difference/intersection operations. Shipped with two known gaps: the
+boolean/Manifold P/Invoke path had a broken native-library RUNPATH plus two
+memory-lifetime bugs in the interop layer, so all 18 boolean-related tests
+failed at merge time (documented, not silently ignored); and the plane-cut
+and transform gizmos were built but never instantiated or connected to the
+viewport — dead code at merge, activation buttons either stubbed or entirely
+absent. Both fixed in M4, see below. 185/203 tests passing at merge (18
+known Manifold failures); 220/220 + 8/8 GPU passing after the M4-0/M4-2
+fixes.
 
 **M4 — Polish and release** ← in progress
 Packaging for three platforms, docs, website, sample files, crash-free on the test
@@ -278,9 +283,40 @@ placement-constructed native object (segfault inside `libmanifold.so.3`) and
 a null-pointer `memcpy` destination in `ExtractMeshGL64` (segfault in
 `libc`). Also fixed inverted-winding test cube fixtures and a geometrically
 unsound `PlaneCutTests` assertion uncovered along the way. Result: 204/204
-unit tests + 8/8 GPU tests passing (previously 185/203 + 8/8). Remaining M4
-batches (real-world test corpus, gizmo/menu UI polish, packaging & CI,
-docs/release) are not yet started — see `reports/M4/` as they land.
+unit tests + 8/8 GPU tests passing (previously 185/203 + 8/8).
+
+Batch M4-2 (gizmo wiring + menu/undo-redo UI) complete: wired the plane-cut
+and transform gizmos into the viewport, following the existing
+`DrainHolePanel`/`DrainHoleGizmo` activation pattern (`SetGizmo`/
+`SetGizmoActivationCallback`, an "activate" button, `MainWindow` owning
+gizmo lifecycle across mesh reloads). Product direction adopted here and
+going forward: this is a **gizmo-first** app — the 3D viewport interaction
+is the primary way users set spatial parameters, textboxes are a typed
+fallback, and once a gizmo has been dragged its values win outright on
+Apply rather than merging with stale textbox contents. Wiring the transform
+gizmo surfaced that its interaction math was itself unfinished, not just
+unwired: pointer-picking tested distance-to-camera instead of where the
+user clicked, rotate was a literal stub incrementing a fixed angle every
+pointer-move regardless of drag, move used a hardcoded ray-projection
+offset, and scale read raw camera distance instead of a since-press ratio —
+all rewritten with real ray-based tracking rather than leaving the visibly
+broken stub wired live. Also added: a `Menu` (File: Open/Exit; Edit:
+Undo/Redo) with `Ctrl+Z`/`Ctrl+Y`/`Ctrl+Shift+Z` shortcuts and a toolbar
+undo/redo status indicator, reusing a newly-extracted `RefreshFromDocument`
+helper shared by the load and undo/redo paths. "Open Recent" was scoped out
+— no settings/preferences persistence exists anywhere in the codebase yet,
+and building one solely for that menu item was judged out of scope. Known
+gap carried forward: `Viewport.Gizmo` is a single slot but each panel
+tracks its own activation state independently, so activating a second
+panel's gizmo silently steals the viewport from the first without telling
+its panel — not a regression (the same gap existed with one gizmo,
+DrainHole), just newly visible with three. Result: 220/220 unit tests + 8/8
+GPU tests passing (13 new tests: 3 undo/redo, 6 plane-cut gizmo, 7
+transform gizmo/rotate-math tests).
+
+Remaining M4 batches (real-world test corpus — M4-1, not yet started;
+packaging & CI — M4-3; docs/release — M4-4) are not yet started — see
+`reports/M4/` as they land.
 
 **M5+**
 v1.x features, then the resin module.
@@ -339,8 +375,10 @@ source, and matches how this audience already buys tools.
 | 2026-09-02 | M2 (Repair) complete: `IMeshOperation` contract + snapshot undo stack, all six repair operations, `AutoRepairPipeline`, and STL/OBJ export |
 | 2026-09-02 | Voxel remesh/solidify is intentionally excluded from the default `AutoRepairPipeline` sequence — it discards fine detail, so it stays a manual, individually-runnable fallback rather than something every Auto Repair run pays for |
 | 2026-09-02 | M2 shipped without UI wiring (no Repair panel or export dialog) — the milestone's task scope named pipeline/operations/undo/export without a UI requirement, so it was treated as out of scope rather than assumed; deferred to M3/M4 |
-| 2026-09-04 | M3 (Edit) complete: all six v1.0 edit operations wired into `MainWindow`, plane-cut and transform gizmos, Manifold C API interop for booleans. Shipped with the 18 boolean tests known-failing (Manifold RUNPATH pointed at an absolute build-tree path) — documented as an M4 blocker rather than silently accepted |
+| 2026-09-04 | M3 (Edit) complete: all six v1.0 edit operations wired into `MainWindow`, plane-cut and transform gizmos built (but not yet connected to the viewport), Manifold C API interop for booleans. Shipped with the 18 boolean tests known-failing (Manifold RUNPATH pointed at an absolute build-tree path) — documented as an M4 blocker rather than silently accepted |
 | 2026-09-04 | M4 batch 0: fixed the Manifold RUNPATH (now `$ORIGIN`-relative, both `libmanifoldc.so` and `libmanifold.so.3` shipped and copied into every project's output) and two further memory-lifetime bugs in `ManifoldInterop` that only surfaced once the library could actually load (a placement-constructed object's backing buffer freed before use; a null-pointer `memcpy` destination in mesh extraction). Also fixed inverted-winding test fixtures and an unsound `PlaneCutTests` assertion found while chasing the above. 204/204 tests + 8/8 GPU now passing |
+| 2026-09-04 | Adopted a gizmo-first UI direction: the 3D viewport is the primary way users set spatial parameters going forward, textboxes are a typed fallback, and a touched gizmo's values win outright on Apply rather than merging with textbox contents |
+| 2026-09-04 | M4 batch 2: wired the plane-cut and transform gizmos into the viewport (dead code since M3) following the `DrainHolePanel` activation pattern; discovered and fixed the transform gizmo's interaction math was itself unfinished, not just unwired (rotate was a stub incrementing a fixed angle per pointer-move regardless of drag, pointer-picking tested camera distance not click location) rather than wiring the visibly-broken stub live. Added a File/Edit menu with undo/redo keyboard shortcuts and a status indicator, reusing a newly-extracted `RefreshFromDocument` helper. Skipped "Open Recent" — no settings persistence exists in the codebase, not worth building solely for this. 220/220 tests + 8/8 GPU now passing |
 
 ## 12. Development environment
 
@@ -396,6 +434,11 @@ M0.
    started.)
 5. Read a week of "Meshmixer alternative" threads and turn them into a prioritised
    feature list to check against §5.1.
-6. Continue M4: gizmo/menu UI polish (M4-2), packaging & CI for Linux/Windows/macOS
-   (M4-3), docs and release (M4-4) — per the M4 kickoff plan; batch 0 (Manifold
-   RPATH + interop fix) is done, see §7 and §11.
+6. ~~Continue M4 batch 2 — gizmo/menu UI polish~~ — done; see §7 and §11. Packaging
+   & CI for Linux/Windows/macOS (M4-3) and docs/release (M4-4) are still ahead, per
+   the M4 kickoff plan.
+7. Known follow-up from M4-2, not yet scheduled to a batch: `Viewport.Gizmo` is a
+   single slot but each Edit panel tracks its own gizmo-activation state
+   independently, so activating a second panel's gizmo silently steals the
+   viewport from the first without telling its panel (pre-existing pattern,
+   newly visible now that three panels have gizmos instead of one).
