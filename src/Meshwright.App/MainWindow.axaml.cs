@@ -2,6 +2,7 @@ using System;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Numerics;
 using System.Reflection;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -24,6 +25,7 @@ public partial class MainWindow : Window
 
     // Gizmos for interactive operations
     private DrainHoleGizmo? _drainHoleGizmo;
+    private PlaneCutGizmo? _planeCutGizmo;
 
     public MainWindow()
     {
@@ -63,6 +65,25 @@ public partial class MainWindow : Window
         DrainHolePanel.SetGizmoActivationCallback(
             onActivate: () => Viewport.Gizmo = _drainHoleGizmo,
             onDeactivate: () => Viewport.Gizmo = null);
+
+        // Create and wire up the plane cut gizmo
+        _planeCutGizmo = new PlaneCutGizmo(ComputeMeshCenter(_document.Mesh));
+        PlaneCutPanel.SetGizmo(_planeCutGizmo);
+
+        PlaneCutPanel.SetGizmoActivationCallback(
+            onActivate: () => Viewport.Gizmo = _planeCutGizmo,
+            onDeactivate: () => Viewport.Gizmo = null);
+    }
+
+    private static Vector3 ComputeMeshCenter(DMesh3? mesh)
+    {
+        if (mesh is null || mesh.TriangleCount == 0)
+        {
+            return Vector3.Zero;
+        }
+
+        Vector3d center = mesh.CachedBounds.Center;
+        return new Vector3((float)center.x, (float)center.y, (float)center.z);
     }
 
     /// <summary>Diagnostics report for the currently loaded mesh, exposed for testing.</summary>
@@ -200,6 +221,13 @@ public partial class MainWindow : Window
         }
         _drainHoleGizmo = new DrainHoleGizmo(mesh);
         DrainHolePanel.SetGizmo(_drainHoleGizmo);
+
+        if (_planeCutGizmo is not null)
+        {
+            _planeCutGizmo.Dispose();
+        }
+        _planeCutGizmo = new PlaneCutGizmo(ComputeMeshCenter(mesh));
+        PlaneCutPanel.SetGizmo(_planeCutGizmo);
 
         // Clear any active gizmo from the viewport
         Viewport.Gizmo = null;

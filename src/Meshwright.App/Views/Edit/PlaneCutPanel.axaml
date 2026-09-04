@@ -59,7 +59,10 @@
           </StackPanel>
         </StackPanel>
 
-        <Button Name="SetViaGizmoButton" Content="Set Plane Via Gizmo" Click="OnSetViaGizmoClick" />
+        <StackPanel Spacing="4">
+          <Button Name="SetViaGizmoButton" Content="Set Plane Via Gizmo" Click="OnSetViaGizmoClick" />
+          <TextBlock Name="GizmoStatusText" TextWrapping="Wrap" FontStyle="Italic" FontSize="11" />
+        </StackPanel>
         <Button Name="ApplyButton" Content="Apply" Click="OnApplyClick" />
 
         <StackPanel Spacing="4">

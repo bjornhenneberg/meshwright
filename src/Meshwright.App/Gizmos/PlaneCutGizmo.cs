@@ -40,6 +40,13 @@ public sealed class PlaneCutGizmo : IViewportGizmo, IDisposable
     public Vector3 PlanePosition => _planePosition;
     public Vector3 PlaneNormal => _planeNormal;
 
+    /// <summary>True once the user has dragged the gizmo; the plane values should then take
+    /// precedence over any manually-typed textbox values.</summary>
+    public bool WasTouched { get; private set; }
+
+    /// <summary>Raised whenever the plane position or normal changes as a result of dragging.</summary>
+    public event EventHandler? Changed;
+
     public PlaneCutGizmo(Vector3 initialPosition)
     {
         _planePosition = initialPosition;
@@ -95,6 +102,9 @@ public sealed class PlaneCutGizmo : IViewportGizmo, IDisposable
             float t = Vector3.Dot(toPreviousPos, rayDir) / rayDir.Length();
             float projectedDelta = Vector3.Dot(e.Ray.PointAt(t) - _dragStartPosition, _planeNormal);
             _planePosition = _dragStartPosition + _planeNormal * projectedDelta;
+
+            WasTouched = true;
+            Changed?.Invoke(this, EventArgs.Empty);
         }
         else
         {
@@ -115,6 +125,9 @@ public sealed class PlaneCutGizmo : IViewportGizmo, IDisposable
                     Quaternion rotation = Quaternion.CreateFromAxisAngle(rotationAxis, angle);
                     _planeNormal = Vector3.Transform(_dragStartNormal, rotation);
                     _planeNormal = Vector3.Normalize(_planeNormal);
+
+                    WasTouched = true;
+                    Changed?.Invoke(this, EventArgs.Empty);
                 }
             }
         }
