@@ -59,10 +59,23 @@ fi
 # configured), which is most of the build-time and dependency savings.
 # MANIFOLD_PAR=OFF avoids a TBB dependency; a two-cube boolean in a proof
 # test has no need for the parallel backend.
+#
+# libmanifoldc.so links against a separate libmanifold.so.3, and by default
+# CMake bakes the *build directory's* absolute path into that dependency's
+# RUNPATH (an "install" RPATH is only applied by `cmake --install`, which
+# this script doesn't run - it copies the .so directly out of the build
+# tree). That absolute path breaks the moment the build dir is rebuilt
+# elsewhere or removed, which is exactly the RPATH issue this script used to
+# ship. CMAKE_BUILD_RPATH_USE_ORIGIN + a literal $ORIGIN RPATH makes the
+# dependency resolve relative to wherever libmanifoldc.so itself ends up, so
+# copying libmanifold.so.3 alongside it into OUT_DIR (step 4) is enough for
+# it to keep working after the build tree is gone.
 echo "==> Configuring (Release, C API only)"
 "$CMAKE_BIN" -S "$MANIFOLD_SRC_DIR" -B "$BUILD_DIR" \
   -DCMAKE_BUILD_TYPE=Release \
   -DBUILD_SHARED_LIBS=ON \
+  -DCMAKE_BUILD_RPATH_USE_ORIGIN=ON \
+  -DCMAKE_BUILD_RPATH='$ORIGIN' \
   -DMANIFOLD_CBIND=ON \
   -DMANIFOLD_CROSS_SECTION=ON \
   -DMANIFOLD_PYBIND=OFF \
@@ -81,6 +94,27 @@ if [ -z "$BUILT_SO" ]; then
   exit 1
 fi
 
+# libmanifold.so.<N> is a separate shared library that libmanifoldc.so
+# depends on at runtime (see the RPATH comment above) - it must ship
+# alongside libmanifoldc.so, not just the C API entry point.
+BUILT_MANIFOLD_SO=$(find "$BUILD_DIR" -maxdepth 3 -name 'libmanifold.so*' -not -name '*.so' -print -quit)
+if [ -z "$BUILT_MANIFOLD_SO" ]; then
+  echo "error: libmanifold.so.* not found under $BUILD_DIR" >&2
+  exit 1
+fi
+
+rm -rf "$OUT_DIR"
 mkdir -p "$OUT_DIR"
+# Dereference symlinks (cp, not cp -P) so OUT_DIR gets real file content
+# under fixed names, not a symlink pointing at a versioned filename that
+# didn't get copied.
 cp "$BUILT_SO" "$OUT_DIR/libmanifoldc.so"
-echo "==> Installed $(basename "$BUILT_SO") to $OUT_DIR/libmanifoldc.so"
+cp "$BUILT_MANIFOLD_SO" "$OUT_DIR/libmanifold.so.3"
+echo "==> Installed libmanifoldc.so and libmanifold.so.3 to $OUT_DIR"
+
+RUNPATH=$(readelf -d "$OUT_DIR/libmanifoldc.so" | grep -oP '(?:RPATH|RUNPATH).*\[\K[^\]]*' || true)
+if [[ "$RUNPATH" == *"$TOOLS_DIR"* ]]; then
+  echo "error: libmanifoldc.so still embeds an absolute build-tree path in its RPATH/RUNPATH: $RUNPATH" >&2
+  exit 1
+fi
+echo "==> Verified libmanifoldc.so RPATH/RUNPATH is portable: '${RUNPATH:-<none>}'"

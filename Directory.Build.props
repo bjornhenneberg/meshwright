@@ -5,4 +5,20 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
   </PropertyGroup>
+
+  <!--
+    Native asset probing under .NET's RID convention only kicks in when
+    runtimes/<rid>/native/ exists under a project's own output directory.
+    Meshwright.Geometry's Manifold P/Invoke isn't packed as a NuGet
+    package (the usual way that convention gets wired up automatically),
+    so every executable/test project needs the loose libmanifoldc.so /
+    libmanifold.so.3 built by scripts/build-manifold-native.sh copied into
+    its own bin output explicitly.
+  -->
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)runtimes/linux-x64/native/*.so;$(MSBuildThisFileDirectory)runtimes/linux-x64/native/*.so.*" Condition="Exists('$(MSBuildThisFileDirectory)runtimes/linux-x64/native')">
+      <Link>runtimes/linux-x64/native/%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
 </Project>

@@ -30,28 +30,28 @@ public class ManifoldInteropTests
 
         // Triangles: 12 triangles (2 per face)
         // Bottom face (z = -s)
-        mesh.AppendTriangle(v0, v1, v2);
-        mesh.AppendTriangle(v0, v2, v3);
+        mesh.AppendTriangle(v0, v2, v1);
+        mesh.AppendTriangle(v0, v3, v2);
 
         // Top face (z = s)
-        mesh.AppendTriangle(v4, v6, v5);
-        mesh.AppendTriangle(v4, v7, v6);
+        mesh.AppendTriangle(v4, v5, v6);
+        mesh.AppendTriangle(v4, v6, v7);
 
         // Front face (y = -s)
-        mesh.AppendTriangle(v0, v5, v1);
-        mesh.AppendTriangle(v0, v4, v5);
+        mesh.AppendTriangle(v0, v1, v5);
+        mesh.AppendTriangle(v0, v5, v4);
 
         // Back face (y = s)
-        mesh.AppendTriangle(v2, v7, v3);
-        mesh.AppendTriangle(v2, v6, v7);
+        mesh.AppendTriangle(v2, v3, v7);
+        mesh.AppendTriangle(v2, v7, v6);
 
         // Left face (x = -s)
-        mesh.AppendTriangle(v0, v3, v7);
-        mesh.AppendTriangle(v0, v7, v4);
+        mesh.AppendTriangle(v0, v7, v3);
+        mesh.AppendTriangle(v0, v4, v7);
 
         // Right face (x = s)
-        mesh.AppendTriangle(v1, v5, v6);
-        mesh.AppendTriangle(v1, v6, v2);
+        mesh.AppendTriangle(v1, v6, v5);
+        mesh.AppendTriangle(v1, v2, v6);
 
         return mesh;
     }

@@ -26,28 +26,28 @@ public class BooleanOperationTests
         var v7 = mesh.AppendVertex(new Vector3d(-s, s, s));
 
         // Bottom face
-        mesh.AppendTriangle(v0, v1, v2);
-        mesh.AppendTriangle(v0, v2, v3);
+        mesh.AppendTriangle(v0, v2, v1);
+        mesh.AppendTriangle(v0, v3, v2);
 
         // Top face
-        mesh.AppendTriangle(v4, v6, v5);
-        mesh.AppendTriangle(v4, v7, v6);
+        mesh.AppendTriangle(v4, v5, v6);
+        mesh.AppendTriangle(v4, v6, v7);
 
         // Front face
-        mesh.AppendTriangle(v0, v5, v1);
-        mesh.AppendTriangle(v0, v4, v5);
+        mesh.AppendTriangle(v0, v1, v5);
+        mesh.AppendTriangle(v0, v5, v4);
 
         // Back face
-        mesh.AppendTriangle(v2, v7, v3);
-        mesh.AppendTriangle(v2, v6, v7);
+        mesh.AppendTriangle(v2, v3, v7);
+        mesh.AppendTriangle(v2, v7, v6);
 
         // Left face
-        mesh.AppendTriangle(v0, v3, v7);
-        mesh.AppendTriangle(v0, v7, v4);
+        mesh.AppendTriangle(v0, v7, v3);
+        mesh.AppendTriangle(v0, v4, v7);
 
         // Right face
-        mesh.AppendTriangle(v1, v5, v6);
-        mesh.AppendTriangle(v1, v6, v2);
+        mesh.AppendTriangle(v1, v6, v5);
+        mesh.AppendTriangle(v1, v2, v6);
 
         return mesh;
     }

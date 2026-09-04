@@ -135,23 +135,28 @@ public static class ManifoldInterop
     public static nuint GetBoxSize() => manifold_box_size();
 
     /// Create a cube manifold for testing (centered at origin).
+    ///
+    /// Note on memory ownership: manifold_cube (like manifold_union,
+    /// manifold_of_meshgl64, etc.) placement-constructs its C++ object
+    /// directly into the `mem` buffer we pass it - the returned handle *is*
+    /// that same pointer, not a separate heap allocation copied from it. The
+    /// buffer must stay alive for as long as the object is in use, so it is
+    /// freed by DeleteManifold, not here.
     public static ManifoldManifold CreateCube(double sizeX, double sizeY, double sizeZ)
     {
         var mem = Marshal.AllocHGlobal((int)GetManifoldSize());
-        try
-        {
-            var cube = manifold_cube(mem, sizeX, sizeY, sizeZ, 1); // center=1
-            return cube;
-        }
-        finally
-        {
-            Marshal.FreeHGlobal(mem);
-        }
+        return manifold_cube(mem, sizeX, sizeY, sizeZ, 1); // center=1
     }
 
     /// Create a MeshGL64 from raw vertex and triangle data.
     /// verts: flattened [x0, y0, z0, x1, y1, z1, ...]
     /// triangles: flattened [v0, v1, v2, v0, v1, v2, ...] (3 indices per triangle)
+    ///
+    /// The `mem` buffer backing the returned handle is owned by the caller
+    /// for the object's lifetime (see the CreateCube note) - free it via
+    /// DeleteMeshGL64, not here. vert_props/tri_verts are only read during
+    /// the call (Manifold copies them into its own vectors), so those GC
+    /// handles are safe to release once manifold_meshgl64 returns.
     public static ManifoldMeshGL64 CreateMeshGL64(double[] verts, ulong[] triangles)
     {
         var vertsHandle = GCHandle.Alloc(verts, GCHandleType.Pinned);
@@ -163,20 +168,13 @@ public static class ManifoldInterop
             var nTris = (nuint)(triangles.Length / 3);
             var mem = Marshal.AllocHGlobal((int)GetMeshGL64Size());
 
-            try
-            {
-                return manifold_meshgl64(
-                    mem,
-                    vertsHandle.AddrOfPinnedObject(),
-                    nVerts,
-                    3,  // 3 properties: x, y, z
-                    trisHandle.AddrOfPinnedObject(),
-                    nTris);
-            }
-            finally
-            {
-                Marshal.FreeHGlobal(mem);
-            }
+            return manifold_meshgl64(
+                mem,
+                vertsHandle.AddrOfPinnedObject(),
+                nVerts,
+                3,  // 3 properties: x, y, z
+                trisHandle.AddrOfPinnedObject(),
+                nTris);
         }
         finally
         {
@@ -189,92 +187,76 @@ public static class ManifoldInterop
     public static ManifoldManifold MeshToManifold(ManifoldMeshGL64 mesh)
     {
         var mem = Marshal.AllocHGlobal((int)GetManifoldSize());
-        try
-        {
-            return manifold_of_meshgl64(mem, mesh);
-        }
-        finally
-        {
-            Marshal.FreeHGlobal(mem);
-        }
+        return manifold_of_meshgl64(mem, mesh);
     }
 
     /// Extract a MeshGL64 from a Manifold.
     public static ManifoldMeshGL64 ManifoldToMesh(ManifoldManifold manifold)
     {
         var mem = Marshal.AllocHGlobal((int)GetMeshGL64Size());
-        try
-        {
-            return manifold_get_meshgl64(mem, manifold);
-        }
-        finally
-        {
-            Marshal.FreeHGlobal(mem);
-        }
+        return manifold_get_meshgl64(mem, manifold);
     }
 
     /// Boolean union: a + b.
     public static ManifoldManifold Union(ManifoldManifold a, ManifoldManifold b)
     {
         var mem = Marshal.AllocHGlobal((int)GetManifoldSize());
-        try
-        {
-            return manifold_union(mem, a, b);
-        }
-        finally
-        {
-            Marshal.FreeHGlobal(mem);
-        }
+        return manifold_union(mem, a, b);
     }
 
     /// Boolean difference: a - b.
     public static ManifoldManifold Difference(ManifoldManifold a, ManifoldManifold b)
     {
         var mem = Marshal.AllocHGlobal((int)GetManifoldSize());
-        try
-        {
-            return manifold_difference(mem, a, b);
-        }
-        finally
-        {
-            Marshal.FreeHGlobal(mem);
-        }
+        return manifold_difference(mem, a, b);
     }
 
     /// Boolean intersection: a ^ b.
     public static ManifoldManifold Intersection(ManifoldManifold a, ManifoldManifold b)
     {
         var mem = Marshal.AllocHGlobal((int)GetManifoldSize());
-        try
-        {
-            return manifold_intersection(mem, a, b);
-        }
-        finally
-        {
-            Marshal.FreeHGlobal(mem);
-        }
+        return manifold_intersection(mem, a, b);
     }
 
     /// Get mesh info from a MeshGL64.
+    ///
+    /// Unlike the placement-construction functions above, manifold_meshgl64_vert_properties
+    /// and manifold_meshgl64_tri_verts don't construct anything at `mem` - they just
+    /// `memcpy` the requested data into it (see copy_data in bindings/c/conv.h), so
+    /// `mem` must be a real caller-supplied buffer sized to hold the copy, not
+    /// IntPtr.Zero (which made this a null-pointer memcpy destination and crashed).
     public static void ExtractMeshGL64(
         ManifoldMeshGL64 mesh,
         out double[] vertexPositions,
         out ulong[] triangleIndices)
     {
-        var nVerts = manifold_meshgl64_num_vert(mesh);
-        var nTris = manifold_meshgl64_num_tri(mesh);
-
         // Vertex properties are packed as [x0, y0, z0, x1, y1, z1, ...] (3 per vertex)
         var vertPropsLen = manifold_meshgl64_vert_properties_length(mesh);
-        var vertMem = manifold_meshgl64_vert_properties(IntPtr.Zero, mesh);
-        vertexPositions = new double[vertPropsLen];
-        Marshal.Copy(vertMem, vertexPositions, 0, (int)vertPropsLen);
+        var vertMemBuf = Marshal.AllocHGlobal((int)vertPropsLen * sizeof(double));
+        try
+        {
+            var vertMem = manifold_meshgl64_vert_properties(vertMemBuf, mesh);
+            vertexPositions = new double[vertPropsLen];
+            Marshal.Copy(vertMem, vertexPositions, 0, (int)vertPropsLen);
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(vertMemBuf);
+        }
 
         // Triangle indices are packed as [v0, v1, v2, v0, v1, v2, ...] (3 per triangle)
         var triLen = manifold_meshgl64_tri_length(mesh);
-        var triMem = manifold_meshgl64_tri_verts(IntPtr.Zero, mesh);
-        triangleIndices = new ulong[triLen];
-        Marshal.Copy(triMem, (long[])((object)triangleIndices), 0, (int)triLen);
+        var triMemBuf = Marshal.AllocHGlobal((int)triLen * sizeof(ulong));
+        try
+        {
+            var triMem = manifold_meshgl64_tri_verts(triMemBuf, mesh);
+            triangleIndices = new ulong[triLen];
+            Marshal.Copy(triMem, (long[])((object)triangleIndices), 0, (int)triLen);
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(triMemBuf);
+        }
     }
 
     /// Check if a Manifold is valid and get its status.
@@ -292,17 +274,21 @@ public static class ManifoldInterop
     /// Get volume (useful for verifying boolean results).
     public static double GetVolume(ManifoldManifold m) => manifold_volume(m);
 
-    /// Safely delete a Manifold, calling destructor and freeing.
+    /// Safely delete a Manifold: run its destructor in place, then free the
+    /// `mem` buffer we allocated for it in CreateCube/MeshToManifold/Union/etc.
+    /// manifold_delete_manifold is NOT used here - it calls C++ `delete` on
+    /// the pointer, which assumes a heap allocation from manifold_alloc_manifold,
+    /// not memory we placement-constructed into via Marshal.AllocHGlobal.
     public static void DeleteManifold(ManifoldManifold m)
     {
         manifold_destruct_manifold(m);
-        manifold_delete_manifold(m);
+        Marshal.FreeHGlobal(m.Handle);
     }
 
-    /// Safely delete a MeshGL64.
+    /// Safely delete a MeshGL64 (see DeleteManifold for why manifold_delete_meshgl64 isn't used).
     public static void DeleteMeshGL64(ManifoldMeshGL64 m)
     {
         manifold_destruct_meshgl64(m);
-        manifold_delete_meshgl64(m);
+        Marshal.FreeHGlobal(m.Handle);
     }
 }

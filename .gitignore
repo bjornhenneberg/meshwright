@@ -22,3 +22,5 @@ Thumbs.db
 /testdata/local/
 /reports/build-hook/
 reports/*/*/*.log
+/.tools/
+TestResults/

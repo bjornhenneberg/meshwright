@@ -10,17 +10,20 @@ namespace Meshwright.Tests.Edit;
 public class PlaneCutTests
 {
     /// <summary>Helper to build a simple closed cube for testing.</summary>
-    private static DMesh3 BuildCube(double size)
+    private static DMesh3 BuildCube(double size) => BuildBox(size, size, size);
+
+    /// <summary>Helper to build a simple closed axis-aligned box for testing.</summary>
+    private static DMesh3 BuildBox(double sizeX, double sizeY, double sizeZ)
     {
         var mesh = new DMesh3();
         int v000 = mesh.AppendVertex(new Vector3d(0, 0, 0));
-        int v100 = mesh.AppendVertex(new Vector3d(1, 0, 0) * size);
-        int v110 = mesh.AppendVertex(new Vector3d(1, 1, 0) * size);
-        int v010 = mesh.AppendVertex(new Vector3d(0, 1, 0) * size);
-        int v001 = mesh.AppendVertex(new Vector3d(0, 0, 1) * size);
-        int v101 = mesh.AppendVertex(new Vector3d(1, 0, 1) * size);
-        int v111 = mesh.AppendVertex(new Vector3d(1, 1, 1) * size);
-        int v011 = mesh.AppendVertex(new Vector3d(0, 1, 1) * size);
+        int v100 = mesh.AppendVertex(new Vector3d(sizeX, 0, 0));
+        int v110 = mesh.AppendVertex(new Vector3d(sizeX, sizeY, 0));
+        int v010 = mesh.AppendVertex(new Vector3d(0, sizeY, 0));
+        int v001 = mesh.AppendVertex(new Vector3d(0, 0, sizeZ));
+        int v101 = mesh.AppendVertex(new Vector3d(sizeX, 0, sizeZ));
+        int v111 = mesh.AppendVertex(new Vector3d(sizeX, sizeY, sizeZ));
+        int v011 = mesh.AppendVertex(new Vector3d(0, sizeY, sizeZ));
 
         void Quad(int p, int q, int r, int s)
         {
@@ -176,12 +179,16 @@ public class PlaneCutTests
     [Fact]
     public void PlaneCut_WithDifferentNormals_ProducesDifferentResults()
     {
-        // Arrange
-        var mesh1 = BuildCube(10.0);
-        var mesh2 = BuildCube(10.0);
+        // Arrange - a non-cubic box cut off-center, so the two cuts aren't related by a
+        // symmetry of the shape (an axis-aligned box sliced through its exact center is
+        // topologically identical - same triangle count - no matter which face-normal you
+        // cut along, so distinguishing cuts by triangle count alone doesn't work here;
+        // bounding box shape is the meaningful, cut-plane-specific signal instead).
+        var mesh1 = BuildBox(10.0, 6.0, 14.0);
+        var mesh2 = BuildBox(10.0, 6.0, 14.0);
         var planeCut = new PlaneCut();
 
-        Vector3d planePoint = new Vector3d(5.0, 5.0, 5.0);
+        Vector3d planePoint = new Vector3d(2.0, 3.0, 7.0);
         Vector3d normalZ = Vector3d.AxisZ.Normalized;
         Vector3d normalX = Vector3d.AxisX.Normalized;
 
@@ -189,8 +196,10 @@ public class PlaneCutTests
         PlaneCutResult resultZ = planeCut.Cut(mesh1, planePoint, normalZ, CutMode.Keep, HoleFillMode.Flat);
         PlaneCutResult resultX = planeCut.Cut(mesh2, planePoint, normalX, CutMode.Keep, HoleFillMode.Flat);
 
-        // Assert - Different normals should produce different results (different triangle counts)
-        Assert.NotEqual(resultZ.PositiveSideMesh.TriangleCount, resultX.PositiveSideMesh.TriangleCount);
+        // Assert - Different normals should keep geometrically different regions
+        AxisAlignedBox3d boundsZ = resultZ.PositiveSideMesh.CachedBounds;
+        AxisAlignedBox3d boundsX = resultX.PositiveSideMesh.CachedBounds;
+        Assert.NotEqual(boundsZ.Extents, boundsX.Extents);
     }
 
     [Fact]
