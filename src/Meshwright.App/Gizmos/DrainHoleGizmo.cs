@@ -124,8 +124,11 @@ public sealed class DrainHoleGizmo : IViewportGizmo, IDisposable
             var worldPos = new Vector3((float)hole.SurfacePoint.x, (float)hole.SurfacePoint.y, (float)hole.SurfacePoint.z);
             float markerRadius = (float)(hole.Diameter / 2.0 * 0.3f); // Slightly smaller than actual diameter for clarity
 
+            // Scale then translate: System.Numerics composes left-to-right for row vectors, so
+            // the reverse order would scale the translation itself and pull the marker toward the
+            // world origin (a hole at x=10 with a 2mm marker would render at x=3).
             SetMatrixUniform(gl, _sphereProgram, "uModel",
-                Matrix4x4.CreateTranslation(worldPos) * Matrix4x4.CreateScale(markerRadius));
+                Matrix4x4.CreateScale(markerRadius) * Matrix4x4.CreateTranslation(worldPos));
             SetMatrixUniform(gl, _sphereProgram, "uView", view);
             SetMatrixUniform(gl, _sphereProgram, "uProjection", projection);
 

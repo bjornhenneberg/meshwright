@@ -42,7 +42,9 @@ public sealed class SimpleMarkerGizmo : IViewportGizmo, IDisposable
         }
 
         gl.UseProgram(_sphereProgram);
-        SetMatrixUniform(gl, _sphereProgram, "uModel", Matrix4x4.CreateTranslation(_position) * Matrix4x4.CreateScale(_markerRadius));
+        // Scale then translate — the reverse order scales the translation too, placing the
+        // marker at _position * _markerRadius instead of at _position.
+        SetMatrixUniform(gl, _sphereProgram, "uModel", Matrix4x4.CreateScale(_markerRadius) * Matrix4x4.CreateTranslation(_position));
         SetMatrixUniform(gl, _sphereProgram, "uView", view);
         SetMatrixUniform(gl, _sphereProgram, "uProjection", projection);
 
