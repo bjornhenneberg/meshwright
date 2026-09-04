@@ -1,0 +1,81 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Meshwright.App.Views.Edit.PlaneCutPanel"
+             Width="300">
+  <ScrollViewer>
+    <Border Padding="8">
+      <StackPanel Spacing="12">
+        <TextBlock Text="Plane Cut" FontWeight="Bold" />
+
+        <StackPanel Spacing="4">
+          <TextBlock Text="Mode:" />
+          <ComboBox Name="ModeComboBox" SelectedIndex="0">
+            <ComboBoxItem>Keep Positive Side</ComboBoxItem>
+            <ComboBoxItem>Keep Negative Side</ComboBoxItem>
+            <ComboBoxItem>Split Both Sides</ComboBoxItem>
+          </ComboBox>
+        </StackPanel>
+
+        <StackPanel Spacing="4">
+          <TextBlock Text="Cap Type:" />
+          <ComboBox Name="CapModeComboBox" SelectedIndex="1">
+            <ComboBoxItem>Flat</ComboBoxItem>
+            <ComboBoxItem>Planar</ComboBoxItem>
+            <ComboBoxItem>Smooth</ComboBoxItem>
+          </ComboBox>
+        </StackPanel>
+
+        <CheckBox Name="AddCapCheckBox" IsChecked="True" Content="Add Cap" />
+
+        <StackPanel Spacing="4">
+          <TextBlock Text="Plane Point (mm):" />
+          <StackPanel Spacing="4">
+            <TextBlock Text="X:" />
+            <TextBox Name="PlanePointXInput" Text="0.0" />
+          </StackPanel>
+          <StackPanel Spacing="4">
+            <TextBlock Text="Y:" />
+            <TextBox Name="PlanePointYInput" Text="0.0" />
+          </StackPanel>
+          <StackPanel Spacing="4">
+            <TextBlock Text="Z:" />
+            <TextBox Name="PlanePointZInput" Text="0.0" />
+          </StackPanel>
+        </StackPanel>
+
+        <StackPanel Spacing="4">
+          <TextBlock Text="Plane Normal (normalized):" />
+          <StackPanel Spacing="4">
+            <TextBlock Text="X:" />
+            <TextBox Name="PlaneNormalXInput" Text="0.0" />
+          </StackPanel>
+          <StackPanel Spacing="4">
+            <TextBlock Text="Y:" />
+            <TextBox Name="PlaneNormalYInput" Text="0.0" />
+          </StackPanel>
+          <StackPanel Spacing="4">
+            <TextBlock Text="Z:" />
+            <TextBox Name="PlaneNormalZInput" Text="1.0" />
+          </StackPanel>
+        </StackPanel>
+
+        <Button Name="SetViaGizmoButton" Content="Set Plane Via Gizmo" Click="OnSetViaGizmoClick" />
+        <Button Name="ApplyButton" Content="Apply" Click="OnApplyClick" />
+
+        <StackPanel Spacing="4">
+          <TextBlock Text="Before:" TextWrapping="Wrap" />
+          <TextBlock Name="BeforeStats" TextWrapping="Wrap" />
+        </StackPanel>
+
+        <StackPanel Spacing="4">
+          <TextBlock Text="After:" TextWrapping="Wrap" />
+          <TextBlock Name="AfterStats" TextWrapping="Wrap" />
+        </StackPanel>
+
+        <StackPanel Spacing="4">
+          <TextBlock Name="ResultMessageText" TextWrapping="Wrap" FontStyle="Italic" />
+        </StackPanel>
+      </StackPanel>
+    </Border>
+  </ScrollViewer>
+</UserControl>
