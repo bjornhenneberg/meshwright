@@ -7,12 +7,26 @@ namespace Meshwright.Tests.Edit;
 
 public class TransformGizmoTests
 {
+    private static readonly Vector2 ViewportSize = new(800f, 600f);
+
+    /// <summary>
+    /// View/projection for a camera sitting where <see cref="RayFromAbove"/>'s rays originate, so
+    /// the matrices agree with the synthetic ray. These are unit-scale tests of the drag maths; the
+    /// camera-driven picking contract lives in <c>Gizmos/GizmoPickContractTests</c>.
+    /// </summary>
+    private static readonly Matrix4x4 View = Matrix4x4.CreateLookAt(new Vector3(0f, 0f, 5f), Vector3.Zero, Vector3.UnitY);
+
+    private static readonly Matrix4x4 Projection =
+        Matrix4x4.CreatePerspectiveFieldOfView(MathF.PI / 4f, ViewportSize.X / ViewportSize.Y, 0.01f, 1000f);
+
     /// <summary>A pointer event whose ray shoots straight down -Z from the given XY position.</summary>
     private static GizmoPointerEvent RayFromAbove(float x, float y, GizmoPointerButton button) =>
         new(
             new ViewportRay(new Vector3(x, y, 5f), new Vector3(0f, 0f, -1f)),
             Vector2.Zero,
-            new Vector2(800f, 600f),
+            ViewportSize,
+            View,
+            Projection,
             button,
             GizmoModifierKeys.None,
             null);

@@ -15,6 +15,13 @@ namespace Meshwright.Rendering.Gizmos;
 /// </param>
 /// <param name="PixelPosition">Raw pointer position in device pixels (origin top-left, y-down), for gizmos that need 2D screen-space hit-testing.</param>
 /// <param name="ViewportPixelSize">Current viewport size in device pixels, matching <paramref name="PixelPosition"/>'s units.</param>
+/// <param name="View">The camera's view matrix for this frame — the same one passed to <see cref="IViewportGizmo.Render"/>.</param>
+/// <param name="Projection">
+/// The camera's projection matrix for this frame. Carried so a gizmo can size its pick tolerances
+/// on screen rather than in world units, via <see cref="GizmoScale"/> — a gizmo picked at a fixed
+/// world tolerance is unhittable on a large model. Required rather than defaulted: a
+/// <c>default(Matrix4x4)</c> is all zeros and would silently yield a nonsense scale.
+/// </param>
 /// <param name="Button">Which button this event relates to; <see cref="GizmoPointerButton.None"/> for move events.</param>
 /// <param name="Modifiers">Keyboard modifiers held during the event.</param>
 /// <param name="Mesh">
@@ -27,6 +34,8 @@ public readonly record struct GizmoPointerEvent(
     ViewportRay Ray,
     Vector2 PixelPosition,
     Vector2 ViewportPixelSize,
+    Matrix4x4 View,
+    Matrix4x4 Projection,
     GizmoPointerButton Button,
     GizmoModifierKeys Modifiers,
     g3.DMesh3? Mesh);

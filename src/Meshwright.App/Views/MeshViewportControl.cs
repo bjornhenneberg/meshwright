@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Numerics;
 using Avalonia;
 using Avalonia.Input;
 using Avalonia.OpenGL;
@@ -219,13 +220,10 @@ public sealed class MeshViewportControl : OpenGlControlBase
         var pointerPos = e.GetPosition(this);
         _lastPointerPosition = pointerPos;
 
-        // Compute unprojected ray for gizmo (and camera) to consume.
-        ViewportRay ray = ComputeViewportRay(pointerPos);
         GizmoPointerButton button = GetGizmoButton(point.Properties);
         GizmoModifierKeys modifiers = GetGizmoModifiers(e.KeyModifiers);
 
-        var gizmoEvent = new GizmoPointerEvent(ray, new System.Numerics.Vector2((float)pointerPos.X, (float)pointerPos.Y),
-            GetViewportPixelSize(), button, modifiers, _mesh);
+        GizmoPointerEvent gizmoEvent = MakeGizmoEvent(pointerPos, button, modifiers);
 
         // Gizmo first refusal: if it claims the event, suppress camera manipulation.
         _gizmoClaimingDrag = _gizmo?.OnPointerPressed(gizmoEvent) ?? false;
@@ -251,13 +249,11 @@ public sealed class MeshViewportControl : OpenGlControlBase
     private void HandlePointerMoved(PointerEventArgs e)
     {
         var position = e.GetPosition(this);
-        ViewportRay ray = ComputeViewportRay(position);
 
         // If gizmo claimed the current drag, route the move to it (even if no button is pressed).
         if (_gizmoClaimingDrag && _gizmo is not null)
         {
-            var gizmoEvent = new GizmoPointerEvent(ray, new System.Numerics.Vector2((float)position.X, (float)position.Y),
-                GetViewportPixelSize(), GizmoPointerButton.None, GetGizmoModifiers(e.KeyModifiers), _mesh);
+            GizmoPointerEvent gizmoEvent = MakeGizmoEvent(position, GizmoPointerButton.None, GetGizmoModifiers(e.KeyModifiers));
             _gizmo.OnPointerMoved(gizmoEvent);
         }
         else if (_isOrbiting || _isPanning)
@@ -278,8 +274,7 @@ public sealed class MeshViewportControl : OpenGlControlBase
         else if (_gizmo is not null)
         {
             // Gizmo hover feedback: even with no drag active, send moves to gizmo for hover highlighting.
-            var gizmoEvent = new GizmoPointerEvent(ray, new System.Numerics.Vector2((float)position.X, (float)position.Y),
-                GetViewportPixelSize(), GizmoPointerButton.None, GetGizmoModifiers(e.KeyModifiers), _mesh);
+            GizmoPointerEvent gizmoEvent = MakeGizmoEvent(position, GizmoPointerButton.None, GetGizmoModifiers(e.KeyModifiers));
             _gizmo.OnPointerMoved(gizmoEvent);
         }
 
@@ -293,11 +288,9 @@ public sealed class MeshViewportControl : OpenGlControlBase
         {
             var point = e.GetCurrentPoint(this);
             var position = e.GetPosition(this);
-            ViewportRay ray = ComputeViewportRay(position);
             GizmoPointerButton button = GetGizmoButton(point.Properties);
 
-            var gizmoEvent = new GizmoPointerEvent(ray, new System.Numerics.Vector2((float)position.X, (float)position.Y),
-                GetViewportPixelSize(), button, GetGizmoModifiers(e.KeyModifiers), _mesh);
+            GizmoPointerEvent gizmoEvent = MakeGizmoEvent(position, button, GetGizmoModifiers(e.KeyModifiers));
             _gizmo.OnPointerReleased(gizmoEvent);
         }
 
@@ -315,27 +308,27 @@ public sealed class MeshViewportControl : OpenGlControlBase
         RequestNextFrameRendering();
     }
 
-    private ViewportRay ComputeViewportRay(Point pixelPosition)
+    /// <summary>
+    /// Builds the <see cref="GizmoPointerEvent"/> for a pointer position, computing the ray and the
+    /// camera matrices from one shared view/projection pair so they cannot disagree. Gizmos need the
+    /// matrices to size their pick tolerances on screen (see <see cref="GizmoScale"/>).
+    /// </summary>
+    private GizmoPointerEvent MakeGizmoEvent(Point pixelPosition, GizmoPointerButton button, GizmoModifierKeys modifiers)
     {
         var size = Bounds.Size;
         double scaling = VisualRoot?.RenderScaling ?? 1.0;
         int pixelWidth = Math.Max(1, (int)(size.Width * scaling));
         int pixelHeight = Math.Max(1, (int)(size.Height * scaling));
 
-        var scaledPixelPos = new System.Numerics.Vector2((float)(pixelPosition.X * scaling), (float)(pixelPosition.Y * scaling));
+        var devicePixelPos = new System.Numerics.Vector2((float)(pixelPosition.X * scaling), (float)(pixelPosition.Y * scaling));
         var viewportPixelSize = new System.Numerics.Vector2(pixelWidth, pixelHeight);
         float aspect = pixelHeight == 0 ? 1f : (float)pixelWidth / pixelHeight;
 
-        return ViewportRaycaster.Unproject(scaledPixelPos, viewportPixelSize, _camera.GetViewMatrix(), _camera.GetProjectionMatrix(aspect));
-    }
+        Matrix4x4 view = _camera.GetViewMatrix();
+        Matrix4x4 projection = _camera.GetProjectionMatrix(aspect);
+        ViewportRay ray = ViewportRaycaster.Unproject(devicePixelPos, viewportPixelSize, view, projection);
 
-    private System.Numerics.Vector2 GetViewportPixelSize()
-    {
-        var size = Bounds.Size;
-        double scaling = VisualRoot?.RenderScaling ?? 1.0;
-        int pixelWidth = Math.Max(1, (int)(size.Width * scaling));
-        int pixelHeight = Math.Max(1, (int)(size.Height * scaling));
-        return new System.Numerics.Vector2(pixelWidth, pixelHeight);
+        return new GizmoPointerEvent(ray, devicePixelPos, viewportPixelSize, view, projection, button, modifiers, _mesh);
     }
 
     private static GizmoPointerButton GetGizmoButton(PointerPointProperties props)

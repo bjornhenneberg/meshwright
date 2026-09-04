@@ -51,7 +51,7 @@ public sealed class ViewportHarness
         return new ViewportHarness(camera, logicalSize, renderScaling);
     }
 
-    /// <summary>Viewport size in device pixels — mirrors <c>MeshViewportControl.GetViewportPixelSize</c>.</summary>
+    /// <summary>Viewport size in device pixels — mirrors the pixel-size arithmetic in <c>MeshViewportControl.MakeGizmoEvent</c>.</summary>
     public Vector2 PixelSize
     {
         get
@@ -73,7 +73,7 @@ public sealed class ViewportHarness
 
     /// <summary>
     /// Unprojects a logical pointer position into a world ray. This mirrors
-    /// <c>MeshViewportControl.ComputeViewportRay</c>: scale the logical position by
+    /// <c>MeshViewportControl.MakeGizmoEvent</c>: scale the logical position by
     /// <see cref="RenderScaling"/>, then hand it to the production
     /// <see cref="ViewportRaycaster.Unproject"/>. Only the scaling arithmetic is restated here;
     /// the unprojection itself is the shipping code, so a regression in it fails these tests.
@@ -118,7 +118,7 @@ public sealed class ViewportHarness
         g3.DMesh3? mesh = null)
     {
         var devicePixel = new Vector2((float)(logicalPixel.X * RenderScaling), (float)(logicalPixel.Y * RenderScaling));
-        return new GizmoPointerEvent(RayThroughPixel(logicalPixel), devicePixel, PixelSize, button, modifiers, mesh);
+        return new GizmoPointerEvent(RayThroughPixel(logicalPixel), devicePixel, PixelSize, View, Projection, button, modifiers, mesh);
     }
 
     /// <summary>Presses at the pixel where <paramref name="world"/> appears; returns whether the gizmo claimed it.</summary>

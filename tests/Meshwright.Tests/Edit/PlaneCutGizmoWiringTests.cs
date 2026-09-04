@@ -47,8 +47,20 @@ public class PlaneCutGizmoWiringTests
         return mesh;
     }
 
+    private static readonly Vector2 ViewportSize = new(800, 600);
+
+    /// <summary>
+    /// View/projection for a camera at the synthetic rays' origin distance, so the matrices agree
+    /// with the ray these tests hand-build. Camera-driven picking is covered separately in
+    /// <c>Gizmos/GizmoPickContractTests</c>; these tests cover panel wiring.
+    /// </summary>
+    private static readonly Matrix4x4 View = Matrix4x4.CreateLookAt(new Vector3(0f, 0f, 5f), Vector3.Zero, Vector3.UnitY);
+
+    private static readonly Matrix4x4 Projection =
+        Matrix4x4.CreatePerspectiveFieldOfView(MathF.PI / 4f, ViewportSize.X / ViewportSize.Y, 0.01f, 1000f);
+
     private static GizmoPointerEvent MakeEvent(Vector3 origin, Vector3 direction, GizmoPointerButton button, GizmoModifierKeys modifiers = GizmoModifierKeys.None) =>
-        new(new ViewportRay(origin, Vector3.Normalize(direction)), Vector2.Zero, new Vector2(800, 600), button, modifiers, null);
+        new(new ViewportRay(origin, Vector3.Normalize(direction)), Vector2.Zero, ViewportSize, View, Projection, button, modifiers, null);
 
     [Fact]
     public void NewGizmo_WasNotTouched()
