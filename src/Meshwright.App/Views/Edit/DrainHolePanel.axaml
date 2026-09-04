@@ -1,0 +1,65 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Meshwright.App.Views.Edit.DrainHolePanel"
+             Width="300">
+  <ScrollViewer>
+    <Border Padding="8">
+      <StackPanel Spacing="12">
+        <TextBlock Text="Drain Holes" FontWeight="Bold" />
+
+        <!-- Gizmo Controls -->
+        <StackPanel Spacing="4">
+          <TextBlock Text="Place Holes:" />
+          <Button Name="ActivateGizmoButton" Content="Place holes with gizmo" Click="OnActivateGizmoClick" />
+          <TextBlock Name="GizmoStatusText" TextWrapping="Wrap" FontStyle="Italic" FontSize="11" />
+        </StackPanel>
+
+        <!-- Hole Parameters -->
+        <Separator />
+        <TextBlock Text="Hole Parameters:" FontWeight="Bold" />
+
+        <StackPanel Spacing="4">
+          <TextBlock Text="Diameter (mm):" />
+          <TextBox Name="DiameterInput" Text="2.0" />
+        </StackPanel>
+
+        <StackPanel Spacing="4">
+          <TextBlock Text="Countersink Depth (mm):" />
+          <TextBox Name="CountersinkInput" Text="0.0" />
+        </StackPanel>
+
+        <!-- Hole List -->
+        <Separator />
+        <TextBlock Text="Placed Holes:" FontWeight="Bold" />
+
+        <ListBox Name="HolesList" Height="150" SelectionMode="Single" SelectionChanged="OnHoleSelectionChanged">
+          <ListBox.ItemTemplate>
+            <DataTemplate>
+              <TextBlock Text="{Binding}" />
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+
+        <!-- Apply Controls -->
+        <Separator />
+        <StackPanel Spacing="8">
+          <Button Name="ApplySelectedButton" Content="Apply to selected hole" Click="OnApplySelectedClick" />
+          <Button Name="ApplyAllButton" Content="Apply to all holes" Click="OnApplyAllClick" />
+          <Button Name="ClearAllButton" Content="Clear all holes" Click="OnClearAllClick" />
+        </StackPanel>
+
+        <!-- Result Message -->
+        <StackPanel Spacing="4">
+          <TextBlock Text="Result:" FontWeight="Bold" />
+          <TextBlock Name="ResultMessageText" TextWrapping="Wrap" FontStyle="Italic" />
+        </StackPanel>
+
+        <!-- Statistics -->
+        <StackPanel Spacing="4">
+          <TextBlock Text="Statistics:" FontWeight="Bold" />
+          <TextBlock Name="StatsText" TextWrapping="Wrap" FontSize="11" />
+        </StackPanel>
+      </StackPanel>
+    </Border>
+  </ScrollViewer>
+</UserControl>
