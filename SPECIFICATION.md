@@ -5,9 +5,10 @@
 **Progress:** M0 (Skeleton), M1 (Inspect), M2 (Repair), and M3 (Edit) complete
 and verified; see `reports/M0/SUMMARY.md`, `reports/M1/SUMMARY.md`,
 `reports/M2/SUMMARY.md`, and `reports/M3/`. M4 (Polish and release) is
-underway — batches M4-0 (Manifold RPATH/interop fix) and M4-2 (gizmo wiring
-+ menu/undo-redo UI) are complete, 220/220 tests + 8/8 GPU passing; see the
-M4 entry in §11 and §7.
+underway — batches M4-0 (Manifold RPATH/interop fix), M4-1 (real-world test
+corpus), M4-2 (gizmo wiring + menu/undo-redo UI), M4-6 (corpus ground
+truth), M4-7 (non-manifold import fix), and M4-3 (Linux CI + packaging) are
+complete, 432/432 tests + 8/8 GPU passing; see the M4 entry in §11 and §7.
 
 ---
 
@@ -426,8 +427,30 @@ count can legitimately differ from what was exported — so "export loses no
 triangles, reimport drops none" is what was actually asserted. See
 `reports/M4/20260904T213615Z-batch2-mesh-export/report.md`.
 
-Remaining M4 batches (packaging & CI — M4-3; docs/release — M4-4) are not yet
-started — see `reports/M4/` as they land. 432 unit tests + 8 GPU tests passing.
+Batch M4-3 (Linux CI + packaging) complete, scoped to Linux only by explicit
+decision — Windows/macOS CI and packaging are a follow-up batch, since
+neither can be built or verified on this dev host. Delivered
+`.github/workflows/ci.yml` (GitHub Actions on `ubuntu-24.04`: restore,
+build, cache + fetch the M4-1 corpus, install Xvfb + Mesa, run both test
+projects under `xvfb-run`; the Manifold native libs are already committed to
+git so CI never needs to build Manifold from source) and
+`scripts/package-linux.sh` (self-contained single-file `linux-x64` publish
+packaged as a `.deb` — `/opt/meshwright`, a `/usr/bin` symlink, a `.desktop`
+entry). AppImage was scoped out — needs `appimagetool`, unavailable on this
+host/via apt; `.deb` alone covers Debian/Ubuntu/Mint, this project's own dev
+platform. Verified locally (GitHub Actions itself can't be triggered from
+this session): full build + both test suites green (432 + 8), the packaged
+`.deb` built, inspected with `dpkg-deb -c`/`-I`, and its installed binary
+launched cleanly from a scratch extraction root with no missing-library
+errors. Not verified: the CI workflow's actual execution on GitHub (this
+session had no `sudo` to install Xvfb and confirm that path locally), and
+any real GUI rendering (no way to see a window from this environment — only
+process-start was smoke-tested). See
+`reports/M4/20260904T214856Z-batch-linux-packaging-ci/report.md`.
+
+Remaining M4 batches (Windows/macOS CI + packaging, still under M4-3;
+docs/release — M4-4) are not yet started — see `reports/M4/` as they land.
+432 unit tests + 8 GPU tests passing.
 
 **M5+**
 v1.x features, then the resin module.
@@ -502,6 +525,7 @@ source, and matches how this audience already buys tools.
 | 2026-09-04 | Import reports the geometry it cannot represent rather than dropping it silently (`MeshImportResult`). `DMesh3` cannot hold a non-manifold edge and `AppendTriangle` refuses those triangles; ignoring that return value made 14 of 24 real print files load incomplete, two at ~73% loss, with every downstream diagnostic then describing a different mesh. Loading such geometry properly is a data-structure decision deferred to its own milestone; misreporting it is not acceptable in the meantime |
 | 2026-09-04 | Import keeps non-manifold geometry by splitting the mesh at the offending vertices rather than dropping triangles. `DMesh3` cannot represent a non-manifold junction, so the only faithful options were losing geometry or cutting connectivity; cutting is strictly better, since the surface stays complete and correctly positioned and the junction genuinely has no single consistent surface to connect to |
 | 2026-09-04 | Topology-derived detectors reason about vertex *positions*, not vertex ids (`PositionTopology`). The mesh structure under-represents the true topology, so a seam left by splitting is indistinguishable from a hole by id alone. `NonManifoldDetector` established this pattern; `BoundaryHoleDetector` and `DisconnectedShellDetector` now follow it. A consequence, accepted deliberately: a crack from near-coincident vertices is reported as duplicate vertices rather than as a hole, because that names the cause and points at the repair that fixes it |
+| 2026-09-04 | M4-3 (packaging & CI) scoped to Linux only for its first batch, by explicit decision — Windows and macOS can't be built or verified on this dev host, so doing all three at once would mean shipping unverified config. `.deb` chosen over AppImage for the first Linux package format: covers this project's own dev platform (Debian/Ubuntu/Mint) and `appimagetool` isn't available on this host or via apt |
 
 ## 12. Development environment
 
@@ -565,10 +589,10 @@ M0.
    ground truth (M4-6)~~ — both done; see `reports/M4/CORPUS.md`.
    ~~Outstanding: import cannot load non-manifold geometry~~ — fixed in M4-7 by
    splitting at the offending vertices; all 53 corpus files now load complete.
-9. Packaging & CI (M4-3) and docs/release (M4-4) remain. Note for CI: the corpus
-   is fetched, not committed, so a CI job must run `scripts/fetch-corpus.sh`
-   (and should cache it) to get corpus coverage; without it those tests pass
-   trivially rather than failing, by design.
+9. ~~Packaging & CI (M4-3)~~ — Linux done: `.github/workflows/ci.yml` fetches
+   and caches the corpus via `scripts/fetch-corpus.sh` as planned, and
+   `scripts/package-linux.sh` builds a self-contained `.deb`. Windows/macOS
+   CI + packaging still remain, as does docs/release (M4-4).
 10. ~~Export is entirely absent from the UI~~ — done: `MeshExporter` + a File >
     Export... menu item/toolbar button in `MainWindow`, round-tripped against
     the full M4-1 corpus. See §7 M4 and

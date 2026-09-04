@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Linux only for now — see SPECIFICATION.md §7 M4-3. Windows/macOS CI is a
+# follow-up once packaging for those platforms exists.
+jobs:
+  build-and-test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore
+        run: dotnet restore Meshwright.sln
+
+      - name: Build
+        run: dotnet build Meshwright.sln --configuration Release --no-restore
+
+      # tests/corpus/files/ is fetched, never committed (see manifest.tsv and
+      # AGENTS.md). Cached by manifest hash so a normal run costs nothing;
+      # a manifest change invalidates the cache and re-fetches.
+      - name: Cache test corpus
+        id: cache-corpus
+        uses: actions/cache@v4
+        with:
+          path: tests/corpus/files
+          key: corpus-${{ hashFiles('tests/corpus/manifest.tsv') }}
+
+      - name: Fetch test corpus
+        run: scripts/fetch-corpus.sh
+
+      # GPU tests (tests/Meshwright.Tests.Gpu) open a real GL context via
+      # Silk.NET.Windowing and skip gracefully (Xunit.SkippableFact) if none
+      # is available — installing Xvfb + Mesa software rendering here means
+      # they actually run in CI instead of silently no-op'ing.
+      - name: Install Xvfb + Mesa
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends xvfb libgl1-mesa-dri libglx-mesa0
+
+      - name: Test
+        run: xvfb-run --auto-servernum dotnet test Meshwright.sln --configuration Release --no-build --logger "console;verbosity=normal"
