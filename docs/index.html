@@ -270,7 +270,7 @@
     <a class="brand" href="#">Meshwright</a>
     <nav class="top-links">
       <a href="https://github.com/bjornhenneberg/meshwright">GitHub</a>
-      <a href="#get-started">Build it</a>
+      <a href="#get-started">Build</a>
       <a href="#status">Status</a>
     </nav>
   </div>
@@ -278,7 +278,7 @@
 
 <div class="wrap">
   <section class="hero" style="border-top:none;">
-    <span class="badge">Open source · early development</span>
+    <span class="badge">Open source · pre-1.0</span>
     <h1>Fix a broken mesh. Get it printing.</h1>
     <p class="lede">
       Meshmixer was discontinued in 2021 and never replaced. Meshwright is a
@@ -340,9 +340,9 @@
   <section id="status">
     <h2>Status</h2>
     <p class="section-lede">
-      Built in public, milestone by milestone. See the full
-      <a href="https://github.com/bjornhenneberg/meshwright/blob/main/SPECIFICATION.md">specification</a> for the complete
-      roadmap and decision log.
+      Four of five milestones are done. The
+      <a href="https://github.com/bjornhenneberg/meshwright/blob/main/SPECIFICATION.md">specification</a>
+      has the full roadmap and decision log.
     </p>
     <ul class="status-list">
       <li><span class="dot dot-done"></span><div><span class="status-label">M0 — Skeleton.</span> <span class="status-desc">Solution scaffolding, STL import, Avalonia + Silk.NET viewport.</span></div></li>
@@ -354,11 +354,10 @@
   </section>
 
   <section id="get-started">
-    <h2>Try it</h2>
+    <h2>Build from source</h2>
     <p class="section-lede">
-      No public release yet — no signed installers, no download link that
-      works today. This is a real snapshot of an open-source project, not a
-      product page: the only honest way to try it right now is from source.
+      There are no packaged downloads yet. With the .NET SDK installed, a
+      working build is three commands away.
     </p>
     <pre><code>sudo apt install dotnet-sdk-10.0
 git clone https://github.com/bjornhenneberg/meshwright.git
@@ -378,16 +377,14 @@ dotnet run --project src/Meshwright.App</code></pre>
       Open source core, paid convenience — prebuilt, signed binaries sold as
       a one-time purchase, same binary as the free build, editing gated
       behind a licence key. Inspection and diagnostics stay free always. The
-      specific permissive licence (MPL-2.0 vs. Apache-2.0) isn't finalised
-      yet — check the repository for the current <code>LICENSE</code> file
-      before relying on it.
+      specific permissive licence (MPL-2.0 vs. Apache-2.0) is not settled —
+      check the repository's <code>LICENSE</code> file before relying on it.
     </p>
   </section>
 </div>
 
 <footer>
   <div class="wrap">
-    Meshwright is open source and built in public.
     <a href="https://github.com/bjornhenneberg/meshwright">Source on GitHub</a> ·
     <a href="https://github.com/bjornhenneberg/meshwright/blob/main/SPECIFICATION.md">Full specification</a>
   </div>
