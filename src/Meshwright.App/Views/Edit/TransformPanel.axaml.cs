@@ -6,12 +6,17 @@ using g3;
 using Meshwright.Core;
 using Meshwright.Core.Operations;
 using Meshwright.Geometry.Diagnostics;
+using Meshwright.Rendering.Gizmos;
 
 namespace Meshwright.App.Views.Edit;
 
 public partial class TransformPanel : UserControl
 {
     private MeshDocument? _document;
+    private TransformGizmo? _gizmo;
+    private bool _gizmoActive;
+    private Action? _gizmoActivationCallback;
+    private Action? _gizmoDeactivationCallback;
 
     public TransformPanel()
     {
@@ -31,6 +36,34 @@ public partial class TransformPanel : UserControl
         UpdateStatsDisplay();
     }
 
+    /// <summary>
+    /// Sets the gizmo that this panel will control. Typically called by the integrating view
+    /// to wire up the UI to the viewport gizmo.
+    /// </summary>
+    public void SetGizmo(TransformGizmo gizmo)
+    {
+        if (_gizmoActive)
+        {
+            // The old gizmo is going away (e.g. a new mesh was loaded), so drop back to the
+            // inactive UI state rather than leaving a stale "Done with gizmo" button.
+            DeactivateGizmo();
+        }
+
+        _gizmo = gizmo;
+        _gizmo.TransformChanged += (_, _) => SyncInputsFromGizmo();
+        _gizmo.SetMode(ModeForIndex(ModeCombo.SelectedIndex) ?? TransformGizmo.TransformMode.Move);
+    }
+
+    /// <summary>
+    /// Sets callbacks to activate/deactivate the gizmo on the viewport when the user
+    /// clicks the gizmo button.
+    /// </summary>
+    public void SetGizmoActivationCallback(Action? onActivate, Action? onDeactivate)
+    {
+        _gizmoActivationCallback = onActivate;
+        _gizmoDeactivationCallback = onDeactivate;
+    }
+
     /// <summary>Current operation result message text, exposed for testing.</summary>
     public string? OperationResultMessage => ResultText?.Text;
 
@@ -41,7 +74,137 @@ public partial class TransformPanel : UserControl
         RotatePanel.IsVisible = selectedMode == 1;
         ScalePanel.IsVisible = selectedMode == 2;
         MirrorPanel.IsVisible = selectedMode == 3;
+
+        TransformGizmo.TransformMode? gizmoMode = ModeForIndex(selectedMode);
+        ActivateGizmoButton.IsEnabled = gizmoMode is not null;
+
+        if (gizmoMode is null)
+        {
+            // Mirror has no gizmo equivalent; fall back to the textboxes.
+            if (_gizmoActive)
+            {
+                DeactivateGizmo();
+            }
+            GizmoStatusText.Text = "Mirror is set with the fields below.";
+            return;
+        }
+
+        if (_gizmo is not null)
+        {
+            _gizmo.SetMode(gizmoMode.Value);
+        }
+
+        GizmoStatusText.Text = _gizmoActive ? GizmoHintForMode(gizmoMode.Value) : "";
     }
+
+    private static TransformGizmo.TransformMode? ModeForIndex(int index) => index switch
+    {
+        0 => TransformGizmo.TransformMode.Move,
+        1 => TransformGizmo.TransformMode.Rotate,
+        2 => TransformGizmo.TransformMode.Scale,
+        _ => null,
+    };
+
+    private static Vector3d AxisForIndex(int index) => index switch
+    {
+        0 => Vector3d.AxisX,
+        1 => Vector3d.AxisY,
+        2 => Vector3d.AxisZ,
+        _ => Vector3d.AxisZ,
+    };
+
+    private static string GizmoHintForMode(TransformGizmo.TransformMode mode) => mode switch
+    {
+        TransformGizmo.TransformMode.Move => "Drag an axis arrow in the viewport, then Apply.",
+        TransformGizmo.TransformMode.Rotate => "Drag a rotation ring in the viewport, then Apply.",
+        _ => "Drag the centre handle in the viewport, then Apply.",
+    };
+
+    private void OnActivateGizmoClick(object? sender, RoutedEventArgs e)
+    {
+        if (_gizmo is null)
+        {
+            ShowResult("Gizmo not set up. Cannot activate.");
+            return;
+        }
+
+        TransformGizmo.TransformMode? gizmoMode = ModeForIndex(ModeCombo.SelectedIndex);
+        if (gizmoMode is null)
+        {
+            return;
+        }
+
+        if (!_gizmoActive)
+        {
+            _gizmoActive = true;
+            _gizmo.SetMode(gizmoMode.Value);
+            ActivateGizmoButton.Content = "Done with gizmo";
+            GizmoStatusText.Text = GizmoHintForMode(gizmoMode.Value);
+            _gizmoActivationCallback?.Invoke();
+        }
+        else
+        {
+            DeactivateGizmo();
+        }
+    }
+
+    private void DeactivateGizmo()
+    {
+        _gizmoActive = false;
+        ActivateGizmoButton.Content = "Use gizmo";
+        GizmoStatusText.Text = "";
+        _gizmoDeactivationCallback?.Invoke();
+    }
+
+    /// <summary>
+    /// Mirrors the gizmo's live values into the visible textboxes so the displayed numbers always
+    /// match what Apply is about to do.
+    /// </summary>
+    private void SyncInputsFromGizmo()
+    {
+        if (_gizmo is null)
+        {
+            return;
+        }
+
+        var transform = _gizmo.CurrentTransform;
+        var center = _gizmo.Center;
+
+        switch (_gizmo.Mode)
+        {
+            case TransformGizmo.TransformMode.Move:
+                MoveXInput.Text = Format(transform.X);
+                MoveYInput.Text = Format(transform.Y);
+                MoveZInput.Text = Format(transform.Z);
+                break;
+
+            case TransformGizmo.TransformMode.Rotate:
+                RotateAngleInput.Text = Format(transform.X);
+                if (_gizmo.ActiveAxis is int axis)
+                {
+                    RotateAxisCombo.SelectedIndex = axis;
+                }
+                RotateCenterXInput.Text = Format(center.X);
+                RotateCenterYInput.Text = Format(center.Y);
+                RotateCenterZInput.Text = Format(center.Z);
+                break;
+
+            case TransformGizmo.TransformMode.Scale:
+                ScaleFactorInput.Text = Format(transform.X);
+                ScaleCenterXInput.Text = Format(center.X);
+                ScaleCenterYInput.Text = Format(center.Y);
+                ScaleCenterZInput.Text = Format(center.Z);
+                break;
+        }
+    }
+
+    /// <summary>True when the gizmo has been dragged in the mode the panel is currently showing,
+    /// in which case its value wins over the textboxes on Apply.</summary>
+    private bool UseGizmoValues(TransformGizmo.TransformMode mode) =>
+        _gizmo is not null && _gizmo.HasTransform && _gizmo.Mode == mode;
+
+    private static string Format(double value) =>
+        value.ToString("0.###", CultureInfo.InvariantCulture);
 
     private void UpdateStatsDisplay()
     {
@@ -115,6 +278,14 @@ public partial class TransformPanel : UserControl
                 boundsAfter.Extents.y,
                 boundsAfter.Extents.z);
 
+            // The drag has been consumed; start the next one from a clean slate so the same
+            // offset/angle/factor is not applied twice.
+            if (_gizmo is not null)
+            {
+                _gizmo.ResetTransform();
+                SyncInputsFromGizmo();
+            }
+
             ShowResult(result.Summary);
         }
         catch (Exception ex)
@@ -125,6 +296,12 @@ public partial class TransformPanel : UserControl
 
     private IMeshOperation? ParseAndCreateMoveOperation()
     {
+        if (UseGizmoValues(TransformGizmo.TransformMode.Move) && _gizmo is not null)
+        {
+            var offset = _gizmo.CurrentTransform;
+            return new TranslateOperation(new Vector3d(offset.X, offset.Y, offset.Z));
+        }
+
         if (!TryParseDouble(MoveXInput.Text, out double x) ||
             !TryParseDouble(MoveYInput.Text, out double y) ||
             !TryParseDouble(MoveZInput.Text, out double z))
@@ -137,6 +314,15 @@ public partial class TransformPanel : UserControl
 
     private IMeshOperation? ParseAndCreateRotateOperation()
     {
+        if (UseGizmoValues(TransformGizmo.TransformMode.Rotate) && _gizmo is not null)
+        {
+            var center = _gizmo.Center;
+            return new RotateOperation(
+                _gizmo.CurrentTransform.X,
+                AxisForIndex(_gizmo.ActiveAxis ?? 2),
+                new Vector3d(center.X, center.Y, center.Z));
+        }
+
         if (!TryParseDouble(RotateAngleInput.Text, out double angle))
             return null;
 
@@ -161,6 +347,14 @@ public partial class TransformPanel : UserControl
 
     private IMeshOperation? ParseAndCreateScaleOperation()
     {
+        if (UseGizmoValues(TransformGizmo.TransformMode.Scale) && _gizmo is not null)
+        {
+            var center = _gizmo.Center;
+            return new ScaleOperation(
+                _gizmo.CurrentTransform.X,
+                new Vector3d(center.X, center.Y, center.Z));
+        }
+
         if (!TryParseDouble(ScaleFactorInput.Text, out double scale))
             return null;
 

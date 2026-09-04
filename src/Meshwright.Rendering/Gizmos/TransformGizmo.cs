@@ -22,14 +22,20 @@ public sealed class TransformGizmo : IViewportGizmo, IDisposable
         Scale,
     }
 
+    private const float AxisLength = 0.5f;
+    private const float RingRadius = 0.4f;
+    private const float CenterHandleRadius = 0.3f;
+    private const float PickTolerance = 0.25f;
+
     private Vector3 _center;
     private TransformMode _mode = TransformMode.Move;
     private Vector3 _currentTransform = Vector3.Zero;
     private bool _isDragging;
+    private bool _hasTransform;
     private int? _activeAxis; // 0=X, 1=Y, 2=Z
-    private Vector3 _dragStartPosition;
-    private Matrix4x4 _dragStartView;
-    private Matrix4x4 _dragStartProjection;
+    private Vector3 _dragStartAxisPoint;
+    private Vector3 _dragStartRadial;
+    private float _dragStartDistance;
 
     private uint _arrowVao;
     private uint _arrowVbo;
@@ -45,7 +51,22 @@ public sealed class TransformGizmo : IViewportGizmo, IDisposable
 
     public Vector3 Center => _center;
     public TransformMode Mode => _mode;
+
+    /// <summary>
+    /// The transform accumulated by the current or most recent drag, interpreted per mode:
+    /// Move = per-axis offset in world units; Rotate = signed angle in degrees in X, swept around
+    /// <see cref="ActiveAxis"/>; Scale = uniform factor replicated in all three components.
+    /// </summary>
     public Vector3 CurrentTransform => _currentTransform;
+
+    /// <summary>Axis the last drag acted on (0=X, 1=Y, 2=Z), or null if none has been picked.</summary>
+    public int? ActiveAxis => _activeAxis;
+
+    /// <summary>True once a drag has produced a transform since the last <see cref="ResetTransform"/> or mode change.</summary>
+    public bool HasTransform => _hasTransform;
+
+    /// <summary>Raised whenever <see cref="CurrentTransform"/> changes during a drag.</summary>
+    public event EventHandler? TransformChanged;
 
     public TransformGizmo(Vector3 initialCenter)
     {
@@ -57,6 +78,7 @@ public sealed class TransformGizmo : IViewportGizmo, IDisposable
         _mode = mode;
         _isDragging = false;
         _activeAxis = null;
+        ResetTransform();
     }
 
     public void SetCenter(Vector3 center)
@@ -66,7 +88,8 @@ public sealed class TransformGizmo : IViewportGizmo, IDisposable
 
     public void ResetTransform()
     {
-        _currentTransform = Vector3.Zero;
+        _currentTransform = _mode == TransformMode.Scale ? Vector3.One : Vector3.Zero;
+        _hasTransform = false;
     }
 
     public void Render(GlApi gl, Matrix4x4 view, Matrix4x4 projection)
@@ -133,7 +156,7 @@ public sealed class TransformGizmo : IViewportGizmo, IDisposable
         gl.UseProgram(_arrowProgram);
 
         // Single scale handle at center (white sphere)
-        var model = Matrix4x4.CreateTranslation(_center) * Matrix4x4.CreateScale(0.15f);
+        var model = Matrix4x4.CreateScale(0.15f) * Matrix4x4.CreateTranslation(_center);
         SetMatrixUniform(gl, _arrowProgram, "uModel", model);
         SetMatrixUniform(gl, _arrowProgram, "uView", view);
         SetMatrixUniform(gl, _arrowProgram, "uProjection", projection);
@@ -147,12 +170,11 @@ public sealed class TransformGizmo : IViewportGizmo, IDisposable
     private void RenderArrow(GlApi gl, uint program, Vector3 base_, Vector3 direction, Vector3 color,
         Matrix4x4 view, Matrix4x4 projection)
     {
-        float arrowLength = 0.5f;
-        var endpoint = base_ + direction * arrowLength;
+        var endpoint = base_ + direction * AxisLength;
 
-        // Build arrow line and cone from base to endpoint
-        var model = Matrix4x4.CreateTranslation(base_);
-        SetMatrixUniform(gl, program, "uModel", model);
+        // Build arrow line and cone from base to endpoint; the vertices below are already in
+        // world space, so the model matrix stays identity.
+        SetMatrixUniform(gl, program, "uModel", Matrix4x4.Identity);
         SetMatrixUniform(gl, program, "uView", view);
         SetMatrixUniform(gl, program, "uProjection", projection);
 
@@ -191,7 +213,7 @@ public sealed class TransformGizmo : IViewportGizmo, IDisposable
     {
         // Build a circle in the plane perpendicular to the axis
         const int segments = 32;
-        const float radius = 0.4f;
+        const float radius = RingRadius;
         var verts = new List<float>();
 
         for (int i = 0; i < segments; i++)
@@ -315,17 +337,54 @@ public sealed class TransformGizmo : IViewportGizmo, IDisposable
         if (e.Button != GizmoPointerButton.Primary)
             return false;
 
-        float distToCenter = Vector3.Distance(e.Ray.Origin, _center);
-        if (distToCenter > 5f)
-            return false;
+        switch (_mode)
+        {
+            case TransformMode.Move:
+            {
+                int? axis = PickNearestAxis(e.Ray);
+                if (axis is null)
+                    return false;
+
+                _activeAxis = axis;
+                ClosestPointOnAxis(_center, AxisVector(axis.Value), e.Ray, out _dragStartAxisPoint);
+                _currentTransform = Vector3.Zero;
+                break;
+            }
+
+            case TransformMode.Rotate:
+            {
+                int? axis = PickNearestRing(e.Ray);
+                if (axis is null)
+                    return false;
+
+                var normal = AxisVector(axis.Value);
+                if (!IntersectPlane(_center, normal, e.Ray, out Vector3 hit))
+                    return false;
+
+                Vector3 radial = RejectOntoPlane(hit - _center, normal);
+                if (radial.LengthSquared() < 1e-8f)
+                    return false;
+
+                _activeAxis = axis;
+                _dragStartRadial = Vector3.Normalize(radial);
+                _currentTransform = Vector3.Zero;
+                break;
+            }
+
+            case TransformMode.Scale:
+            {
+                float distance = DistancePointToRay(_center, e.Ray);
+                if (distance > CenterHandleRadius)
+                    return false;
+
+                _dragStartDistance = Math.Max(distance, 1e-3f);
+                _currentTransform = Vector3.One;
+                break;
+            }
+        }
 
         _isDragging = true;
-        _dragStartPosition = _center;
-        _dragStartView = Matrix4x4.Identity; // Note: would need actual matrices from viewport
-        _dragStartProjection = Matrix4x4.Identity;
-
-        // Pick the nearest axis (for move/rotate) or just activate drag (for scale)
-        _activeAxis = PickNearestAxis(e.Ray);
+        TransformChanged?.Invoke(this, EventArgs.Empty);
         return true;
     }
 
@@ -347,6 +406,8 @@ public sealed class TransformGizmo : IViewportGizmo, IDisposable
                 break;
         }
 
+        _hasTransform = true;
+        TransformChanged?.Invoke(this, EventArgs.Empty);
         return true;
     }
 
@@ -354,7 +415,6 @@ public sealed class TransformGizmo : IViewportGizmo, IDisposable
     {
         bool wasActive = _isDragging;
         _isDragging = false;
-        _activeAxis = null;
         return wasActive;
     }
 
@@ -363,12 +423,11 @@ public sealed class TransformGizmo : IViewportGizmo, IDisposable
         float minDist = float.MaxValue;
         int? nearest = null;
 
-        Vector3[] axes = { Vector3.UnitX, Vector3.UnitY, Vector3.UnitZ };
         for (int i = 0; i < 3; i++)
         {
-            var axisEnd = _center + axes[i] * 0.5f;
+            var axisEnd = _center + AxisVector(i) * AxisLength;
             float dist = DistancePointToRay(axisEnd, ray);
-            if (dist < minDist && dist < 0.2f)
+            if (dist < minDist && dist < PickTolerance)
             {
                 minDist = dist;
                 nearest = i;
@@ -378,7 +437,36 @@ public sealed class TransformGizmo : IViewportGizmo, IDisposable
         return nearest;
     }
 
-    private float DistancePointToRay(Vector3 point, ViewportRay ray)
+    private int? PickNearestRing(ViewportRay ray)
+    {
+        float minError = float.MaxValue;
+        int? nearest = null;
+
+        for (int i = 0; i < 3; i++)
+        {
+            if (!IntersectPlane(_center, AxisVector(i), ray, out Vector3 hit))
+                continue;
+
+            float error = Math.Abs((hit - _center).Length() - RingRadius);
+            if (error < minError && error < PickTolerance)
+            {
+                minError = error;
+                nearest = i;
+            }
+        }
+
+        return nearest;
+    }
+
+    private static Vector3 AxisVector(int axis) => axis switch
+    {
+        0 => Vector3.UnitX,
+        1 => Vector3.UnitY,
+        2 => Vector3.UnitZ,
+        _ => Vector3.Zero,
+    };
+
+    private static float DistancePointToRay(Vector3 point, ViewportRay ray)
     {
         var rayOrigin = ray.Origin;
         var rayDir = Vector3.Normalize(ray.Direction);
@@ -388,42 +476,93 @@ public sealed class TransformGizmo : IViewportGizmo, IDisposable
         return Vector3.Distance(point, closestPoint);
     }
 
+    /// <summary>Closest point on the infinite line through <paramref name="origin"/> along
+    /// <paramref name="axis"/> to the given ray; false if the two are (near-)parallel.</summary>
+    private static bool ClosestPointOnAxis(Vector3 origin, Vector3 axis, ViewportRay ray, out Vector3 point)
+    {
+        var rayDir = Vector3.Normalize(ray.Direction);
+        float axisDotRay = Vector3.Dot(axis, rayDir);
+        float denominator = 1f - axisDotRay * axisDotRay;
+        if (denominator < 1e-6f)
+        {
+            point = origin;
+            return false;
+        }
+
+        var toRayOrigin = ray.Origin - origin;
+        float t = (Vector3.Dot(toRayOrigin, axis) - axisDotRay * Vector3.Dot(toRayOrigin, rayDir)) / denominator;
+        point = origin + axis * t;
+        return true;
+    }
+
+    private static bool IntersectPlane(Vector3 planePoint, Vector3 planeNormal, ViewportRay ray, out Vector3 hit)
+    {
+        var rayDir = Vector3.Normalize(ray.Direction);
+        float denominator = Vector3.Dot(planeNormal, rayDir);
+        if (Math.Abs(denominator) < 1e-6f)
+        {
+            hit = planePoint;
+            return false;
+        }
+
+        float t = Vector3.Dot(planePoint - ray.Origin, planeNormal) / denominator;
+        if (t < 0f)
+        {
+            hit = planePoint;
+            return false;
+        }
+
+        hit = ray.Origin + rayDir * t;
+        return true;
+    }
+
+    private static Vector3 RejectOntoPlane(Vector3 vector, Vector3 planeNormal) =>
+        vector - planeNormal * Vector3.Dot(vector, planeNormal);
+
     private void UpdateMoveTransform(ViewportRay ray)
     {
-        if (_activeAxis == null)
+        if (_activeAxis is null)
             return;
 
-        Vector3 axis = _activeAxis switch
-        {
-            0 => Vector3.UnitX,
-            1 => Vector3.UnitY,
-            2 => Vector3.UnitZ,
-            _ => Vector3.Zero,
-        };
+        Vector3 axis = AxisVector(_activeAxis.Value);
+        if (!ClosestPointOnAxis(_center, axis, ray, out Vector3 dragPoint))
+            return;
 
-        // Simple 1D drag along the axis
-        var toPoint = _dragStartPosition + axis * 10f - ray.Origin;
-        float t = Vector3.Dot(toPoint, Vector3.Normalize(ray.Direction));
-        var dragPos = ray.Origin + Vector3.Normalize(ray.Direction) * t;
-
-        _currentTransform = (dragPos - _center) * axis;
+        // 1D drag: the offset is how far along the axis the pointer has slid since the press.
+        _currentTransform = axis * Vector3.Dot(dragPoint - _dragStartAxisPoint, axis);
     }
 
     private void UpdateRotateTransform(ViewportRay ray)
     {
-        if (_activeAxis == null)
+        if (_activeAxis is null)
             return;
 
-        // Simplified: accumulate angle based on ray movement
-        // In a production gizmo, this would track actual rotation around the axis
-        _currentTransform.X += 0.5f;
+        Vector3 normal = AxisVector(_activeAxis.Value);
+        if (!IntersectPlane(_center, normal, ray, out Vector3 hit))
+            return;
+
+        Vector3 radial = RejectOntoPlane(hit - _center, normal);
+        if (radial.LengthSquared() < 1e-8f)
+            return;
+
+        radial = Vector3.Normalize(radial);
+
+        // Signed angle swept around the axis between the press point and the current ray hit,
+        // both taken on the plane perpendicular to the active axis.
+        float sin = Vector3.Dot(Vector3.Cross(_dragStartRadial, radial), normal);
+        float cos = Vector3.Dot(_dragStartRadial, radial);
+        float degrees = (float)(Math.Atan2(sin, cos) * 180.0 / Math.PI);
+
+        _currentTransform = new Vector3(degrees, 0f, 0f);
     }
 
     private void UpdateScaleTransform(ViewportRay ray)
     {
-        // Scale based on distance from center
-        float dist = Vector3.Distance(ray.Origin, _center);
-        _currentTransform = new Vector3(dist / 5f, dist / 5f, dist / 5f);
+        // Uniform scale from how far the pointer has moved away from (or toward) the center,
+        // measured as the perpendicular distance from the center to the pointer ray.
+        float distance = Math.Max(DistancePointToRay(_center, ray), 1e-3f);
+        float factor = Math.Clamp(distance / _dragStartDistance, 0.01f, 100f);
+        _currentTransform = new Vector3(factor, factor, factor);
     }
 
     private void BuildArrowGeometry(GlApi gl)

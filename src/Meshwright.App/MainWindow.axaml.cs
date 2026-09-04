@@ -14,6 +14,7 @@ using Meshwright.App.Views.Edit;
 using Meshwright.Core;
 using Meshwright.Geometry.Diagnostics;
 using Meshwright.IO.Stl;
+using Meshwright.Rendering.Gizmos;
 
 namespace Meshwright.App;
 
@@ -26,6 +27,7 @@ public partial class MainWindow : Window
     // Gizmos for interactive operations
     private DrainHoleGizmo? _drainHoleGizmo;
     private PlaneCutGizmo? _planeCutGizmo;
+    private TransformGizmo? _transformGizmo;
 
     public MainWindow()
     {
@@ -72,6 +74,13 @@ public partial class MainWindow : Window
 
         PlaneCutPanel.SetGizmoActivationCallback(
             onActivate: () => Viewport.Gizmo = _planeCutGizmo,
+            onDeactivate: () => Viewport.Gizmo = null);
+
+        // Create and wire up the transform gizmo (move/rotate/scale)
+        _transformGizmo = new TransformGizmo(ComputeMeshCenter(_document.Mesh));
+        TransformPanel.SetGizmo(_transformGizmo);
+        TransformPanel.SetGizmoActivationCallback(
+            onActivate: () => Viewport.Gizmo = _transformGizmo,
             onDeactivate: () => Viewport.Gizmo = null);
     }
 
@@ -228,6 +237,13 @@ public partial class MainWindow : Window
         }
         _planeCutGizmo = new PlaneCutGizmo(ComputeMeshCenter(mesh));
         PlaneCutPanel.SetGizmo(_planeCutGizmo);
+
+        if (_transformGizmo is not null)
+        {
+            _transformGizmo.Dispose();
+        }
+        _transformGizmo = new TransformGizmo(ComputeMeshCenter(mesh));
+        TransformPanel.SetGizmo(_transformGizmo);
 
         // Clear any active gizmo from the viewport
         Viewport.Gizmo = null;
