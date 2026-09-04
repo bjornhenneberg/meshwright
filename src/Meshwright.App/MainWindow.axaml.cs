@@ -225,6 +225,69 @@ public partial class MainWindow : Window
         RefreshFromDocument(statusPrefix);
     }
 
+    private async void OnExportFileClick(object? sender, RoutedEventArgs e)
+    {
+        if (_document.Mesh is not { } mesh)
+        {
+            StatusText.Text = "Nothing to export";
+            return;
+        }
+
+        var topLevel = TopLevel.GetTopLevel(this);
+        if (topLevel?.StorageProvider is not { } storageProvider)
+        {
+            return;
+        }
+
+        var file = await storageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "Export mesh file",
+            FileTypeChoices = new[]
+            {
+                new FilePickerFileType("STL files") { Patterns = new[] { "*.stl" } },
+                new FilePickerFileType("OBJ files") { Patterns = new[] { "*.obj" } },
+            },
+        });
+
+        if (file is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await using Stream stream = await file.OpenWriteAsync();
+            MeshExporter.Export(stream, mesh, file.Name);
+            StatusText.Text = $"Exported {file.Name}";
+        }
+        catch (Exception ex)
+        {
+            StatusText.Text = $"Failed to export {file.Name}: {ex.Message}";
+        }
+    }
+
+    /// <summary>Exports the current mesh to a path through the real export pipeline, bypassing the
+    /// save-file picker dialog; used by integration tests that can't drive an OS file picker
+    /// headlessly.</summary>
+    public void ExportFileForTesting(string path)
+    {
+        if (_document.Mesh is not { } mesh)
+        {
+            StatusText.Text = "Nothing to export";
+            return;
+        }
+
+        try
+        {
+            MeshExporter.ExportFile(path, mesh);
+            StatusText.Text = $"Exported {Path.GetFileName(path)}";
+        }
+        catch (Exception ex)
+        {
+            StatusText.Text = $"Failed to export {Path.GetFileName(path)}: {ex.Message}";
+        }
+    }
+
     private void OnExitClick(object? sender, RoutedEventArgs e) => Close();
 
     private void OnUndoClick(object? sender, RoutedEventArgs e) => PerformUndo();

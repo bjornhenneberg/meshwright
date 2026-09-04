@@ -404,8 +404,30 @@ extending the pattern `NonManifoldDetector` already set. Agreement with the
 reference improved sharply: 204394's shell count went from 4,757 to 31 against
 a reference of 32. See `reports/M4/CORPUS.md`.
 
+Also delivered outside the batch plan: **mesh export**. §5.1 requires STL and
+OBJ export in v1.0 and M2 delivered both writers, but `Meshwright.App`
+contained no reference to `StlWriter` or `ObjWriter`, no save-file picker and
+no Export menu item — flagged in "Immediate next steps" as the largest
+remaining v1.0 functional gap, since a user could open and repair a mesh but
+not get it back out. Added a `MeshExporter` (extension-to-writer dispatch,
+mirroring `MeshImporter`'s `SupportedExtensions`/`SupportedPatterns` shape so
+the save-picker filter and the writer set cannot drift apart) and wired a File
+> Export... menu item/toolbar button into `MainWindow`, format chosen from the
+picked file's extension, errors surfaced on the status line the same way
+`OnOpenFileClick` already does. Per AGENTS.md's note that `ObjWriter` compiled
+and ran for the first time only recently and is far less battle-tested than
+its age suggests, it was exercised against the full M4-1 corpus rather than
+just hand-built fixtures: every one of the 53 corpus meshes exported to both
+STL and OBJ and reimported through the shipping importer with zero triangles
+dropped and an unchanged triangle count. A bit-identical round trip was
+deliberately not the invariant checked — import now splits non-manifold
+geometry rather than dropping it, and STL's triangle-soup shape means vertex
+count can legitimately differ from what was exported — so "export loses no
+triangles, reimport drops none" is what was actually asserted. See
+`reports/M4/20260904T213615Z-batch2-mesh-export/report.md`.
+
 Remaining M4 batches (packaging & CI — M4-3; docs/release — M4-4) are not yet
-started — see `reports/M4/` as they land. 417 unit tests + 8 GPU tests passing.
+started — see `reports/M4/` as they land. 432 unit tests + 8 GPU tests passing.
 
 **M5+**
 v1.x features, then the resin module.
@@ -547,11 +569,7 @@ M0.
    is fetched, not committed, so a CI job must run `scripts/fetch-corpus.sh`
    (and should cache it) to get corpus coverage; without it those tests pass
    trivially rather than failing, by design.
-10. **Export is entirely absent from the UI.** §5.1 requires STL and OBJ export
-    in v1.0 and M2 delivered both writers, but `Meshwright.App` contains no
-    reference to `StlWriter` or `ObjWriter`, no save-file picker and no Export
-    menu item — a user can open and repair a mesh but cannot get it back out.
-    This is the largest remaining v1.0 functional gap and was flagged as a known
-    M2 deferral ("no UI wiring") that no later milestone picked up. It should be
-    a batch of its own before packaging (M4-3), since shipping an installer for
-    a tool that cannot save would be worse than shipping later.
+10. ~~Export is entirely absent from the UI~~ — done: `MeshExporter` + a File >
+    Export... menu item/toolbar button in `MainWindow`, round-tripped against
+    the full M4-1 corpus. See §7 M4 and
+    `reports/M4/20260904T213615Z-batch2-mesh-export/report.md`.

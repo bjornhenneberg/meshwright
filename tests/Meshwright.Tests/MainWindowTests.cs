@@ -106,6 +106,39 @@ public class MainWindowTests
         Assert.True((bool)GetField(transformPanel, "_gizmoActive")!);
     }
 
+    [AvaloniaFact]
+    public void ExportFileForTesting_WritesTheLoadedMeshToDisk()
+    {
+        var window = new MainWindow();
+        string path = Path.Combine(Path.GetTempPath(), $"meshwright-export-{Guid.NewGuid():N}.stl");
+
+        try
+        {
+            window.ExportFileForTesting(path);
+
+            Assert.True(File.Exists(path));
+            var mesh = StlReader.ReadFile(path);
+            Assert.Equal(window.CurrentReport!.Statistics.TriangleCount, mesh.TriangleCount);
+            Assert.Contains("Exported", window.StatusMessage);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [AvaloniaFact]
+    public void ExportFileForTesting_RejectsAnUnsupportedExtension()
+    {
+        var window = new MainWindow();
+        string path = Path.Combine(Path.GetTempPath(), $"meshwright-export-{Guid.NewGuid():N}.3mf");
+
+        window.ExportFileForTesting(path);
+
+        Assert.Contains("Failed to export", window.StatusMessage);
+        Assert.False(File.Exists(path));
+    }
+
     private static object? GetField(object instance, string name)
     {
         FieldInfo field = instance.GetType().GetField(name, BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance)
