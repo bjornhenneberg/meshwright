@@ -36,6 +36,11 @@ public static class SelfIntersectionSearch
         Array.Sort(triangleIds);
         foreach (int ti in triangleIds)
         {
+            if (IsDegenerate(mesh, ti))
+            {
+                continue;
+            }
+
             Index3i triI = mesh.GetTriangle(ti);
 
             CollectCandidates(tree, mesh, ti, candidates);
@@ -43,7 +48,7 @@ public static class SelfIntersectionSearch
 
             foreach (int tj in candidates)
             {
-                if (SharesVertex(triI, mesh.GetTriangle(tj)))
+                if (SharesVertex(triI, mesh.GetTriangle(tj)) || IsDegenerate(mesh, tj))
                 {
                     continue;
                 }
@@ -82,6 +87,34 @@ public static class SelfIntersectionSearch
 
         tree.DoTraversal(traversal);
     }
+
+    /// <summary>
+    /// True for a triangle with no usable area. Such triangles are excluded from the exact
+    /// intersection test for two reasons. Semantically, a triangle with no interior cannot
+    /// meaningfully pass through another, and it is already reported in its own right by
+    /// <c>DegenerateTriangleDetector</c>, so nothing is lost by skipping it here. Practically, the
+    /// vendored exact test cannot handle them: a fully-collinear triangle puts all three vertices
+    /// on the intersection line, and <c>IntrLine2Triangle2.GetInterval</c> throws "too many
+    /// intersections!" — which took down the whole import of a real corpus file until this guard
+    /// existed.
+    /// </summary>
+    private static bool IsDegenerate(DMesh3 mesh, int triangleId)
+    {
+        Index3i tri = mesh.GetTriangle(triangleId);
+        Vector3d v0 = mesh.GetVertex(tri.a);
+        Vector3d v1 = mesh.GetVertex(tri.b);
+        Vector3d v2 = mesh.GetVertex(tri.c);
+
+        return 0.5 * (v1 - v0).Cross(v2 - v0).Length < DegenerateAreaEpsilon;
+    }
+
+    /// <summary>
+    /// Absolute zero-area floor. Deliberately far tighter than
+    /// <c>DegenerateTriangleDetector</c>'s scale-relative sliver threshold: the job here is only
+    /// to exclude triangles the exact predicate cannot process, not to decide what counts as a
+    /// sliver, so a genuine thin-but-real triangle is still tested for intersections.
+    /// </summary>
+    private const double DegenerateAreaEpsilon = 1e-12;
 
     /// <summary>
     /// Triangles sharing a vertex touch by construction; only non-adjacent pairs are defects.

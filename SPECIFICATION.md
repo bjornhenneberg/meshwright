@@ -314,9 +314,67 @@ DrainHole), just newly visible with three. Result: 220/220 unit tests + 8/8
 GPU tests passing (13 new tests: 3 undo/redo, 6 plane-cut gizmo, 7
 transform gizmo/rotate-math tests).
 
-Remaining M4 batches (real-world test corpus — M4-1, not yet started;
-packaging & CI — M4-3; docs/release — M4-4) are not yet started — see
-`reports/M4/` as they land.
+Batch M4-5 (viewport interaction hardening) complete, unplanned — prompted by
+a crash on the first click into the drain-hole tool in a real run. Every
+interaction defect found in this codebase so far had escaped a green suite for
+one structural reason: no test drove a gizmo through a real camera.
+`ViewportRaycaster.Unproject` appeared in exactly one test file (the one
+testing it), and gizmo tests synthesised rays like `new ViewportRay(new
+Vector3(0,0,3), -UnitZ)`, fixing the two variables the bugs actually depended
+on — camera distance and display scaling. A camera framed on a 50 mm model
+sits ~163 units away, not 3, so a test at distance 3 passed while every real
+click failed. Delivered a `ViewportHarness` that drives gizmos through a
+framed `OrbitCamera` and the production unprojection, and a picking contract
+run against all three gizmos at four model radii × two display scalings:
+clicking the gizmo claims the drag, clicking away from it does not (so camera
+orbit survives), and its grab radius stays hittable. Fixed under it: `ToRay3d`
+asserting a normalization it only had to float precision, crashing g3's
+`FindNearestHitTriangle` on the first click; the plane-cut gizmo testing
+camera distance rather than click location (the same bug already fixed in the
+transform gizmo during M4-2 and not swept for elsewhere); two marker gizmos
+composing the model matrix in the wrong order, rendering every drain-hole
+marker at `position × radius`; and gizmos sized in fixed world units, which
+gave the scale handle a 1px grab radius on a 50 mm model and 0px on a 500 mm
+one — all five dimensions across two gizmos are now fractions of viewport
+height resolved through a shared `GizmoScale`, so the shape that is drawn is
+the shape that responds.
+
+Batch M4-1 (real-world test corpus) complete: 53 third-party meshes, fetched
+on demand and never committed — `tests/corpus/manifest.tsv` carries
+filename/sha256/url/source/licence/defect notes, `scripts/fetch-corpus.sh`
+downloads and re-verifies them into a gitignored directory, and
+`CorpusSmokeTests` loads every file through the shipping importer and full
+detector set to assert nothing throws. Not committing keeps licensing with the
+upstream projects, keeps ~170MB of binaries out of git history permanently,
+and keeps the set reproducible by checksum. Sources are 24 real consumer print
+files from the Thingi10K research dataset via Hugging Face (all CC-BY/CC0/
+public-domain; NC/ND/share-alike excluded so the set stays usable if ever
+redistributed) and 29 research/scan models from `common-3d-test-models` and
+`libigl-tutorial-data`. The corpus paid for itself twice on its first two
+runs: it exposed `SelfIntersectionDetector` as an all-pairs O(n^2) scan (2.5s
+on 5,800 triangles, hours per file extrapolated to the corpus's 269k-triangle
+models, against §6.4's 5s budget for a 500k-triangle auto-repair) while
+`SelfIntersectionRepair` already had the broadphase — both now share
+`Spatial/SelfIntersectionSearch`, 17-84x faster with identical issue counts —
+and it crashed the whole import of one real print file via a vendored-g3
+limitation on fully-collinear triangles. See `reports/M4/CORPUS.md`.
+
+Also delivered outside the batch plan: **OBJ import** (`ObjReader` +
+`MeshImporter`), which §5.1 has always listed in v1.0 scope but which no
+milestone had built — the app could not open an OBJ at all. It deliberately
+does not weld coincident vertices: OBJ already carries the author's indexing,
+and welding on import would repair the file behind the user's back, hiding the
+very defects Inspect exists to report. Implementing it uncovered that
+`src/Meshwright.IO/Obj/ObjWriter.cs` had **never been compiled**: MSBuild's
+`DefaultItemExcludes` covers `obj/**` and matches globs case-insensitively, so
+a source directory named `Obj` is silently excluded on Linux too. OBJ export
+was absent from the shipping DLL with zero references anywhere, and its 8
+tests had never run while the suite reported green — M2 recorded ASCII OBJ
+export as delivered, and it has never existed in a build. Fixed at the root by
+renaming both directories to `Wavefront/`.
+
+Remaining M4 batches (packaging & CI — M4-3; docs/release — M4-4) are not yet
+started — see `reports/M4/` as they land. 389 unit tests + 8 GPU tests passing.
 
 **M5+**
 v1.x features, then the resin module.
@@ -379,6 +437,14 @@ source, and matches how this audience already buys tools.
 | 2026-09-04 | M4 batch 0: fixed the Manifold RUNPATH (now `$ORIGIN`-relative, both `libmanifoldc.so` and `libmanifold.so.3` shipped and copied into every project's output) and two further memory-lifetime bugs in `ManifoldInterop` that only surfaced once the library could actually load (a placement-constructed object's backing buffer freed before use; a null-pointer `memcpy` destination in mesh extraction). Also fixed inverted-winding test fixtures and an unsound `PlaneCutTests` assertion found while chasing the above. 204/204 tests + 8/8 GPU now passing |
 | 2026-09-04 | Adopted a gizmo-first UI direction: the 3D viewport is the primary way users set spatial parameters going forward, textboxes are a typed fallback, and a touched gizmo's values win outright on Apply rather than merging with textbox contents |
 | 2026-09-04 | M4 batch 2: wired the plane-cut and transform gizmos into the viewport (dead code since M3) following the `DrainHolePanel` activation pattern; discovered and fixed the transform gizmo's interaction math was itself unfinished, not just unwired (rotate was a stub incrementing a fixed angle per pointer-move regardless of drag, pointer-picking tested camera distance not click location) rather than wiring the visibly-broken stub live. Added a File/Edit menu with undo/redo keyboard shortcuts and a status indicator, reusing a newly-extracted `RefreshFromDocument` helper. Skipped "Open Recent" — no settings persistence exists in the codebase, not worth building solely for this. 220/220 tests + 8/8 GPU now passing |
+| 2026-09-04 | Gizmos are sized as a fraction of viewport height, not in world units, resolved through a shared `GizmoScale` that both the render and pick paths call. Fixed world sizes only work at one zoom: the scale handle had a 1px grab radius on a 50mm model and 0px on a 500mm one. Bounds-derived sizing was considered and rejected — screen size must be invariant to *camera distance*, not model size, or the gizmo breaks again the moment the user zooms |
+| 2026-09-04 | Gizmo interaction is tested through a real `OrbitCamera` and the production unprojection (`ViewportHarness`), never a hand-built ray. Every interaction defect found so far escaped a green suite because synthetic rays fixed the two variables the bugs depended on: camera distance and display scaling |
+| 2026-09-04 | `GizmoPointerEvent` carries the frame's view/projection as required (not defaulted) fields. `default(Matrix4x4)` is all zeros and would silently yield a nonsense scale — the quiet-wrong-answer failure mode this work exists to remove |
+| 2026-09-04 | OBJ import does not weld coincident vertices, unlike STL import. STL is triangle soup so welding is the only way to recover an indexed mesh; OBJ already carries the author's indexing, and merging on import would repair the file behind the user's back and hide the duplicate-vertex and non-manifold defects Inspect exists to report. Import stays faithful; repair stays the user's choice |
+| 2026-09-04 | Source directories must never be named `Obj`/`obj`. MSBuild's `DefaultItemExcludes` covers `obj/**` and matches case-insensitively on every platform, so such a directory is silently dropped from compilation. `ObjWriter` and its 8 tests had been invisible since M2 while the suite reported green; both directories renamed to `Wavefront/` |
+| 2026-09-04 | The test corpus is fetched, never committed: a manifest of checksums plus `scripts/fetch-corpus.sh`. Keeps licensing with the upstream projects, keeps ~170MB of binaries out of git history permanently, and keeps the set reproducible. Corpus meshes are restricted to CC-BY/CC0/public-domain so the set stays usable if it is ever redistributed — NC and ND models are excluded because §8 sells binaries |
+| 2026-09-04 | Thingi10K via Hugging Face is the source for real print files. Thingiverse and Printables both refuse automated download (403) and bulk fetching breaks Thingiverse's terms; the research mirror is both legitimate and strictly better, adding per-file licence and per-file defect ground truth. Epic's Sketchfab/Fab were checked and rejected: OAuth-gated, and art assets rather than print files |
+| 2026-09-04 | `SelfIntersectionDetector` and `SelfIntersectionRepair` share one `SelfIntersectionSearch`, so detection and repair cannot disagree about what a self-intersection is. The detector's former O(n^2) all-pairs scan was a documented M1 shortcut that the corpus made untenable |
 
 ## 12. Development environment
 
@@ -427,18 +493,33 @@ M0.
    programmatically and tested end-to-end, but not yet exposed in `MainWindow`.
 3. ~~Start M3 — Edit~~ — done; see `reports/M3/`. Shipped with all 18 boolean
    tests known-failing (Manifold RUNPATH); fixed in M4 batch 0.
-4. Collect a real test corpus: 20-30 broken meshes from Thingiverse/Printables plus
-   scanner output, kept as regression fixtures. M1 and M2's testing used one
-   synthetic `BrokenSample.stl`; real-world meshes are still needed, and matter more
-   now that M2's repair operations exist to run against them. (M4 batch 1, not yet
-   started.)
+4. ~~Collect a real test corpus~~ — done as M4-1; superseded by item 8 below.
+   Note the source changed: Thingiverse and Printables both refuse automated
+   download, so the print-file half comes from the Thingi10K research dataset
+   via Hugging Face instead, which also supplies per-file licence and defect
+   ground truth that scraping would not have.
 5. Read a week of "Meshmixer alternative" threads and turn them into a prioritised
    feature list to check against §5.1.
 6. ~~Continue M4 batch 2 — gizmo/menu UI polish~~ — done; see §7 and §11. Packaging
    & CI for Linux/Windows/macOS (M4-3) and docs/release (M4-4) are still ahead, per
    the M4 kickoff plan.
-7. Known follow-up from M4-2, not yet scheduled to a batch: `Viewport.Gizmo` is a
-   single slot but each Edit panel tracks its own gizmo-activation state
-   independently, so activating a second panel's gizmo silently steals the
-   viewport from the first without telling its panel (pre-existing pattern,
-   newly visible now that three panels have gizmos instead of one).
+7. ~~Known follow-up from M4-2: `Viewport.Gizmo` single-slot arbitration~~ — done.
+8. ~~Collect a real test corpus (M4-1)~~ — done; see `reports/M4/CORPUS.md`.
+   Outstanding: the corpus only *smoke-tests* that nothing throws. Thingi10K
+   publishes per-file defect ground truth (boundary edges, self-intersections,
+   manifoldness, orientation, component count) which the manifest already
+   records — asserting Meshwright's detector output against it would turn the
+   smoke test into a true regression corpus, and is the single highest-value
+   follow-up here.
+9. Packaging & CI (M4-3) and docs/release (M4-4) remain. Note for CI: the corpus
+   is fetched, not committed, so a CI job must run `scripts/fetch-corpus.sh`
+   (and should cache it) to get corpus coverage; without it those tests pass
+   trivially rather than failing, by design.
+10. **Export is entirely absent from the UI.** §5.1 requires STL and OBJ export
+    in v1.0 and M2 delivered both writers, but `Meshwright.App` contains no
+    reference to `StlWriter` or `ObjWriter`, no save-file picker and no Export
+    menu item — a user can open and repair a mesh but cannot get it back out.
+    This is the largest remaining v1.0 functional gap and was flagged as a known
+    M2 deferral ("no UI wiring") that no later milestone picked up. It should be
+    a batch of its own before packaging (M4-3), since shipping an installer for
+    a tool that cannot save would be worse than shipping later.

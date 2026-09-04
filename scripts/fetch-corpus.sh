@@ -19,7 +19,7 @@ mkdir -p "$dest"
 
 fetched=0 cached=0 failed=0
 
-while IFS=$'\t' read -r name sha256 _source url; do
+while IFS=$'\t' read -r name sha256 url _rest; do
     # Skip comments and blank lines.
     [[ -z "${name:-}" || "$name" == \#* ]] && continue
 

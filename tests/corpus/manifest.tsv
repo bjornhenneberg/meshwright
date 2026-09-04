@@ -1,49 +1,85 @@
-# Meshwright real-world test corpus (SPECIFICATION.md §7 M4-1).
+# Meshwright real-world test corpus (SPECIFICATION.md §7, M4-1).
 #
-# These files are NOT committed. They are third-party models under their own
-# licences, and this repository does not redistribute them - scripts/fetch-corpus.sh
-# downloads each from its original home into tests/corpus/files/, which is
-# gitignored. That keeps licensing with the upstream projects, keeps ~55MB of
-# binary assets out of git history forever, and lets the set be re-fetched
-# reproducibly by checksum.
+# NOT COMMITTED. These are third-party meshes under their own licences; the
+# repository does not redistribute them. scripts/fetch-corpus.sh downloads each
+# from its original home into tests/corpus/files/ (gitignored) and verifies the
+# checksum, so re-running is free and a truncated or upstream-changed file fails
+# loudly rather than silently.
 #
-# Licensing: neither upstream repository carries a blanket licence file, and the
-# models have individual provenance (research datasets, scans, and donated art).
-# They are used here as local, non-redistributed test input only. Before any of
-# these are relied on in a shipped artefact or a public CI log, per-model
-# provenance needs checking - see the note in reports/M4/CORPUS.md.
+# Columns (tab-separated):
+#   filename  sha256  url  source  licence  notes
+# Anything after the url column is documentation; the fetch script reads only the
+# first three.
 #
-# Thingiverse and Printables, which SPECIFICATION.md names as sources, are not
-# represented: Thingiverse returns 403 to automated download and bulk fetching is
-# against its terms. Those need fetching by hand, or an API key.
+# --- Thingi10K, via Hugging Face -------------------------------------------
+# Real consumer 3D-printing files: the population Meshwright actually targets.
+# Selected from the 10,000-model Thingi10K research dataset, which publishes
+# per-file licence and per-file defect statistics. Every row below is CC-BY, CC0
+# or public domain (NC/ND/share-alike models were excluded so the set stays usable
+# if it is ever redistributed), sized 800-135,000 faces, and chosen to cover every
+# v1.0 detector category across three size bands, plus clean controls. The notes
+# column records the defects Thingi10K's own analysis attributes to each file -
+# independent ground truth to check Meshwright's detectors against.
 #
-# Columns: filename <TAB> sha256 <TAB> upstream repo <TAB> url
-alligator.obj	108a1f4319e4a069b2bfbee3b5f278551501d75c473bb705c62e2bef872ad544	alecjacobson/common-3d-test-models	https://raw.githubusercontent.com/alecjacobson/common-3d-test-models/master/data/alligator.obj
-armadillo.obj	d2fd040334c12b16804fbcb9962391232cc24708244617f931baaa871210563e	alecjacobson/common-3d-test-models	https://raw.githubusercontent.com/alecjacobson/common-3d-test-models/master/data/armadillo.obj
-beast.obj	74c5fecd883b761bc1b2bb6c82fe94d3b3b450297ab561e83c0e63c7ed46abe8	alecjacobson/common-3d-test-models	https://raw.githubusercontent.com/alecjacobson/common-3d-test-models/master/data/beast.obj
-beetle.obj	46ee9dcbec84b8d1b8f0d743ab1c91b1ed81378672fc0516e7afff5172d7c9b7	alecjacobson/common-3d-test-models	https://raw.githubusercontent.com/alecjacobson/common-3d-test-models/master/data/beetle.obj
-bimba.obj	5e2beb15d8f5852383eb44a95f227097e3037b2e7a3e3ea1494931fd7c3b1e72	alecjacobson/common-3d-test-models	https://raw.githubusercontent.com/alecjacobson/common-3d-test-models/master/data/bimba.obj
-cheburashka.obj	b2ac59bc1112f1b3e086ac0285d9be7fdefef278a32151a79e650414b2244f3f	alecjacobson/common-3d-test-models	https://raw.githubusercontent.com/alecjacobson/common-3d-test-models/master/data/cheburashka.obj
-cow.obj	69afce548640bc2beb0c44894d1a24d5766cc9cd3fd74f3ec55b4e229104b23f	alecjacobson/common-3d-test-models	https://raw.githubusercontent.com/alecjacobson/common-3d-test-models/master/data/cow.obj
-fandisk.obj	ea5bab2fbf545b1915f0d9faf6cc61ff8c18e0d8174ad61f8e35de15d8f6e3f8	alecjacobson/common-3d-test-models	https://raw.githubusercontent.com/alecjacobson/common-3d-test-models/master/data/fandisk.obj
-happy.obj	8ce5a4a7161efd97dabc8eeb281824fac1b17c9ba2cb0c2c6f350cd05982058c	alecjacobson/common-3d-test-models	https://raw.githubusercontent.com/alecjacobson/common-3d-test-models/master/data/happy.obj
-homer.obj	b20b1391fd62964f65703d748514d86d747d1202d38e55e0f1addac7a5a10e8b	alecjacobson/common-3d-test-models	https://raw.githubusercontent.com/alecjacobson/common-3d-test-models/master/data/homer.obj
-horse.obj	d2e1beaa7e366b61746192345f552f09056c97bbd096cb31eac4b9fe467fa7aa	alecjacobson/common-3d-test-models	https://raw.githubusercontent.com/alecjacobson/common-3d-test-models/master/data/horse.obj
-igea.obj	13dd57979295049c73830313772c379da4508e035551921686e2edc7de9bff0e	alecjacobson/common-3d-test-models	https://raw.githubusercontent.com/alecjacobson/common-3d-test-models/master/data/igea.obj
-lg-camel_b.obj	91f7a9a22a273e3dc4c9eab85674ac2a04355f21699a18032f2d5f1f7a7f62c4	libigl/libigl-tutorial-data	https://raw.githubusercontent.com/libigl/libigl-tutorial-data/master/camel_b.obj
-lg-decimated-max.obj	e7489f9987a384f582c632ba19d8e6185e749909ef197215eb0c768597678532	libigl/libigl-tutorial-data	https://raw.githubusercontent.com/libigl/libigl-tutorial-data/master/decimated-max.obj
-lg-elephant.obj	f1038147fa61efd8b3213d119c682279ffea3cf06cc1713ae2a8ff81e68ba671	libigl/libigl-tutorial-data	https://raw.githubusercontent.com/libigl/libigl-tutorial-data/master/elephant.obj
-lg-face.obj	4817c60799fb7f5ae7f46d27fc48e8c6cbd6b5c7dec7f8197fb794802665a826	libigl/libigl-tutorial-data	https://raw.githubusercontent.com/libigl/libigl-tutorial-data/master/face.obj
-lg-inspired_mesh.obj	badf23768f7f9b8e804c0d0d8f1c5c930ffd4881070efa477e6312d7fdb116b4	libigl/libigl-tutorial-data	https://raw.githubusercontent.com/libigl/libigl-tutorial-data/master/inspired_mesh.obj
-lg-lilium.obj	4f62ff741b41bd629ccbeaeb0bb2e44ac060cdff88f090129911bede790e8ab3	libigl/libigl-tutorial-data	https://raw.githubusercontent.com/libigl/libigl-tutorial-data/master/lilium.obj
-lg-snail.obj	4e525b729e858e52799a0e73eb4b89c5895e2dc004ca14e03c18801907463500	libigl/libigl-tutorial-data	https://raw.githubusercontent.com/libigl/libigl-tutorial-data/master/snail.obj
-lg-truck.obj	c3aeca508490cbb8a0d58131619685b6cee82eb51c0af4ded984dac5ee9f3c11	libigl/libigl-tutorial-data	https://raw.githubusercontent.com/libigl/libigl-tutorial-data/master/truck.obj
-max-planck.obj	282b278f40cbf6f6054e95d9b7704e51f49c7a2c8d74a2d6977412e6f455ef06	alecjacobson/common-3d-test-models	https://raw.githubusercontent.com/alecjacobson/common-3d-test-models/master/data/max-planck.obj
-nefertiti.obj	19e39748b145092878cc4faafd050505eb5991c5d3e497be2b4575673fa87968	alecjacobson/common-3d-test-models	https://raw.githubusercontent.com/alecjacobson/common-3d-test-models/master/data/nefertiti.obj
-ogre.obj	b72e270246ec3bd91bd8e082c4acf462352680f09067813322903b4e1a3f6967	alecjacobson/common-3d-test-models	https://raw.githubusercontent.com/alecjacobson/common-3d-test-models/master/data/ogre.obj
-rocker-arm.obj	590257e6d01e689354821d807854306c3bfbb02d9cca73404d5a4924f105c287	alecjacobson/common-3d-test-models	https://raw.githubusercontent.com/alecjacobson/common-3d-test-models/master/data/rocker-arm.obj
-spot.obj	0738b5e8608fed74e5e8c7aa8dd0af97b4b74f9f6cbf7aac84cd7e40b2e44a75	alecjacobson/common-3d-test-models	https://raw.githubusercontent.com/alecjacobson/common-3d-test-models/master/data/spot.obj
-stanford-bunny.obj	1eb35d1e21ce99e5ce911353b6be278990713448dd9e8f5c9387f9de39b32205	alecjacobson/common-3d-test-models	https://raw.githubusercontent.com/alecjacobson/common-3d-test-models/master/data/stanford-bunny.obj
-suzanne.obj	d8684326f9bd8cfc24d3d302c1042fa16f63d2e66e49ed56b413fa20bed271e6	alecjacobson/common-3d-test-models	https://raw.githubusercontent.com/alecjacobson/common-3d-test-models/master/data/suzanne.obj
-teapot.obj	1b5396fedd74b577e32cef41146582c2f2e1a050d5b4915193c0ac1ad4187ed4	alecjacobson/common-3d-test-models	https://raw.githubusercontent.com/alecjacobson/common-3d-test-models/master/data/teapot.obj
-woody.obj	8f9c1657fd4ed2e5d5cc0f65ae35ff49d338cf09ae51f57c496353c0b2c53209	alecjacobson/common-3d-test-models	https://raw.githubusercontent.com/alecjacobson/common-3d-test-models/master/data/woody.obj
+# Thingiverse and Printables both refuse automated download (HTTP 403), and bulk
+# fetching is against Thingiverse's terms. Hugging Face's mirror of the Thingi10K
+# research dataset is how these files are reachable legitimately.
+thingi10k-73869.stl	6cd21a4f1c86ccf164bf2aeb604dd8e3c00a71c0e28aebbf4125658511ae899c	https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/main/raw_meshes/73869.stl	Thingi10K/Thingi10K	CC-BY	2953faces;nonmanifold-edge
+thingi10k-76902.stl	b1dd01c38d19a1b85b2f1e9b4a4636fd1abc64bef6e6e7d700f7ce654ad5a018	https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/main/raw_meshes/76902.stl	Thingi10K/Thingi10K	CC-BY	1856faces;unoriented
+thingi10k-80104.stl	0bc300d28b449947fcc7dc543d959f85e9f845b1514eda0cf4597108140c1d5c	https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/main/raw_meshes/80104.stl	Thingi10K/Thingi10K	CC0	8603faces;unoriented
+thingi10k-81268.stl	0df8159f644972a4341c701740ec3f73d587ce92981cb8d0d5f2a5370761263f	https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/main/raw_meshes/81268.stl	Thingi10K/Thingi10K	CC-BY	950faces;nonmanifold-vertex
+thingi10k-83550.stl	8fabbde1e9c6698461c56f8cfbe97bff183fbf98895f1b575db171f5886a6599	https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/main/raw_meshes/83550.stl	Thingi10K/Thingi10K	CC-BY	7904faces;duplicate-face,nonmanifold-edge
+thingi10k-84929.stl	003721e85794d73a4d54dffdf1012ce36c6197fbf5ca65742c30daeecbda2a11	https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/main/raw_meshes/84929.stl	Thingi10K/Thingi10K	CC-BY	854faces;degenerate
+thingi10k-85797.stl	bcd6a99bffdf50236509baecacbf3189ef343be3c8aa222e24dfbf028929767d	https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/main/raw_meshes/85797.stl	Thingi10K/Thingi10K	CC-BY	812faces;duplicate-face
+thingi10k-87343.stl	17339f40c892dedc2986336d11eb3f2b27e98affebbdde371c8464cfe9a8d33d	https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/main/raw_meshes/87343.stl	Thingi10K/Thingi10K	CC-BY	21611faces;degenerate,nonmanifold-vertex
+thingi10k-87345.stl	5a23228ccb6a396245c6f0fee282c6bc5d3b51d1a3e670d15d95e9b6549c49ed	https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/main/raw_meshes/87345.stl	Thingi10K/Thingi10K	CC-BY	20034faces;boundary,multi-component
+thingi10k-91354.stl	a1fcb806656ccbb5395733f75089b35c381b2422ed14276d2a1cba45a7c7fc54	https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/main/raw_meshes/91354.stl	Thingi10K/Thingi10K	CC-BY	20646faces;selfint
+thingi10k-92067.stl	4ca1e09bfb9ca103c824eb3c24dbec70b1cadaca425369c10fe6bd1f6e76251c	https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/main/raw_meshes/92067.stl	Thingi10K/Thingi10K	CC-BY	1386faces;selfint
+thingi10k-94888.stl	42de4b7cda85e8103bc90544a5a0cab1d6c80f5c504f7696859db07e0f858de4	https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/main/raw_meshes/94888.stl	Thingi10K/Thingi10K	CC-BY	1280faces;multi-component
+thingi10k-96639.stl	14d4b7d4deec3b64e8113ba64384cf56055e117e5f2a7c194464be0a970664f8	https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/main/raw_meshes/96639.stl	Thingi10K/Thingi10K	CC-BY	116289faces;boundary
+thingi10k-98655.stl	d56793a95e3a354be93abf32983e3e5136eefbf67ec2b63c8c9b1b4b93bd50eb	https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/main/raw_meshes/98655.stl	Thingi10K/Thingi10K	CC-BY	1786faces;boundary
+thingi10k-129894.stl	0323a43c33eab6d8d006d1945e35e6c0cdd5aa2e931d514fbe4442f4cf16f652	https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/main/raw_meshes/129894.stl	Thingi10K/Thingi10K	CC-BY	1600faces;clean
+thingi10k-129924.stl	bfa5bd2efcffd3c007b6cb37e2277e118600aa7c7c858a031dbbf58643c2b46a	https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/main/raw_meshes/129924.stl	Thingi10K/Thingi10K	CC-BY	11348faces;clean
+thingi10k-132445.stl	1537ffd113599831712250b675c785437b0597d092182a588f67ac878085ba83	https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/main/raw_meshes/132445.stl	Thingi10K/Thingi10K	CC-BY	33712faces;unoriented
+thingi10k-170179.stl	f7c1d774ce6f0d109d5b8474a296470dd8182f5d91a5758b02736f4b35c5ec55	https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/main/raw_meshes/170179.stl	Thingi10K/Thingi10K	CC-BY	60004faces;duplicate-face
+thingi10k-170180.stl	7f6753d934f1bdb8964d8d7ee34442cff0b261a693609de8a45d57756b9fb299	https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/main/raw_meshes/170180.stl	Thingi10K/Thingi10K	CC-BY	120004faces;nonmanifold-vertex
+thingi10k-204394.stl	d748ffd0148f121cff3e7aed34b42031726186f3e2cd74acc2127ef95989e212	https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/main/raw_meshes/204394.stl	Thingi10K/Thingi10K	CC-BY	34752faces;selfint
+thingi10k-233338.stl	614ee651e4044f92db292ae4417cc4c8baa034f9a6d2735aeffb9a7e84ef766d	https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/main/raw_meshes/233338.stl	Thingi10K/Thingi10K	CC-BY	75948faces;degenerate
+thingi10k-237741.stl	7e6387094c8c41485fb7dbb4756f1333c15ac990ae14e8f82afd14bb8c702fc9	https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/main/raw_meshes/237741.stl	Thingi10K/Thingi10K	CC-BY	134658faces;nonmanifold-edge
+thingi10k-242232.stl	ee63defcc22d75ea57dab7d9c8f395e40d08c8782404d7ac3fa5230f1729b4ac	https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/main/raw_meshes/242232.stl	Thingi10K/Thingi10K	CC-BY	43114faces;multi-component
+thingi10k-366361.stl	22e80cc74e86b66fb73c46297a3effdee434b2a4b334a0195c23b42bb3e2f359	https://huggingface.co/datasets/Thingi10K/Thingi10K/resolve/main/raw_meshes/366361.stl	Thingi10K/Thingi10K	CC-BY	41736faces;clean
+#
+# --- Research and scan models ----------------------------------------------
+# Standard graphics/scan test meshes. Neither upstream repository carries a
+# blanket licence and the models have individual provenance, so these are local
+# test input only - per-model provenance needs checking before any is relied on in
+# a shipped artefact or a public CI log.
+alligator.obj	108a1f4319e4a069b2bfbee3b5f278551501d75c473bb705c62e2bef872ad544	https://raw.githubusercontent.com/alecjacobson/common-3d-test-models/master/data/alligator.obj	alecjacobson/common-3d-test-models	see-upstream	research/scan model
+armadillo.obj	d2fd040334c12b16804fbcb9962391232cc24708244617f931baaa871210563e	https://raw.githubusercontent.com/alecjacobson/common-3d-test-models/master/data/armadillo.obj	alecjacobson/common-3d-test-models	see-upstream	research/scan model
+beast.obj	74c5fecd883b761bc1b2bb6c82fe94d3b3b450297ab561e83c0e63c7ed46abe8	https://raw.githubusercontent.com/alecjacobson/common-3d-test-models/master/data/beast.obj	alecjacobson/common-3d-test-models	see-upstream	research/scan model
+beetle.obj	46ee9dcbec84b8d1b8f0d743ab1c91b1ed81378672fc0516e7afff5172d7c9b7	https://raw.githubusercontent.com/alecjacobson/common-3d-test-models/master/data/beetle.obj	alecjacobson/common-3d-test-models	see-upstream	research/scan model
+bimba.obj	5e2beb15d8f5852383eb44a95f227097e3037b2e7a3e3ea1494931fd7c3b1e72	https://raw.githubusercontent.com/alecjacobson/common-3d-test-models/master/data/bimba.obj	alecjacobson/common-3d-test-models	see-upstream	research/scan model
+cheburashka.obj	b2ac59bc1112f1b3e086ac0285d9be7fdefef278a32151a79e650414b2244f3f	https://raw.githubusercontent.com/alecjacobson/common-3d-test-models/master/data/cheburashka.obj	alecjacobson/common-3d-test-models	see-upstream	research/scan model
+cow.obj	69afce548640bc2beb0c44894d1a24d5766cc9cd3fd74f3ec55b4e229104b23f	https://raw.githubusercontent.com/alecjacobson/common-3d-test-models/master/data/cow.obj	alecjacobson/common-3d-test-models	see-upstream	research/scan model
+fandisk.obj	ea5bab2fbf545b1915f0d9faf6cc61ff8c18e0d8174ad61f8e35de15d8f6e3f8	https://raw.githubusercontent.com/alecjacobson/common-3d-test-models/master/data/fandisk.obj	alecjacobson/common-3d-test-models	see-upstream	research/scan model
+happy.obj	8ce5a4a7161efd97dabc8eeb281824fac1b17c9ba2cb0c2c6f350cd05982058c	https://raw.githubusercontent.com/alecjacobson/common-3d-test-models/master/data/happy.obj	alecjacobson/common-3d-test-models	see-upstream	research/scan model
+homer.obj	b20b1391fd62964f65703d748514d86d747d1202d38e55e0f1addac7a5a10e8b	https://raw.githubusercontent.com/alecjacobson/common-3d-test-models/master/data/homer.obj	alecjacobson/common-3d-test-models	see-upstream	research/scan model
+horse.obj	d2e1beaa7e366b61746192345f552f09056c97bbd096cb31eac4b9fe467fa7aa	https://raw.githubusercontent.com/alecjacobson/common-3d-test-models/master/data/horse.obj	alecjacobson/common-3d-test-models	see-upstream	research/scan model
+igea.obj	13dd57979295049c73830313772c379da4508e035551921686e2edc7de9bff0e	https://raw.githubusercontent.com/alecjacobson/common-3d-test-models/master/data/igea.obj	alecjacobson/common-3d-test-models	see-upstream	research/scan model
+lg-camel_b.obj	91f7a9a22a273e3dc4c9eab85674ac2a04355f21699a18032f2d5f1f7a7f62c4	https://raw.githubusercontent.com/libigl/libigl-tutorial-data/master/camel_b.obj	libigl/libigl-tutorial-data	see-upstream	research/scan model
+lg-decimated-max.obj	e7489f9987a384f582c632ba19d8e6185e749909ef197215eb0c768597678532	https://raw.githubusercontent.com/libigl/libigl-tutorial-data/master/decimated-max.obj	libigl/libigl-tutorial-data	see-upstream	research/scan model
+lg-elephant.obj	f1038147fa61efd8b3213d119c682279ffea3cf06cc1713ae2a8ff81e68ba671	https://raw.githubusercontent.com/libigl/libigl-tutorial-data/master/elephant.obj	libigl/libigl-tutorial-data	see-upstream	research/scan model
+lg-face.obj	4817c60799fb7f5ae7f46d27fc48e8c6cbd6b5c7dec7f8197fb794802665a826	https://raw.githubusercontent.com/libigl/libigl-tutorial-data/master/face.obj	libigl/libigl-tutorial-data	see-upstream	research/scan model
+lg-inspired_mesh.obj	badf23768f7f9b8e804c0d0d8f1c5c930ffd4881070efa477e6312d7fdb116b4	https://raw.githubusercontent.com/libigl/libigl-tutorial-data/master/inspired_mesh.obj	libigl/libigl-tutorial-data	see-upstream	research/scan model
+lg-lilium.obj	4f62ff741b41bd629ccbeaeb0bb2e44ac060cdff88f090129911bede790e8ab3	https://raw.githubusercontent.com/libigl/libigl-tutorial-data/master/lilium.obj	libigl/libigl-tutorial-data	see-upstream	research/scan model
+lg-snail.obj	4e525b729e858e52799a0e73eb4b89c5895e2dc004ca14e03c18801907463500	https://raw.githubusercontent.com/libigl/libigl-tutorial-data/master/snail.obj	libigl/libigl-tutorial-data	see-upstream	research/scan model
+lg-truck.obj	c3aeca508490cbb8a0d58131619685b6cee82eb51c0af4ded984dac5ee9f3c11	https://raw.githubusercontent.com/libigl/libigl-tutorial-data/master/truck.obj	libigl/libigl-tutorial-data	see-upstream	research/scan model
+max-planck.obj	282b278f40cbf6f6054e95d9b7704e51f49c7a2c8d74a2d6977412e6f455ef06	https://raw.githubusercontent.com/alecjacobson/common-3d-test-models/master/data/max-planck.obj	alecjacobson/common-3d-test-models	see-upstream	research/scan model
+nefertiti.obj	19e39748b145092878cc4faafd050505eb5991c5d3e497be2b4575673fa87968	https://raw.githubusercontent.com/alecjacobson/common-3d-test-models/master/data/nefertiti.obj	alecjacobson/common-3d-test-models	see-upstream	research/scan model
+ogre.obj	b72e270246ec3bd91bd8e082c4acf462352680f09067813322903b4e1a3f6967	https://raw.githubusercontent.com/alecjacobson/common-3d-test-models/master/data/ogre.obj	alecjacobson/common-3d-test-models	see-upstream	research/scan model
+rocker-arm.obj	590257e6d01e689354821d807854306c3bfbb02d9cca73404d5a4924f105c287	https://raw.githubusercontent.com/alecjacobson/common-3d-test-models/master/data/rocker-arm.obj	alecjacobson/common-3d-test-models	see-upstream	research/scan model
+spot.obj	0738b5e8608fed74e5e8c7aa8dd0af97b4b74f9f6cbf7aac84cd7e40b2e44a75	https://raw.githubusercontent.com/alecjacobson/common-3d-test-models/master/data/spot.obj	alecjacobson/common-3d-test-models	see-upstream	research/scan model
+stanford-bunny.obj	1eb35d1e21ce99e5ce911353b6be278990713448dd9e8f5c9387f9de39b32205	https://raw.githubusercontent.com/alecjacobson/common-3d-test-models/master/data/stanford-bunny.obj	alecjacobson/common-3d-test-models	see-upstream	research/scan model
+suzanne.obj	d8684326f9bd8cfc24d3d302c1042fa16f63d2e66e49ed56b413fa20bed271e6	https://raw.githubusercontent.com/alecjacobson/common-3d-test-models/master/data/suzanne.obj	alecjacobson/common-3d-test-models	see-upstream	research/scan model
+teapot.obj	1b5396fedd74b577e32cef41146582c2f2e1a050d5b4915193c0ac1ad4187ed4	https://raw.githubusercontent.com/alecjacobson/common-3d-test-models/master/data/teapot.obj	alecjacobson/common-3d-test-models	see-upstream	research/scan model
+woody.obj	8f9c1657fd4ed2e5d5cc0f65ae35ff49d338cf09ae51f57c496353c0b2c53209	https://raw.githubusercontent.com/alecjacobson/common-3d-test-models/master/data/woody.obj	alecjacobson/common-3d-test-models	see-upstream	research/scan model
