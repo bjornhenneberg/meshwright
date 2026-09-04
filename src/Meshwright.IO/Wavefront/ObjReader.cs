@@ -1,5 +1,6 @@
 using System.Globalization;
 using g3;
+using Meshwright.Geometry.Mesh;
 using Meshwright.IO;
 
 namespace Meshwright.IO.Wavefront;
@@ -45,16 +46,16 @@ public static class ObjReader
     /// <inheritdoc cref="ReadFileWithDiagnostics"/>
     public static MeshImportResult ReadWithDiagnostics(TextReader reader)
     {
-        var mesh = new DMesh3();
+        // OBJ carries its own vertex indexing, so vertices are appended unwelded (see the class
+        // remarks). The builder still splits where DMesh3 cannot hold what the file describes.
+        var builder = new NonManifoldMeshBuilder();
 
         // OBJ face indices may refer to vertices positionally (1-based) or relatively (negative,
         // counting back from the most recent vertex), so both need the running vertex count.
         int vertexCount = 0;
         bool sawFace = false;
         int lineNumber = 0;
-        int triangleCount = 0;
-        int nonManifoldDropped = 0;
-        int degenerateDropped = 0;
+
 
         var corners = new List<int>();
 
@@ -71,7 +72,7 @@ public static class ObjReader
 
             if (StartsWithKeyword(span, "v"))
             {
-                mesh.AppendVertex(ParseVertex(span[1..], lineNumber));
+                builder.AddVertexUnwelded(ParseVertex(span[1..], lineNumber));
                 vertexCount++;
                 continue;
             }
@@ -84,19 +85,7 @@ public static class ObjReader
                 // orientation defects an inverted-normal detector looks for survive import.
                 for (int i = 1; i + 1 < corners.Count; i++)
                 {
-                    triangleCount++;
-
-                    // AppendTriangle refuses rather than throws; see MeshImportResult for why a
-                    // silent drop here would misreport the whole mesh.
-                    int appended = mesh.AppendTriangle(corners[0], corners[i], corners[i + 1]);
-                    if (appended == DMesh3.NonManifoldID)
-                    {
-                        nonManifoldDropped++;
-                    }
-                    else if (appended < 0)
-                    {
-                        degenerateDropped++;
-                    }
+                    builder.AddTriangle(corners[0], corners[i], corners[i + 1]);
                 }
 
                 sawFace = true;
@@ -118,7 +107,12 @@ public static class ObjReader
             throw new InvalidDataException("OBJ contains vertices but no faces; Meshwright imports surface meshes, not point clouds.");
         }
 
-        return new MeshImportResult(mesh, triangleCount, nonManifoldDropped, degenerateDropped);
+        return new MeshImportResult(
+            builder.Mesh,
+            builder.TriangleCount,
+            builder.NonManifoldTrianglesSplit,
+            builder.DegenerateTrianglesSplit,
+            builder.TrianglesDropped);
     }
 
     /// <summary>True when <paramref name="span"/> begins with <paramref name="keyword"/> as a whole token.</summary>

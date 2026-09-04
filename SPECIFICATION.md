@@ -386,15 +386,26 @@ non-manifold edge, so `AppendTriangle` refuses such triangles and returns
 real print files lost triangles, two of them ~73%, after which every detector
 was describing a different mesh from the one the user opened (204394's
 reference count of 34,905 self-intersections came back as 16 because most of
-the mesh was never loaded). Representing that geometry is a data-structure
-change and was not attempted; making the loss visible was —
-`MeshImportResult` now carries per-cause counts through every import and
-`MainWindow` appends a plain-language warning, so "no problems found" can no
-longer be said about a mesh a quarter of which failed to load. See
-`reports/M4/CORPUS.md`.
+the mesh was never loaded). Batch M4-7 fixed it properly: `NonManifoldMeshBuilder`
+now keeps that geometry by **splitting the mesh at the offending vertices
+instead of dropping the triangle** — duplicating a vertex gives the triangle a
+fresh edge to attach to, so it lands at exactly the right position while the
+topology stays legal. The geometry is complete; only the connectivity is cut,
+which is an honest description of a non-manifold junction. This is the
+representation `NonManifoldDetector` was always written for ("several distinct
+edge ids that share the same pair of vertex *positions*") but which nothing
+produced, so it could only ever report defects the importer had already thrown
+away. Every corpus file now loads 100% of its triangles, asserted per file
+against the reference's face count. Cutting connectivity leaves seams that
+vertex-id-based detectors mistake for defects — the first run reported 13,348
+phantom holes on a closed file — so `BoundaryHoleDetector` and
+`DisconnectedShellDetector` now reason about positions too (`PositionTopology`),
+extending the pattern `NonManifoldDetector` already set. Agreement with the
+reference improved sharply: 204394's shell count went from 4,757 to 31 against
+a reference of 32. See `reports/M4/CORPUS.md`.
 
 Remaining M4 batches (packaging & CI — M4-3; docs/release — M4-4) are not yet
-started — see `reports/M4/` as they land. 404 unit tests + 8 GPU tests passing.
+started — see `reports/M4/` as they land. 417 unit tests + 8 GPU tests passing.
 
 **M5+**
 v1.x features, then the resin module.
@@ -467,6 +478,8 @@ source, and matches how this audience already buys tools.
 | 2026-09-04 | `SelfIntersectionDetector` and `SelfIntersectionRepair` share one `SelfIntersectionSearch`, so detection and repair cannot disagree about what a self-intersection is. The detector's former O(n^2) all-pairs scan was a documented M1 shortcut that the corpus made untenable |
 | 2026-09-04 | The corpus asserts *direction*, not exact counts, against Thingi10K's ground truth: a mesh the reference calls clean must not be reported defective. Two implementations legitimately count one defect differently, but a false positive pushes a user into "repairing" good geometry, so that direction is the one worth pinning |
 | 2026-09-04 | Import reports the geometry it cannot represent rather than dropping it silently (`MeshImportResult`). `DMesh3` cannot hold a non-manifold edge and `AppendTriangle` refuses those triangles; ignoring that return value made 14 of 24 real print files load incomplete, two at ~73% loss, with every downstream diagnostic then describing a different mesh. Loading such geometry properly is a data-structure decision deferred to its own milestone; misreporting it is not acceptable in the meantime |
+| 2026-09-04 | Import keeps non-manifold geometry by splitting the mesh at the offending vertices rather than dropping triangles. `DMesh3` cannot represent a non-manifold junction, so the only faithful options were losing geometry or cutting connectivity; cutting is strictly better, since the surface stays complete and correctly positioned and the junction genuinely has no single consistent surface to connect to |
+| 2026-09-04 | Topology-derived detectors reason about vertex *positions*, not vertex ids (`PositionTopology`). The mesh structure under-represents the true topology, so a seam left by splitting is indistinguishable from a hole by id alone. `NonManifoldDetector` established this pattern; `BoundaryHoleDetector` and `DisconnectedShellDetector` now follow it. A consequence, accepted deliberately: a crack from near-coincident vertices is reported as duplicate vertices rather than as a hole, because that names the cause and points at the repair that fixes it |
 
 ## 12. Development environment
 
@@ -528,14 +541,8 @@ M0.
 7. ~~Known follow-up from M4-2: `Viewport.Gizmo` single-slot arbitration~~ — done.
 8. ~~Collect a real test corpus (M4-1)~~ and ~~assert detectors against its
    ground truth (M4-6)~~ — both done; see `reports/M4/CORPUS.md`.
-   **Outstanding and significant**: import still cannot load non-manifold
-   geometry — the loss is now reported, but 14 of 24 real print files still
-   load incomplete and two lose ~73% of their triangles. Deciding what
-   Meshwright should do about meshes `DMesh3` cannot hold (repair on import,
-   keep a parallel triangle soup, or change the mesh structure) is a real
-   design question and the biggest known correctness gap in the product: a
-   repair tool that cannot load the broken geometry it exists to fix is
-   limited in exactly its core use case. Worth a milestone of its own.
+   ~~Outstanding: import cannot load non-manifold geometry~~ — fixed in M4-7 by
+   splitting at the offending vertices; all 53 corpus files now load complete.
 9. Packaging & CI (M4-3) and docs/release (M4-4) remain. Note for CI: the corpus
    is fetched, not committed, so a CI job must run `scripts/fetch-corpus.sh`
    (and should cache it) to get corpus coverage; without it those tests pass

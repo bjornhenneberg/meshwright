@@ -98,39 +98,55 @@ category must not come back silent.
 Assertions run only on losslessly-imported meshes — see below for why that qualifier is
 load-bearing.
 
-## The import was silently discarding geometry
+## The import was silently discarding geometry — now fixed
 
-The ground-truth comparison immediately found the most serious bug of the corpus work.
-`DMesh3` is an indexed mesh and cannot represent a non-manifold edge, so
-`DMesh3.AppendTriangle` refuses such a triangle and returns `NonManifoldID`; it likewise
-refuses a triangle whose corners have welded together. **Both readers discarded that
-return value**, so importing silently dropped exactly the geometry Meshwright exists to
-diagnose, and every detector then reported on a mutilated remainder.
+The ground-truth comparison found the most serious bug of the corpus work.
+`DMesh3` is an indexed, edge-based mesh: an edge belongs to at most two triangles, so
+`AppendTriangle` refuses a third and returns `NonManifoldID`, and it needs three distinct
+vertex ids per triangle. **Both readers discarded that return value**, so importing
+silently dropped exactly the geometry Meshwright exists to diagnose. 14 of the 24 real
+print files lost triangles and two lost about 73%; thingi10k-204394 kept 9,516 of 34,752,
+which is why its reference count of 34,905 self-intersections came back as 16.
 
-Across the 24 real print files, 14 lost triangles and two lost about 73%:
+`NonManifoldMeshBuilder` now keeps that geometry by **splitting the mesh at the offending
+vertices instead of dropping the triangle**. Duplicating a vertex gives the triangle a
+fresh edge to attach to, so it lands at exactly the right position while the topology
+stays legal: the geometry is complete and only the connectivity is cut, which is an
+honest description of a non-manifold junction — there is no single consistent surface
+there to be connected to. Degenerate triangles survive the same way, as zero-area
+triangles the degenerate detector then reports.
 
-| file | in file | loaded | dropped |
+This is the representation `NonManifoldDetector` was already written for. Its comment has
+always said a true non-manifold edge "can only appear in this data structure as several
+distinct edge ids that share the same pair of vertex *positions*" — but nothing produced
+that shape, so it could only ever report defects the importer had already thrown away.
+Every corpus file now loads 100% of its triangles, asserted per file against the
+reference's own face count.
+
+### The consequence, and the second half of the fix
+
+Cutting connectivity leaves *seams*: edges the structure calls boundaries although another
+edge sits at the same two positions and the surface plainly continues. Detectors reasoning
+only about vertex ids then invent defects — the first run after the change reported 13,348
+phantom holes on one closed file, and split single shells into thousands of fragments. A
+fix that trades lost geometry for false reports is not a fix.
+
+So the topology-derived detectors now reason about positions, extending the pattern
+`NonManifoldDetector` already set (`PositionTopology`). `BoundaryHoleDetector` ignores
+loops made entirely of seam edges; `DisconnectedShellDetector` joins components across
+coincident edge positions. Agreement with the reference improved sharply as a result:
+
+| file | shells before | shells after | reference components |
 | --- | --- | --- | --- |
-| thingi10k-204394 | 34,752 | 9,516 | 25,236 (72.6%) |
-| thingi10k-92067 | 1,386 | 368 | 1,018 (73.4%) |
-| thingi10k-96639 | 116,289 | 115,370 | 919 (0.8%) |
-| thingi10k-237741 | 134,658 | 134,320 | 338 (0.3%) |
-| …10 more | | | 3.7% of the corpus overall |
+| thingi10k-204394 | 4,757 | 31 | 32 |
+| thingi10k-92067 | 183 | 1 | 1 |
+| thingi10k-96639 | 917 | 1 | 1 |
 
-That is why 204394's reference count of 34,905 self-intersections came back as 16: most
-of the mesh was never there.
-
-Properly representing non-manifold geometry is a change to the mesh data structure and
-was not attempted. Making the loss visible was: `MeshImportResult` now travels with every
-import carrying per-cause counts, and `MainWindow` appends a plain-language warning to the
-status line. A user told "no problems found" about a mesh a quarter of which failed to
-load has been actively misled, and that is now impossible. `ImportAccountsForEveryTriangleInTheFile`
-additionally checks our triangle count against the reference's, so a parser bug cannot
-hide behind a representation limit.
-
-**Still open**: the geometry is reported but still not loaded. Deciding what Meshwright
-should do with meshes `DMesh3` cannot hold — repair on import, keep a parallel soup, or
-change structure — is a real design question and belongs in a milestone of its own.
+The same rule means a *crack* — two open edges at identical positions, from near-coincident
+vertices welding did not merge — is not reported as a hole. That is deliberate: the surface
+is geometrically continuous there, and `DuplicateVertexDetector` reports the actual cause
+with a repair that addresses it. Calling it a hole would point the user at the wrong fix.
+The ground-truth check accepts either category as "we noticed this surface is not closed".
 
 ## Census
 

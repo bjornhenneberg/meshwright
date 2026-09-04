@@ -1,6 +1,8 @@
 using System.Globalization;
 using System.Numerics;
 using System.Text;
+using Meshwright.Geometry.Mesh;
+
 namespace Meshwright.IO.Stl;
 
 
@@ -198,46 +200,29 @@ public static class StlReader
 
     private static MeshImportResult BuildIndexedMesh(IReadOnlyList<Vector3> positions)
     {
-        var mesh = new g3.DMesh3();
-        var vertexIds = new Dictionary<g3.Vector3d, int>();
-        int triangleCount = 0;
-        int nonManifoldDropped = 0;
-        int degenerateDropped = 0;
+        // STL is triangle soup, so vertices must be welded by position to recover an indexed mesh.
+        // The builder keeps triangles that welding then makes unrepresentable - a shared edge with
+        // a third face, or corners collapsed onto one vertex - by splitting instead of skipping.
+        var builder = new NonManifoldMeshBuilder();
 
-        for (int positionIndex = 0; positionIndex < positions.Count; positionIndex += 3)
+        for (int positionIndex = 0; positionIndex + 2 < positions.Count; positionIndex += 3)
         {
             int[] triangle = new int[3];
             for (int corner = 0; corner < 3; corner++)
             {
                 Vector3 position = positions[positionIndex + corner];
-                var vertex = new g3.Vector3d(position.X, position.Y, position.Z);
-                if (!vertexIds.TryGetValue(vertex, out int vertexId))
-                {
-                    vertexId = mesh.AppendVertex(vertex);
-                    vertexIds.Add(vertex, vertexId);
-                }
-
-                triangle[corner] = vertexId;
+                triangle[corner] = builder.AddVertexWelded(new g3.Vector3d(position.X, position.Y, position.Z));
             }
 
-            triangleCount++;
-
-            // AppendTriangle refuses rather than throws: NonManifoldID when the triangle would give
-            // an edge a third face, InvalidID when welding has collapsed two corners onto one
-            // vertex. Ignoring the result silently discards precisely the broken geometry this tool
-            // exists to report, so count both.
-            int appended = mesh.AppendTriangle(triangle[0], triangle[1], triangle[2]);
-            if (appended == g3.DMesh3.NonManifoldID)
-            {
-                nonManifoldDropped++;
-            }
-            else if (appended < 0)
-            {
-                degenerateDropped++;
-            }
+            builder.AddTriangle(triangle[0], triangle[1], triangle[2]);
         }
 
-        return new MeshImportResult(mesh, triangleCount, nonManifoldDropped, degenerateDropped);
+        return new MeshImportResult(
+            builder.Mesh,
+            builder.TriangleCount,
+            builder.NonManifoldTrianglesSplit,
+            builder.DegenerateTrianglesSplit,
+            builder.TrianglesDropped);
     }
 
     private static int Expect(string[] tokens, int i, string expected)

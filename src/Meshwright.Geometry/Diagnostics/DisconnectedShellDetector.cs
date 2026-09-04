@@ -1,10 +1,18 @@
 using g3;
+using Meshwright.Geometry.Mesh;
 
 namespace Meshwright.Geometry.Diagnostics;
 
 /// <summary>
 /// Flags shells that are disconnected from the mesh's single largest-by-volume
 /// shell, e.g. small floating debris left over from a bad export.
+///
+/// <para>
+/// Components are found by position rather than by vertex id (see <see cref="PositionTopology"/>):
+/// a surface that <see cref="NonManifoldMeshBuilder"/> had to cut in order to represent
+/// non-manifold geometry is still one shell, and reporting its pieces as floating debris would be
+/// an artefact of the mesh structure rather than a defect in the file.
+/// </para>
 /// </summary>
 public sealed class DisconnectedShellDetector : IMeshDetector
 {
@@ -12,21 +20,20 @@ public sealed class DisconnectedShellDetector : IMeshDetector
 
     public IReadOnlyList<MeshIssue> Detect(DMesh3 mesh)
     {
-        var components = new MeshConnectedComponents(mesh);
-        components.FindConnectedT();
+        IReadOnlyList<List<int>> componentList = PositionTopology.ConnectedComponents(mesh);
 
-        if (components.Components.Count <= 1)
+        if (componentList.Count <= 1)
         {
             return Array.Empty<MeshIssue>();
         }
 
-        var shellVolumes = new double[components.Components.Count];
+        var shellVolumes = new double[componentList.Count];
         double totalVolume = 0.0;
 
-        for (int i = 0; i < components.Components.Count; i++)
+        for (int i = 0; i < componentList.Count; i++)
         {
             double volume = 0.0;
-            foreach (int tid in components.Components[i].Indices)
+            foreach (int tid in componentList[i])
             {
                 Index3i tri = mesh.GetTriangle(tid);
                 Vector3d v0 = mesh.GetVertex(tri.a);
@@ -51,21 +58,21 @@ public sealed class DisconnectedShellDetector : IMeshDetector
         }
 
         var issues = new List<MeshIssue>();
-        for (int i = 0; i < components.Components.Count; i++)
+        for (int i = 0; i < componentList.Count; i++)
         {
             if (i == largest)
             {
                 continue;
             }
 
-            MeshConnectedComponents.Component component = components.Components[i];
+            List<int> component = componentList[i];
             double percent = totalVolume > 0.0 ? (shellVolumes[i] / totalVolume) * 100.0 : 0.0;
 
             issues.Add(new MeshIssue(
                 Category: Category,
                 Severity: MeshIssueSeverity.Warning,
-                Message: $"Stray disconnected shell ({component.Indices.Length} triangles, {percent:0.##}% of total volume)",
-                TriangleIds: component.Indices));
+                Message: $"Stray disconnected shell ({component.Count} triangles, {percent:0.##}% of total volume)",
+                TriangleIds: component.ToArray()));
         }
 
         return issues;

@@ -21,7 +21,7 @@ namespace Meshwright.Tests.Corpus;
 /// </para>
 ///
 /// <para>
-/// Assertions are restricted to losslessly-imported meshes. Where <see cref="DMesh3"/> could not
+/// Assertions are restricted to completely-imported meshes. Where <see cref="DMesh3"/> could not
 /// hold part of the file (see <see cref="MeshImportResult"/>), the detectors are describing a
 /// different mesh from the one Thingi10K measured, and comparing the two would be meaningless.
 /// </para>
@@ -86,6 +86,11 @@ public class CorpusGroundTruthTests
             // External consistency: we read the same number of triangles the reference did, so a
             // parser bug cannot masquerade as a representation limit.
             Assert.Equal(Truth(l, "faces"), l.Import.TrianglesInFile);
+
+            // And the point of splitting rather than skipping: every triangle in the file is in the
+            // mesh. Two of these files used to lose ~73% of themselves here.
+            Assert.True(l.Import.IsComplete, $"{l.Entry.FileName} dropped {l.Import.TrianglesDropped} triangles.");
+            Assert.Equal(Truth(l, "faces"), l.Import.Mesh.TriangleCount);
         }
     }
 
@@ -99,7 +104,7 @@ public class CorpusGroundTruthTests
             return;
         }
 
-        var lossless = loaded.Where(l => l.Import.IsLossless).ToList();
+        var lossless = loaded.Where(l => l.Import.IsComplete).ToList();
         Assert.NotEmpty(lossless);
 
         var failures = new List<string>();
@@ -127,7 +132,7 @@ public class CorpusGroundTruthTests
         }
 
         Assert.True(failures.Count == 0,
-            $"Detectors reported defects on geometry the reference calls clean ({lossless.Count} losslessly-imported files checked):\n"
+            $"Detectors reported defects on geometry the reference calls clean ({lossless.Count} completely-imported files checked):\n"
             + string.Join("\n", failures));
     }
 
@@ -147,16 +152,25 @@ public class CorpusGroundTruthTests
         const int Substantial = 50;
         var failures = new List<string>();
 
-        foreach (Loaded l in loaded.Where(l => l.Import.IsLossless))
+        foreach (Loaded l in loaded.Where(l => l.Import.IsComplete))
         {
             if (Truth(l, "self_int") >= Substantial && Count(l, "SelfIntersection") == 0)
             {
                 failures.Add($"{l.Entry.FileName}: reference reports {Truth(l, "self_int")} self-intersections, we found none.");
             }
 
-            if (Truth(l, "boundary_edges") >= Substantial && Count(l, "BoundaryHole") == 0)
+            // An open surface may be a hole or a crack — two open edges at the same position, left
+            // by near-coincident vertices. Meshwright reports the second as duplicate vertices
+            // rather than as a hole, because that names the cause and points at the repair that
+            // fixes it. The reference counts both as boundary edges, so either category satisfies
+            // "we noticed this surface is not closed".
+            if (Truth(l, "boundary_edges") >= Substantial
+                && Count(l, "BoundaryHole") == 0
+                && Count(l, "DuplicateVertex") == 0)
             {
-                failures.Add($"{l.Entry.FileName}: reference reports {Truth(l, "boundary_edges")} boundary edges, we found no holes.");
+                failures.Add(
+                    $"{l.Entry.FileName}: reference reports {Truth(l, "boundary_edges")} boundary edges, "
+                    + "we reported neither holes nor duplicate vertices.");
             }
         }
 
@@ -177,7 +191,7 @@ public class CorpusGroundTruthTests
         // What matters is that the loss is never silent: every lossy import must produce a warning
         // naming the scale of it. This is the guard on the bug the ground-truth comparison found -
         // 14 of 24 real files were losing triangles with no indication at all.
-        var lossy = loaded.Where(l => !l.Import.IsLossless).ToList();
+        var lossy = loaded.Where(l => !l.Import.IsComplete).ToList();
 
         foreach (Loaded l in lossy)
         {
@@ -186,7 +200,7 @@ public class CorpusGroundTruthTests
             _output.WriteLine($"{l.Entry.FileName,-24} {l.Import.Warning}");
         }
 
-        foreach (Loaded l in loaded.Where(l => l.Import.IsLossless))
+        foreach (Loaded l in loaded.Where(l => l.Import.IsComplete))
         {
             Assert.Null(l.Import.Warning);
         }
