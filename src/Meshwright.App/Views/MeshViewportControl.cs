@@ -6,6 +6,7 @@ using Avalonia.OpenGL;
 using Avalonia.OpenGL.Controls;
 using Meshwright.Geometry.Diagnostics;
 using Meshwright.Rendering.Camera;
+using Meshwright.Rendering.Gizmos;
 using Meshwright.Rendering.GL;
 using Silk.NET.OpenGL;
 
@@ -32,7 +33,9 @@ public sealed class MeshViewportControl : OpenGlControlBase
 
     private bool _isOrbiting;
     private bool _isPanning;
+    private bool _gizmoClaimingDrag;
     private Point _lastPointerPosition;
+    private IViewportGizmo? _gizmo;
 
     public g3.DMesh3? Mesh
     {
@@ -66,6 +69,23 @@ public sealed class MeshViewportControl : OpenGlControlBase
         {
             _report = value;
             _highlightsDirty = true;
+            RequestNextFrameRendering();
+        }
+    }
+
+    /// <summary>
+    /// An interactive overlay gizmo, if any (e.g. a plane-cut handle, transform axes, or drain-hole
+    /// placement marker). Only one gizmo is active at a time. Set to null to deactivate.
+    /// The gizmo is rendered after the mesh on every frame and is given first refusal on pointer
+    /// events (see <see cref="IViewportGizmo"/> for the contract).
+    /// </summary>
+    public IViewportGizmo? Gizmo
+    {
+        get => _gizmo;
+        set
+        {
+            _gizmo = value;
+            _gizmoClaimingDrag = false;
             RequestNextFrameRendering();
         }
     }
@@ -114,7 +134,15 @@ public sealed class MeshViewportControl : OpenGlControlBase
         _gl.Clear((uint)(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit));
 
         float aspect = pixelHeight == 0 ? 1f : (float)pixelWidth / pixelHeight;
-        _renderer.Render(_camera.GetViewMatrix(), _camera.GetProjectionMatrix(aspect), System.Numerics.Matrix4x4.Identity);
+        var view = _camera.GetViewMatrix();
+        var projection = _camera.GetProjectionMatrix(aspect);
+        _renderer.Render(view, projection, System.Numerics.Matrix4x4.Identity);
+
+        // Render active gizmo (if any) on top of the mesh.
+        if (_gizmo is not null)
+        {
+            _gizmo.Render(_gl, view, projection);
+        }
     }
 
     private void UploadCurrentMesh(g3.DMesh3 mesh)
@@ -136,6 +164,10 @@ public sealed class MeshViewportControl : OpenGlControlBase
 
     protected override void OnOpenGlDeinit(GlInterface gl)
     {
+        // Dispose gizmo while GL context is current (if it holds GL resources).
+        (_gizmo as IDisposable)?.Dispose();
+        _gizmo = null;
+
         _renderer?.Dispose();
         _renderer = null;
         _gl = null;
@@ -184,50 +216,96 @@ public sealed class MeshViewportControl : OpenGlControlBase
     private void HandlePointerPressed(PointerPressedEventArgs e)
     {
         var point = e.GetCurrentPoint(this);
-        if (point.Properties.IsLeftButtonPressed)
+        var pointerPos = e.GetPosition(this);
+        _lastPointerPosition = pointerPos;
+
+        // Compute unprojected ray for gizmo (and camera) to consume.
+        ViewportRay ray = ComputeViewportRay(pointerPos);
+        GizmoPointerButton button = GetGizmoButton(point.Properties);
+        GizmoModifierKeys modifiers = GetGizmoModifiers(e.KeyModifiers);
+
+        var gizmoEvent = new GizmoPointerEvent(ray, new System.Numerics.Vector2((float)pointerPos.X, (float)pointerPos.Y),
+            GetViewportPixelSize(), button, modifiers, _mesh);
+
+        // Gizmo first refusal: if it claims the event, suppress camera manipulation.
+        _gizmoClaimingDrag = _gizmo?.OnPointerPressed(gizmoEvent) ?? false;
+        if (!_gizmoClaimingDrag)
         {
-            bool panModifier = e.KeyModifiers.HasFlag(KeyModifiers.Shift);
-            _isOrbiting = !panModifier;
-            _isPanning = panModifier;
-        }
-        else if (point.Properties.IsMiddleButtonPressed || point.Properties.IsRightButtonPressed)
-        {
-            _isPanning = true;
+            // Camera orbit/pan as before, only if gizmo didn't claim the press.
+            if (point.Properties.IsLeftButtonPressed)
+            {
+                bool panModifier = e.KeyModifiers.HasFlag(KeyModifiers.Shift);
+                _isOrbiting = !panModifier;
+                _isPanning = panModifier;
+            }
+            else if (point.Properties.IsMiddleButtonPressed || point.Properties.IsRightButtonPressed)
+            {
+                _isPanning = true;
+            }
         }
 
-        _lastPointerPosition = e.GetPosition(this);
         e.Pointer.Capture(this);
+        RequestNextFrameRendering();
     }
 
     private void HandlePointerMoved(PointerEventArgs e)
     {
-        if (!_isOrbiting && !_isPanning)
-        {
-            return;
-        }
-
         var position = e.GetPosition(this);
-        double dx = position.X - _lastPointerPosition.X;
-        double dy = position.Y - _lastPointerPosition.Y;
+        ViewportRay ray = ComputeViewportRay(position);
+
+        // If gizmo claimed the current drag, route the move to it (even if no button is pressed).
+        if (_gizmoClaimingDrag && _gizmo is not null)
+        {
+            var gizmoEvent = new GizmoPointerEvent(ray, new System.Numerics.Vector2((float)position.X, (float)position.Y),
+                GetViewportPixelSize(), GizmoPointerButton.None, GetGizmoModifiers(e.KeyModifiers), _mesh);
+            _gizmo.OnPointerMoved(gizmoEvent);
+        }
+        else if (_isOrbiting || _isPanning)
+        {
+            // Normal camera orbit/pan path (only active if a button is down and gizmo didn't claim it).
+            double dx = position.X - _lastPointerPosition.X;
+            double dy = position.Y - _lastPointerPosition.Y;
+
+            if (_isOrbiting)
+            {
+                _camera.Orbit((float)(dx * OrbitSensitivity), (float)(-dy * OrbitSensitivity));
+            }
+            else if (_isPanning)
+            {
+                _camera.Pan((float)(dx * PanSensitivity), (float)(dy * PanSensitivity));
+            }
+        }
+        else if (_gizmo is not null)
+        {
+            // Gizmo hover feedback: even with no drag active, send moves to gizmo for hover highlighting.
+            var gizmoEvent = new GizmoPointerEvent(ray, new System.Numerics.Vector2((float)position.X, (float)position.Y),
+                GetViewportPixelSize(), GizmoPointerButton.None, GetGizmoModifiers(e.KeyModifiers), _mesh);
+            _gizmo.OnPointerMoved(gizmoEvent);
+        }
+
         _lastPointerPosition = position;
-
-        if (_isOrbiting)
-        {
-            _camera.Orbit((float)(dx * OrbitSensitivity), (float)(-dy * OrbitSensitivity));
-        }
-        else if (_isPanning)
-        {
-            _camera.Pan((float)(dx * PanSensitivity), (float)(dy * PanSensitivity));
-        }
-
         RequestNextFrameRendering();
     }
 
     private void HandlePointerReleased(PointerReleasedEventArgs e)
     {
+        if (_gizmoClaimingDrag && _gizmo is not null)
+        {
+            var point = e.GetCurrentPoint(this);
+            var position = e.GetPosition(this);
+            ViewportRay ray = ComputeViewportRay(position);
+            GizmoPointerButton button = GetGizmoButton(point.Properties);
+
+            var gizmoEvent = new GizmoPointerEvent(ray, new System.Numerics.Vector2((float)position.X, (float)position.Y),
+                GetViewportPixelSize(), button, GetGizmoModifiers(e.KeyModifiers), _mesh);
+            _gizmo.OnPointerReleased(gizmoEvent);
+        }
+
+        _gizmoClaimingDrag = false;
         _isOrbiting = false;
         _isPanning = false;
         e.Pointer.Capture(null);
+        RequestNextFrameRendering();
     }
 
     private void HandlePointerWheelChanged(PointerWheelEventArgs e)
@@ -235,5 +313,45 @@ public sealed class MeshViewportControl : OpenGlControlBase
         // Scale the zoom step by current distance so it feels consistent whether zoomed in or out.
         _camera.Zoom((float)(-e.Delta.Y) * _camera.Distance * ZoomSensitivity * 100f);
         RequestNextFrameRendering();
+    }
+
+    private ViewportRay ComputeViewportRay(Point pixelPosition)
+    {
+        var size = Bounds.Size;
+        double scaling = VisualRoot?.RenderScaling ?? 1.0;
+        int pixelWidth = Math.Max(1, (int)(size.Width * scaling));
+        int pixelHeight = Math.Max(1, (int)(size.Height * scaling));
+
+        var scaledPixelPos = new System.Numerics.Vector2((float)(pixelPosition.X * scaling), (float)(pixelPosition.Y * scaling));
+        var viewportPixelSize = new System.Numerics.Vector2(pixelWidth, pixelHeight);
+        float aspect = pixelHeight == 0 ? 1f : (float)pixelWidth / pixelHeight;
+
+        return ViewportRaycaster.Unproject(scaledPixelPos, viewportPixelSize, _camera.GetViewMatrix(), _camera.GetProjectionMatrix(aspect));
+    }
+
+    private System.Numerics.Vector2 GetViewportPixelSize()
+    {
+        var size = Bounds.Size;
+        double scaling = VisualRoot?.RenderScaling ?? 1.0;
+        int pixelWidth = Math.Max(1, (int)(size.Width * scaling));
+        int pixelHeight = Math.Max(1, (int)(size.Height * scaling));
+        return new System.Numerics.Vector2(pixelWidth, pixelHeight);
+    }
+
+    private static GizmoPointerButton GetGizmoButton(PointerPointProperties props)
+    {
+        if (props.IsLeftButtonPressed) return GizmoPointerButton.Primary;
+        if (props.IsRightButtonPressed) return GizmoPointerButton.Secondary;
+        if (props.IsMiddleButtonPressed) return GizmoPointerButton.Middle;
+        return GizmoPointerButton.None;
+    }
+
+    private static GizmoModifierKeys GetGizmoModifiers(KeyModifiers modifiers)
+    {
+        GizmoModifierKeys result = GizmoModifierKeys.None;
+        if (modifiers.HasFlag(KeyModifiers.Shift)) result |= GizmoModifierKeys.Shift;
+        if (modifiers.HasFlag(KeyModifiers.Control)) result |= GizmoModifierKeys.Control;
+        if (modifiers.HasFlag(KeyModifiers.Alt)) result |= GizmoModifierKeys.Alt;
+        return result;
     }
 }
