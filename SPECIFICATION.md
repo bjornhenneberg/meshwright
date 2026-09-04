@@ -2,9 +2,11 @@
 
 **Status:** Draft v0.2 — living document, updated as milestones land
 **Working name:** Meshwright (placeholder — rename freely)
-**Progress:** M0 (Skeleton), M1 (Inspect), and M2 (Repair) complete and
-verified; see `reports/M0/SUMMARY.md`, `reports/M1/SUMMARY.md`, and
-`reports/M2/SUMMARY.md`. M3 (Edit) is next.
+**Progress:** M0 (Skeleton), M1 (Inspect), M2 (Repair), and M3 (Edit) complete
+and verified; see `reports/M0/SUMMARY.md`, `reports/M1/SUMMARY.md`,
+`reports/M2/SUMMARY.md`, and `reports/M3/`. M4 (Polish and release) is
+underway — the Manifold RPATH/interop blocker is fixed (204/204 tests
+passing); see the M4 entry in §11 and §7.
 
 ---
 
@@ -249,12 +251,36 @@ restores them. 119/119 tests passing. No UI wiring (Repair panel, export
 dialog) yet — flagged as a known gap for M3/M4, not built in this pass since
 this milestone's scope didn't call for it.
 
-**M3 — Edit** ← next
+**M3 — Edit** ✅ Complete (`reports/M3/`)
 Plane cut, booleans, transforms, hollow, drain holes, decimation.
+Delivered: all six v1.0 edit operations, wired into `MainWindow` as a tabbed
+sidebar, each panel bound to the shared `MeshDocument` for undo/redo; a
+plane-cut gizmo and a transform gizmo in the viewport; and a Manifold C API
+native-interop layer (`ManifoldInterop`/native `libmanifoldc`) backing the
+boolean union/difference/intersection operations. Shipped with a known gap:
+the boolean/Manifold P/Invoke path had a broken native-library RUNPATH plus
+two memory-lifetime bugs in the interop layer, so all 18 boolean-related
+tests failed at merge time (documented, not silently ignored) — fixed in M4,
+see below. 185/203 tests passing at merge (18 known Manifold failures);
+204/204 + 8/8 GPU passing after the M4 fix.
 
-**M4 — Polish and release**
+**M4 — Polish and release** ← in progress
 Packaging for three platforms, docs, website, sample files, crash-free on the test
 corpus. Public 1.0.
+Batch M4-0 (Manifold RPATH + interop fix) complete: rebuilt
+`libmanifoldc.so`/`libmanifold.so.3` with a portable `$ORIGIN`-relative RPATH
+instead of an absolute build-directory path; wired `Directory.Build.props` to
+copy both into every project's own output (the `runtimes/<rid>/native/`
+probing convention only applies automatically for NuGet-packed native
+assets); and fixed two `ManifoldInterop` memory-lifetime bugs uncovered once
+the library actually loaded — a buffer being freed out from under a
+placement-constructed native object (segfault inside `libmanifold.so.3`) and
+a null-pointer `memcpy` destination in `ExtractMeshGL64` (segfault in
+`libc`). Also fixed inverted-winding test cube fixtures and a geometrically
+unsound `PlaneCutTests` assertion uncovered along the way. Result: 204/204
+unit tests + 8/8 GPU tests passing (previously 185/203 + 8/8). Remaining M4
+batches (real-world test corpus, gizmo/menu UI polish, packaging & CI,
+docs/release) are not yet started — see `reports/M4/` as they land.
 
 **M5+**
 v1.x features, then the resin module.
@@ -313,6 +339,8 @@ source, and matches how this audience already buys tools.
 | 2026-09-02 | M2 (Repair) complete: `IMeshOperation` contract + snapshot undo stack, all six repair operations, `AutoRepairPipeline`, and STL/OBJ export |
 | 2026-09-02 | Voxel remesh/solidify is intentionally excluded from the default `AutoRepairPipeline` sequence — it discards fine detail, so it stays a manual, individually-runnable fallback rather than something every Auto Repair run pays for |
 | 2026-09-02 | M2 shipped without UI wiring (no Repair panel or export dialog) — the milestone's task scope named pipeline/operations/undo/export without a UI requirement, so it was treated as out of scope rather than assumed; deferred to M3/M4 |
+| 2026-09-04 | M3 (Edit) complete: all six v1.0 edit operations wired into `MainWindow`, plane-cut and transform gizmos, Manifold C API interop for booleans. Shipped with the 18 boolean tests known-failing (Manifold RUNPATH pointed at an absolute build-tree path) — documented as an M4 blocker rather than silently accepted |
+| 2026-09-04 | M4 batch 0: fixed the Manifold RUNPATH (now `$ORIGIN`-relative, both `libmanifoldc.so` and `libmanifold.so.3` shipped and copied into every project's output) and two further memory-lifetime bugs in `ManifoldInterop` that only surfaced once the library could actually load (a placement-constructed object's backing buffer freed before use; a null-pointer `memcpy` destination in mesh extraction). Also fixed inverted-winding test fixtures and an unsound `PlaneCutTests` assertion found while chasing the above. 204/204 tests + 8/8 GPU now passing |
 
 ## 12. Development environment
 
@@ -359,11 +387,15 @@ M0.
 2. ~~Start M2 — Repair~~ — done; see `reports/M2/SUMMARY.md`. Outstanding: no UI
    wiring yet (Repair panel, export dialog) — everything is usable
    programmatically and tested end-to-end, but not yet exposed in `MainWindow`.
-3. Start M3 — Edit: plane cut, booleans (via Manifold), transforms, hollow, drain
-   holes, decimation, per §5.1/§7.
+3. ~~Start M3 — Edit~~ — done; see `reports/M3/`. Shipped with all 18 boolean
+   tests known-failing (Manifold RUNPATH); fixed in M4 batch 0.
 4. Collect a real test corpus: 20-30 broken meshes from Thingiverse/Printables plus
    scanner output, kept as regression fixtures. M1 and M2's testing used one
    synthetic `BrokenSample.stl`; real-world meshes are still needed, and matter more
-   now that M2's repair operations exist to run against them.
+   now that M2's repair operations exist to run against them. (M4 batch 1, not yet
+   started.)
 5. Read a week of "Meshmixer alternative" threads and turn them into a prioritised
    feature list to check against §5.1.
+6. Continue M4: gizmo/menu UI polish (M4-2), packaging & CI for Linux/Windows/macOS
+   (M4-3), docs and release (M4-4) — per the M4 kickoff plan; batch 0 (Manifold
+   RPATH + interop fix) is done, see §7 and §11.
