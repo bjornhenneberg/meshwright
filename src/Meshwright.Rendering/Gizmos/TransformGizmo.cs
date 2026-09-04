@@ -22,10 +22,15 @@ public sealed class TransformGizmo : IViewportGizmo, IDisposable
         Scale,
     }
 
-    private const float AxisLength = 0.5f;
-    private const float RingRadius = 0.4f;
-    private const float CenterHandleRadius = 0.3f;
-    private const float PickTolerance = 0.25f;
+    // Gizmo dimensions, as fractions of the viewport's height rather than fixed world units. A
+    // fixed world size only works at one zoom: 0.5 world units of axis arrow is most of the screen
+    // on a 1mm part and a single pixel on a 500mm one, which left the centre handle with a 1px grab
+    // radius on a 50mm model. Resolved against the live camera by the *For() helpers below, so the
+    // drawn size and the picked size are always the same number.
+    private const float AxisLengthFraction = 0.12f;
+    private const float RingRadiusFraction = 0.10f;
+    private const float CenterHandleRadiusFraction = 0.05f;
+    private const float PickToleranceFraction = 0.025f;
 
     private Vector3 _center;
     private TransformMode _mode = TransformMode.Move;
@@ -156,7 +161,7 @@ public sealed class TransformGizmo : IViewportGizmo, IDisposable
         gl.UseProgram(_arrowProgram);
 
         // Single scale handle at center (white sphere)
-        var model = Matrix4x4.CreateScale(0.15f) * Matrix4x4.CreateTranslation(_center);
+        var model = Matrix4x4.CreateScale(CenterHandleRadiusFor(view, projection)) * Matrix4x4.CreateTranslation(_center);
         SetMatrixUniform(gl, _arrowProgram, "uModel", model);
         SetMatrixUniform(gl, _arrowProgram, "uView", view);
         SetMatrixUniform(gl, _arrowProgram, "uProjection", projection);
@@ -170,7 +175,7 @@ public sealed class TransformGizmo : IViewportGizmo, IDisposable
     private void RenderArrow(GlApi gl, uint program, Vector3 base_, Vector3 direction, Vector3 color,
         Matrix4x4 view, Matrix4x4 projection)
     {
-        var endpoint = base_ + direction * AxisLength;
+        var endpoint = base_ + direction * AxisLengthFor(view, projection);
 
         // Build arrow line and cone from base to endpoint; the vertices below are already in
         // world space, so the model matrix stays identity.
@@ -213,7 +218,7 @@ public sealed class TransformGizmo : IViewportGizmo, IDisposable
     {
         // Build a circle in the plane perpendicular to the axis
         const int segments = 32;
-        const float radius = RingRadius;
+        float radius = RingRadiusFor(view, projection);
         var verts = new List<float>();
 
         for (int i = 0; i < segments; i++)
@@ -332,6 +337,18 @@ public sealed class TransformGizmo : IViewportGizmo, IDisposable
         }
     }
 
+    private float AxisLengthFor(Matrix4x4 view, Matrix4x4 projection) =>
+        GizmoScale.ForFractionOfHeight(_center, view, projection, AxisLengthFraction);
+
+    private float RingRadiusFor(Matrix4x4 view, Matrix4x4 projection) =>
+        GizmoScale.ForFractionOfHeight(_center, view, projection, RingRadiusFraction);
+
+    private float CenterHandleRadiusFor(Matrix4x4 view, Matrix4x4 projection) =>
+        GizmoScale.ForFractionOfHeight(_center, view, projection, CenterHandleRadiusFraction);
+
+    private float PickToleranceFor(Matrix4x4 view, Matrix4x4 projection) =>
+        GizmoScale.ForFractionOfHeight(_center, view, projection, PickToleranceFraction);
+
     public bool OnPointerPressed(GizmoPointerEvent e)
     {
         if (e.Button != GizmoPointerButton.Primary)
@@ -341,7 +358,7 @@ public sealed class TransformGizmo : IViewportGizmo, IDisposable
         {
             case TransformMode.Move:
             {
-                int? axis = PickNearestAxis(e.Ray);
+                int? axis = PickNearestAxis(e.Ray, e.View, e.Projection);
                 if (axis is null)
                     return false;
 
@@ -353,7 +370,7 @@ public sealed class TransformGizmo : IViewportGizmo, IDisposable
 
             case TransformMode.Rotate:
             {
-                int? axis = PickNearestRing(e.Ray);
+                int? axis = PickNearestRing(e.Ray, e.View, e.Projection);
                 if (axis is null)
                     return false;
 
@@ -374,7 +391,7 @@ public sealed class TransformGizmo : IViewportGizmo, IDisposable
             case TransformMode.Scale:
             {
                 float distance = DistancePointToRay(_center, e.Ray);
-                if (distance > CenterHandleRadius)
+                if (distance > CenterHandleRadiusFor(e.View, e.Projection))
                     return false;
 
                 _dragStartDistance = Math.Max(distance, 1e-3f);
@@ -418,16 +435,18 @@ public sealed class TransformGizmo : IViewportGizmo, IDisposable
         return wasActive;
     }
 
-    private int? PickNearestAxis(ViewportRay ray)
+    private int? PickNearestAxis(ViewportRay ray, Matrix4x4 view, Matrix4x4 projection)
     {
         float minDist = float.MaxValue;
         int? nearest = null;
+        float axisLength = AxisLengthFor(view, projection);
+        float tolerance = PickToleranceFor(view, projection);
 
         for (int i = 0; i < 3; i++)
         {
-            var axisEnd = _center + AxisVector(i) * AxisLength;
+            var axisEnd = _center + AxisVector(i) * axisLength;
             float dist = DistancePointToRay(axisEnd, ray);
-            if (dist < minDist && dist < PickTolerance)
+            if (dist < minDist && dist < tolerance)
             {
                 minDist = dist;
                 nearest = i;
@@ -437,18 +456,20 @@ public sealed class TransformGizmo : IViewportGizmo, IDisposable
         return nearest;
     }
 
-    private int? PickNearestRing(ViewportRay ray)
+    private int? PickNearestRing(ViewportRay ray, Matrix4x4 view, Matrix4x4 projection)
     {
         float minError = float.MaxValue;
         int? nearest = null;
+        float ringRadius = RingRadiusFor(view, projection);
+        float tolerance = PickToleranceFor(view, projection);
 
         for (int i = 0; i < 3; i++)
         {
             if (!IntersectPlane(_center, AxisVector(i), ray, out Vector3 hit))
                 continue;
 
-            float error = Math.Abs((hit - _center).Length() - RingRadius);
-            if (error < minError && error < PickTolerance)
+            float error = Math.Abs((hit - _center).Length() - ringRadius);
+            if (error < minError && error < tolerance)
             {
                 minError = error;
                 nearest = i;

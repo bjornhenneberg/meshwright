@@ -18,7 +18,18 @@ public sealed class PlaneCutGizmo : IViewportGizmo, IDisposable
 {
     private Vector3 _planePosition;
     private Vector3 _planeNormal = Vector3.UnitZ;
-    private float _planeSize = 2.0f;
+    /// <summary>
+    /// Half-extent the plane square and normal arrow geometry is baked at in the VBOs. The
+    /// on-screen size is set by scaling that geometry in the model matrix, not by rebuilding it.
+    /// </summary>
+    private const float BakedHalfExtent = 2.0f;
+
+    /// <summary>
+    /// The plane widget's half-extent as a fraction of viewport height. Fixed world units only
+    /// work at one zoom — the old 2.0f made the square fill the screen on a 1mm part and shrink
+    /// below a pixel on a 500mm one — so the size is resolved against the live camera instead.
+    /// </summary>
+    private const float PlaneHalfExtentFraction = 0.10f;
 
     private bool _isDragging;
     private Vector3 _dragStartPosition;
@@ -89,7 +100,8 @@ public sealed class PlaneCutGizmo : IViewportGizmo, IDisposable
         Vector3 local = hit - _planePosition;
         float localRight = Vector3.Dot(local, right);
         float localUp = Vector3.Dot(local, up);
-        if (Math.Abs(localRight) > _planeSize || Math.Abs(localUp) > _planeSize)
+        float halfExtent = PlaneHalfExtentFor(e.View, e.Projection);
+        if (Math.Abs(localRight) > halfExtent || Math.Abs(localUp) > halfExtent)
         {
             return false;
         }
@@ -100,6 +112,14 @@ public sealed class PlaneCutGizmo : IViewportGizmo, IDisposable
         _dragModifiers = e.Modifiers;
         return true;
     }
+
+    /// <summary>
+    /// The widget's world half-extent for the current camera. The pick path and the render path
+    /// both size themselves from this one method, so the square that is drawn is the square that
+    /// responds.
+    /// </summary>
+    private float PlaneHalfExtentFor(Matrix4x4 view, Matrix4x4 projection) =>
+        GizmoScale.ForFractionOfHeight(_planePosition, view, projection, PlaneHalfExtentFraction);
 
     /// <summary>Same right/up basis used to orient the rendered plane square and normal arrow.</summary>
     private static (Vector3 Right, Vector3 Up) PlaneBasis(Vector3 normal)
@@ -203,7 +223,7 @@ public sealed class PlaneCutGizmo : IViewportGizmo, IDisposable
     private void BuildPlaneSquare(GlApi gl)
     {
         // Build a square quad in the plane
-        float size = _planeSize;
+        float size = BakedHalfExtent;
         var vertices = new float[]
         {
             -size, -size, 0, // 0: bottom-left
@@ -263,11 +283,13 @@ public sealed class PlaneCutGizmo : IViewportGizmo, IDisposable
         right = Vector3.Normalize(right);
         Vector3 up = Vector3.Cross(_planeNormal, right);
 
+        float scale = PlaneHalfExtentFor(view, projection) / BakedHalfExtent;
+
         Matrix4x4 model = Matrix4x4.CreateTranslation(_planePosition);
-        // Build rotation matrix from basis vectors
-        model.M11 = right.X; model.M12 = right.Y; model.M13 = right.Z;
-        model.M21 = up.X; model.M22 = up.Y; model.M23 = up.Z;
-        model.M31 = _planeNormal.X; model.M32 = _planeNormal.Y; model.M33 = _planeNormal.Z;
+        // Build a scaled rotation matrix from the basis vectors.
+        model.M11 = right.X * scale; model.M12 = right.Y * scale; model.M13 = right.Z * scale;
+        model.M21 = up.X * scale; model.M22 = up.Y * scale; model.M23 = up.Z * scale;
+        model.M31 = _planeNormal.X * scale; model.M32 = _planeNormal.Y * scale; model.M33 = _planeNormal.Z * scale;
 
         gl.UseProgram(_planeProgram);
         SetMatrixUniform(gl, _planeProgram, "uModel", model);
@@ -288,10 +310,13 @@ public sealed class PlaneCutGizmo : IViewportGizmo, IDisposable
         right = Vector3.Normalize(right);
         Vector3 up = Vector3.Cross(_planeNormal, right);
 
+        float scale = PlaneHalfExtentFor(view, projection) / BakedHalfExtent;
+
         Matrix4x4 model = Matrix4x4.CreateTranslation(_planePosition);
-        model.M11 = right.X; model.M12 = right.Y; model.M13 = right.Z;
-        model.M21 = up.X; model.M22 = up.Y; model.M23 = up.Z;
-        model.M31 = _planeNormal.X; model.M32 = _planeNormal.Y; model.M33 = _planeNormal.Z;
+        // Build a scaled rotation matrix from the basis vectors.
+        model.M11 = right.X * scale; model.M12 = right.Y * scale; model.M13 = right.Z * scale;
+        model.M21 = up.X * scale; model.M22 = up.Y * scale; model.M23 = up.Z * scale;
+        model.M31 = _planeNormal.X * scale; model.M32 = _planeNormal.Y * scale; model.M33 = _planeNormal.Z * scale;
 
         gl.UseProgram(_arrowProgram);
         SetMatrixUniform(gl, _arrowProgram, "uModel", model);

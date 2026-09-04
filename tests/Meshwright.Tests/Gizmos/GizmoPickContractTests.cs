@@ -71,11 +71,7 @@ public class GizmoPickContractTests
             $"A click in the viewport corner must fall through to camera orbit (radius={radius}, scaling={scaling}).");
     }
 
-    [Theory(Skip = "Known gap, not a regression: gizmos are sized in fixed world units " +
-        "(PlaneCutGizmo._planeSize = 2.0f, TransformGizmo.CenterHandleRadius = 0.3f), so their " +
-        "on-screen size shrinks as the model grows - 1px grab radius on a 50mm model, 0px on a " +
-        "500mm one. Fixing it needs constant-screen-size scaling, which needs the camera " +
-        "matrices at pick time (GizmoPointerEvent carries only the ray). Unskip with that change.")]
+    [Theory]
     [MemberData(nameof(Scales))]
     public void PlaneCut_IsBigEnoughOnScreenToHit(float radius, double scaling)
     {
@@ -94,15 +90,27 @@ public class GizmoPickContractTests
     public void Transform_Move_ClickingAnAxisHandle_ClaimsTheDrag(float radius, double scaling)
     {
         var harness = ViewportHarness.Framed(ModelCenter, radius, renderScaling: scaling);
-        var gizmo = new TransformGizmo(ModelCenter);
-        gizmo.SetMode(TransformGizmo.TransformMode.Move);
 
-        // The +Y arrow: perpendicular to the default camera's view direction, so it is not
-        // foreshortened into a point from this angle.
-        Vector3 handle = ModelCenter + Vector3.UnitY * 0.5f;
+        // Walk outward along the +Y arrow's on-screen direction and find where it is grabbable,
+        // rather than asserting a world position derived from the gizmo's own size constants.
+        // (The Y arrow is perpendicular to the default camera's view direction, so it is not
+        // foreshortened to a point from this angle.)
+        Vector2 screenDirection = harness.ScreenDirection(ModelCenter, Vector3.UnitY);
+        IReadOnlyList<int> claiming = harness.ClaimingOffsets(
+            () =>
+            {
+                var g = new TransformGizmo(ModelCenter);
+                g.SetMode(TransformGizmo.TransformMode.Move);
+                return g;
+            },
+            ModelCenter,
+            screenDirection);
 
-        Assert.True(harness.PressAtWorld(gizmo, handle),
-            $"Clicking the move gizmo's Y axis handle must claim the drag (radius={radius}, scaling={scaling}).");
+        Assert.True(claiming.Count > 0,
+            $"The move gizmo's Y axis handle is not grabbable at any pixel along its own on-screen axis (radius={radius}, scaling={scaling}).");
+        Assert.True(claiming.Count >= MinGrabRadiusPixels,
+            $"The move gizmo's Y axis handle is grabbable over only {claiming.Count}px of its axis " +
+            $"(need >= {MinGrabRadiusPixels}px) at radius={radius}, scaling={scaling}.");
     }
 
     [Theory]
@@ -129,11 +137,7 @@ public class GizmoPickContractTests
             $"A click in the viewport corner must fall through to camera orbit (radius={radius}, scaling={scaling}).");
     }
 
-    [Theory(Skip = "Known gap, not a regression: gizmos are sized in fixed world units " +
-        "(PlaneCutGizmo._planeSize = 2.0f, TransformGizmo.CenterHandleRadius = 0.3f), so their " +
-        "on-screen size shrinks as the model grows - 1px grab radius on a 50mm model, 0px on a " +
-        "500mm one. Fixing it needs constant-screen-size scaling, which needs the camera " +
-        "matrices at pick time (GizmoPointerEvent carries only the ray). Unskip with that change.")]
+    [Theory]
     [MemberData(nameof(Scales))]
     public void Transform_Scale_IsBigEnoughOnScreenToHit(float radius, double scaling)
     {

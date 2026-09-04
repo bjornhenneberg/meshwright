@@ -152,6 +152,49 @@ public sealed class ViewportHarness
         gizmo.OnPointerReleased(EventAt(logicalPixel, GizmoPointerButton.None, modifiers, mesh));
 
     /// <summary>
+    /// The on-screen direction, as a unit vector in logical pixels, that <paramref name="worldDirection"/>
+    /// points in when viewed from <paramref name="worldCenter"/>. Lets a test walk along a gizmo's
+    /// axis on screen without knowing how long that axis is in world units.
+    /// </summary>
+    public Vector2 ScreenDirection(Vector3 worldCenter, Vector3 worldDirection)
+    {
+        float step = MathF.Max(1e-4f, (worldCenter - Camera.Position).Length() * 1e-3f);
+        Vector2 at = RequireProjectToPixel(worldCenter);
+        Vector2 along = RequireProjectToPixel(worldCenter + Vector3.Normalize(worldDirection) * step);
+        return Vector2.Normalize(along - at);
+    }
+
+    /// <summary>
+    /// The pixel offsets along <paramref name="direction"/>, measured from where
+    /// <paramref name="worldCenter"/> appears, at which a press lands on the gizmo. Lets a test
+    /// assert that a handle is grabbable <em>somewhere</em> along its on-screen axis without
+    /// restating the gizmo's own size constants — which would just reintroduce the drift between
+    /// drawn size and picked size that these tests exist to catch.
+    /// </summary>
+    public IReadOnlyList<int> ClaimingOffsets(
+        Func<IViewportGizmo> freshGizmo,
+        Vector3 worldCenter,
+        Vector2 direction,
+        int limit = 400,
+        GizmoModifierKeys modifiers = GizmoModifierKeys.None,
+        g3.DMesh3? mesh = null)
+    {
+        Vector2 center = RequireProjectToPixel(worldCenter);
+        Vector2 step = Vector2.Normalize(direction);
+
+        var offsets = new List<int>();
+        for (int i = 0; i <= limit; i++)
+        {
+            if (PressAtPixel(freshGizmo(), center + step * i, modifiers, mesh))
+            {
+                offsets.Add(i);
+            }
+        }
+
+        return offsets;
+    }
+
+    /// <summary>
     /// The largest offset, in logical pixels, at which a press still lands on the gizmo — walking
     /// outward from the pixel where <paramref name="worldCenter"/> appears, in the given direction.
     /// This is the gizmo's on-screen grab radius, the quantity that decides whether a user can
