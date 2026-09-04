@@ -1,0 +1,152 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Meshwright.App.Views.Edit.TransformPanel"
+             Padding="8">
+  <ScrollViewer VerticalScrollBarVisibility="Auto">
+    <StackPanel Spacing="8">
+      <TextBlock Text="Transform" FontWeight="Bold" FontSize="14" />
+
+      <!-- Mode selector: Move / Rotate / Scale / Mirror -->
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <TextBlock Text="Mode:" VerticalAlignment="Center" />
+        <ComboBox Name="ModeCombo" VerticalAlignment="Center" Width="120">
+          <ComboBoxItem>Move</ComboBoxItem>
+          <ComboBoxItem>Rotate</ComboBoxItem>
+          <ComboBoxItem>Scale</ComboBoxItem>
+          <ComboBoxItem>Mirror</ComboBoxItem>
+        </ComboBox>
+      </StackPanel>
+
+      <!-- Move mode parameters -->
+      <StackPanel Name="MovePanel" Spacing="4">
+        <TextBlock Text="Offset (mm)" FontWeight="SemiBold" />
+        <Grid ColumnDefinitions="40,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="4" RowSpacing="4">
+          <TextBlock Text="X:" Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" />
+          <TextBox Name="MoveXInput" Grid.Row="0" Grid.Column="1" Text="0" />
+
+          <TextBlock Text="Y:" Grid.Row="1" Grid.Column="0" VerticalAlignment="Center" />
+          <TextBox Name="MoveYInput" Grid.Row="1" Grid.Column="1" Text="0" />
+
+          <TextBlock Text="Z:" Grid.Row="2" Grid.Column="0" VerticalAlignment="Center" />
+          <TextBox Name="MoveZInput" Grid.Row="2" Grid.Column="1" Text="0" />
+        </Grid>
+      </StackPanel>
+
+      <!-- Rotate mode parameters -->
+      <StackPanel Name="RotatePanel" Spacing="4" IsVisible="False">
+        <TextBlock Text="Rotation" FontWeight="SemiBold" />
+        <Grid ColumnDefinitions="60,*" RowDefinitions="Auto,Auto" ColumnSpacing="4" RowSpacing="4">
+          <TextBlock Text="Angle (°):" Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" />
+          <TextBox Name="RotateAngleInput" Grid.Row="0" Grid.Column="1" Text="0" />
+
+          <TextBlock Text="Axis:" Grid.Row="1" Grid.Column="0" VerticalAlignment="Center" />
+          <ComboBox Name="RotateAxisCombo" Grid.Row="1" Grid.Column="1">
+            <ComboBoxItem>X</ComboBoxItem>
+            <ComboBoxItem>Y</ComboBoxItem>
+            <ComboBoxItem>Z</ComboBoxItem>
+          </ComboBox>
+        </Grid>
+        <TextBlock Text="Center" FontWeight="SemiBold" />
+        <Grid ColumnDefinitions="40,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="4" RowSpacing="4">
+          <TextBlock Text="X:" Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" />
+          <TextBox Name="RotateCenterXInput" Grid.Row="0" Grid.Column="1" Text="0" />
+
+          <TextBlock Text="Y:" Grid.Row="1" Grid.Column="0" VerticalAlignment="Center" />
+          <TextBox Name="RotateCenterYInput" Grid.Row="1" Grid.Column="1" Text="0" />
+
+          <TextBlock Text="Z:" Grid.Row="2" Grid.Column="0" VerticalAlignment="Center" />
+          <TextBox Name="RotateCenterZInput" Grid.Row="2" Grid.Column="1" Text="0" />
+        </Grid>
+      </StackPanel>
+
+      <!-- Scale mode parameters -->
+      <StackPanel Name="ScalePanel" Spacing="4" IsVisible="False">
+        <TextBlock Text="Scale" FontWeight="SemiBold" />
+        <Grid ColumnDefinitions="60,*" RowDefinitions="Auto" ColumnSpacing="4" RowSpacing="4">
+          <TextBlock Text="Factor:" Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" />
+          <TextBox Name="ScaleFactorInput" Grid.Row="0" Grid.Column="1" Text="1.0" />
+        </Grid>
+        <TextBlock Text="Center" FontWeight="SemiBold" />
+        <Grid ColumnDefinitions="40,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="4" RowSpacing="4">
+          <TextBlock Text="X:" Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" />
+          <TextBox Name="ScaleCenterXInput" Grid.Row="0" Grid.Column="1" Text="0" />
+
+          <TextBlock Text="Y:" Grid.Row="1" Grid.Column="0" VerticalAlignment="Center" />
+          <TextBox Name="ScaleCenterYInput" Grid.Row="1" Grid.Column="1" Text="0" />
+
+          <TextBlock Text="Z:" Grid.Row="2" Grid.Column="0" VerticalAlignment="Center" />
+          <TextBox Name="ScaleCenterZInput" Grid.Row="2" Grid.Column="1" Text="0" />
+        </Grid>
+      </StackPanel>
+
+      <!-- Mirror mode parameters -->
+      <StackPanel Name="MirrorPanel" Spacing="4" IsVisible="False">
+        <TextBlock Text="Mirror Plane" FontWeight="SemiBold" />
+        <TextBlock Text="Plane Point" FontSize="11" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+        <Grid ColumnDefinitions="40,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="4" RowSpacing="4">
+          <TextBlock Text="X:" Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" />
+          <TextBox Name="MirrorPointXInput" Grid.Row="0" Grid.Column="1" Text="0" />
+
+          <TextBlock Text="Y:" Grid.Row="1" Grid.Column="0" VerticalAlignment="Center" />
+          <TextBox Name="MirrorPointYInput" Grid.Row="1" Grid.Column="1" Text="0" />
+
+          <TextBlock Text="Z:" Grid.Row="2" Grid.Column="0" VerticalAlignment="Center" />
+          <TextBox Name="MirrorPointZInput" Grid.Row="2" Grid.Column="1" Text="0" />
+        </Grid>
+        <TextBlock Text="Plane Normal" FontSize="11" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+        <Grid ColumnDefinitions="40,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="4" RowSpacing="4">
+          <TextBlock Text="X:" Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" />
+          <TextBox Name="MirrorNormalXInput" Grid.Row="0" Grid.Column="1" Text="1" />
+
+          <TextBlock Text="Y:" Grid.Row="1" Grid.Column="0" VerticalAlignment="Center" />
+          <TextBox Name="MirrorNormalYInput" Grid.Row="1" Grid.Column="1" Text="0" />
+
+          <TextBlock Text="Z:" Grid.Row="2" Grid.Column="0" VerticalAlignment="Center" />
+          <TextBox Name="MirrorNormalZInput" Grid.Row="2" Grid.Column="1" Text="0" />
+        </Grid>
+      </StackPanel>
+
+      <!-- Before/After stats -->
+      <TextBlock Text="Mesh Statistics" FontWeight="SemiBold" />
+      <Border Padding="6" Background="{DynamicResource SystemAltLowColor}" CornerRadius="4">
+        <StackPanel Spacing="4">
+          <TextBlock FontSize="11">
+            <Run Text="Before: " FontWeight="SemiBold" />
+            <Run Name="BeforeStatsText" Text="No mesh loaded" />
+          </TextBlock>
+          <TextBlock FontSize="11">
+            <Run Text="After: " FontWeight="SemiBold" />
+            <Run Name="AfterStatsText" Text="(not applied yet)" />
+          </TextBlock>
+        </StackPanel>
+      </Border>
+
+      <!-- Special operations -->
+      <TextBlock Text="Quick Operations" FontWeight="SemiBold" />
+      <StackPanel Orientation="Horizontal" Spacing="4">
+        <Button Name="AlignToBedButton"
+                Content="Align to Bed"
+                Click="OnAlignToBedClick"
+                Padding="12,6" />
+        <Button Name="DropToZ0Button"
+                Content="Drop to Z=0"
+                Click="OnDropToZ0Click"
+                Padding="12,6" />
+      </StackPanel>
+
+      <!-- Apply button -->
+      <Button Name="ApplyButton"
+              Content="Apply Transform"
+              Click="OnApplyClick"
+              HorizontalAlignment="Left"
+              Padding="12,6" />
+
+      <!-- Status/result message -->
+      <TextBlock Name="ResultText"
+                 TextWrapping="Wrap"
+                 Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                 FontSize="11"
+                 IsVisible="False" />
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>
