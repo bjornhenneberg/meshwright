@@ -54,4 +54,32 @@ public class MainWindowTests
         Assert.NotNull(window);
         Assert.NotNull(window.CurrentReport);
     }
+
+    [AvaloniaFact]
+    public void FreshlyLoadedMesh_HasNothingToUndoOrRedo()
+    {
+        var window = new MainWindow();
+
+        Assert.Equal(string.Empty, window.UndoRedoStatusMessage);
+    }
+
+    [AvaloniaFact]
+    public void Undo_WithNoHistory_ReportsNothingToUndo()
+    {
+        var window = new MainWindow();
+
+        window.TriggerUndoForTesting();
+
+        Assert.Equal("Nothing to undo", window.StatusMessage);
+    }
+
+    [AvaloniaFact]
+    public void Redo_WithNoHistory_ReportsNothingToRedo()
+    {
+        var window = new MainWindow();
+
+        window.TriggerRedoForTesting();
+
+        Assert.Equal("Nothing to redo", window.StatusMessage);
+    }
 }

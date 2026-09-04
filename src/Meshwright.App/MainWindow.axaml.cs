@@ -32,6 +32,17 @@ public partial class MainWindow : Window
         LoadSampleMesh();
     }
 
+    /// <summary>Current text of the undo/redo status indicator, exposed for testing.</summary>
+    public string? UndoRedoStatusMessage => UndoRedoStatusText.Text;
+
+    /// <summary>Invokes the Undo menu action directly, bypassing the keyboard shortcut/menu
+    /// click, for use by tests that can't drive UI input headlessly.</summary>
+    public void TriggerUndoForTesting() => PerformUndo();
+
+    /// <summary>Invokes the Redo menu action directly, bypassing the keyboard shortcut/menu
+    /// click, for use by tests that can't drive UI input headlessly.</summary>
+    public void TriggerRedoForTesting() => PerformRedo();
+
     /// <summary>Initialize all edit operation panels with the document and gizmos.</summary>
     private void InitializeEditPanels()
     {
@@ -124,6 +135,59 @@ public partial class MainWindow : Window
     private void ApplyLoadedMesh(DMesh3 mesh, string statusPrefix)
     {
         _document.Load(mesh);
+        RefreshFromDocument(statusPrefix);
+    }
+
+    private void OnExitClick(object? sender, RoutedEventArgs e) => Close();
+
+    private void OnUndoClick(object? sender, RoutedEventArgs e) => PerformUndo();
+
+    private void OnRedoClick(object? sender, RoutedEventArgs e) => PerformRedo();
+
+    private void OnMainWindowKeyDown(object? sender, KeyEventArgs e)
+    {
+        // MenuItem.HotKey already handles plain Ctrl+Z (undo) and Ctrl+Y (redo). Ctrl+Shift+Z is
+        // an additional, Mac-style redo accelerator that isn't expressible as a second HotKey on
+        // the same MenuItem, so it's handled here instead.
+        if (e.KeyModifiers == (KeyModifiers.Control | KeyModifiers.Shift) && e.Key == Key.Z)
+        {
+            PerformRedo();
+            e.Handled = true;
+        }
+    }
+
+    private void PerformUndo()
+    {
+        if (_document.Undo())
+        {
+            RefreshFromDocument("Undo");
+        }
+        else
+        {
+            StatusText.Text = "Nothing to undo";
+            RefreshUndoRedoState();
+        }
+    }
+
+    private void PerformRedo()
+    {
+        if (_document.Redo())
+        {
+            RefreshFromDocument("Redo");
+        }
+        else
+        {
+            StatusText.Text = "Nothing to redo";
+            RefreshUndoRedoState();
+        }
+    }
+
+    /// <summary>Refreshes the viewport, gizmos, Edit panels, status bar, and diagnostics panel
+    /// from the document's current mesh/report. Shared by the initial load path and by
+    /// undo/redo, both of which change <see cref="_document"/>'s mesh out from under the UI.</summary>
+    private void RefreshFromDocument(string statusPrefix)
+    {
+        DMesh3 mesh = _document.Mesh!;
         MeshDiagnosticsReport report = _document.Report!;
 
         Viewport.Mesh = mesh;
@@ -150,6 +214,20 @@ public partial class MainWindow : Window
 
         StatusText.Text = $"{statusPrefix} ({mesh.TriangleCount} triangles) — {report.Issues.Count} issues found";
         UpdateDiagnosticsPanel(report);
+        RefreshUndoRedoState();
+    }
+
+    private void RefreshUndoRedoState()
+    {
+        UndoMenuItem.IsEnabled = _document.CanUndo;
+        RedoMenuItem.IsEnabled = _document.CanRedo;
+        UndoRedoStatusText.Text = (_document.CanUndo, _document.CanRedo) switch
+        {
+            (true, true) => "| Undo and Redo available",
+            (true, false) => "| Undo available",
+            (false, true) => "| Redo available",
+            (false, false) => string.Empty,
+        };
     }
 
     private void UpdateDiagnosticsPanel(MeshDiagnosticsReport report)
