@@ -59,6 +59,44 @@ public class PlaneCutGizmoWiringTests
     }
 
     [Fact]
+    public void OnPointerPressed_RayHitsPlaneSquare_ReturnsTrueEvenFromFarCamera()
+    {
+        // Regression: picking used to test distance from the *camera* (ray origin) to the
+        // plane, not where the click landed - a ray from far away that hits the plane
+        // square dead-center used to be rejected outright.
+        var gizmo = new PlaneCutGizmo(Vector3.Zero);
+
+        bool pressed = gizmo.OnPointerPressed(MakeEvent(new Vector3(0, 0, 100), new Vector3(0, 0, -1), GizmoPointerButton.Primary));
+
+        Assert.True(pressed);
+    }
+
+    [Fact]
+    public void OnPointerPressed_RayMissesPlaneSquare_ReturnsFalseEvenFromCloseCamera()
+    {
+        // Regression: the old distance-to-camera check meant a close-up camera made every
+        // click hit the gizmo, even ones nowhere near the rendered square.
+        var gizmo = new PlaneCutGizmo(Vector3.Zero);
+
+        // Plane is centered at the origin with normal +Z, extending ±_planeSize (2.0) in
+        // its local right/up directions - a ray hitting far outside that footprint should
+        // miss even though the camera is close to the plane.
+        bool pressed = gizmo.OnPointerPressed(MakeEvent(new Vector3(50, 50, 1), new Vector3(0, 0, -1), GizmoPointerButton.Primary));
+
+        Assert.False(pressed);
+    }
+
+    [Fact]
+    public void OnPointerPressed_RayParallelToPlane_ReturnsFalse()
+    {
+        var gizmo = new PlaneCutGizmo(Vector3.Zero);
+
+        bool pressed = gizmo.OnPointerPressed(MakeEvent(new Vector3(0, 0, 3), new Vector3(1, 0, 0), GizmoPointerButton.Primary));
+
+        Assert.False(pressed);
+    }
+
+    [Fact]
     public void DraggingGizmo_TranslateAlongNormal_MarksTouchedAndRaisesChanged()
     {
         var gizmo = new PlaneCutGizmo(Vector3.Zero);

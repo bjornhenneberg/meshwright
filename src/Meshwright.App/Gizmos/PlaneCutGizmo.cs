@@ -2,6 +2,7 @@ using System;
 using System.Numerics;
 using Silk.NET.OpenGL;
 using GlApi = Silk.NET.OpenGL.GL;
+using Meshwright.Rendering.Camera;
 using Meshwright.Rendering.Gizmos;
 
 namespace Meshwright.App.Gizmos;
@@ -73,18 +74,61 @@ public sealed class PlaneCutGizmo : IViewportGizmo, IDisposable
             return false;
         }
 
-        // Simple pick: check if ray is close to plane center
-        float distanceToPlane = Vector3.Distance(e.Ray.Origin, _planePosition);
-        if (distanceToPlane < _planeSize + 2.0f)
+        // Pick: intersect the ray with the gizmo's own plane, then check whether the hit
+        // falls inside the rendered square (see RenderPlaneSquare for the same basis/extent).
+        // The previous check (`Vector3.Distance(e.Ray.Origin, _planePosition) < _planeSize +
+        // 2.0f`) measured how far the *camera* was from the plane, not where the click
+        // landed - depending on zoom level that made every click anywhere in the viewport
+        // hit the gizmo, or no click ever hit it.
+        if (!IntersectPlane(_planePosition, _planeNormal, e.Ray, out Vector3 hit))
         {
-            _isDragging = true;
-            _dragStartPosition = _planePosition;
-            _dragStartNormal = _planeNormal;
-            _dragModifiers = e.Modifiers;
-            return true;
+            return false;
         }
 
-        return false;
+        (Vector3 right, Vector3 up) = PlaneBasis(_planeNormal);
+        Vector3 local = hit - _planePosition;
+        float localRight = Vector3.Dot(local, right);
+        float localUp = Vector3.Dot(local, up);
+        if (Math.Abs(localRight) > _planeSize || Math.Abs(localUp) > _planeSize)
+        {
+            return false;
+        }
+
+        _isDragging = true;
+        _dragStartPosition = _planePosition;
+        _dragStartNormal = _planeNormal;
+        _dragModifiers = e.Modifiers;
+        return true;
+    }
+
+    /// <summary>Same right/up basis used to orient the rendered plane square and normal arrow.</summary>
+    private static (Vector3 Right, Vector3 Up) PlaneBasis(Vector3 normal)
+    {
+        Vector3 right = Math.Abs(normal.X) < 0.9f ? Vector3.Cross(Vector3.UnitX, normal) : Vector3.Cross(Vector3.UnitY, normal);
+        right = Vector3.Normalize(right);
+        Vector3 up = Vector3.Cross(normal, right);
+        return (right, up);
+    }
+
+    private static bool IntersectPlane(Vector3 planePoint, Vector3 planeNormal, ViewportRay ray, out Vector3 hit)
+    {
+        Vector3 rayDir = Vector3.Normalize(ray.Direction);
+        float denominator = Vector3.Dot(planeNormal, rayDir);
+        if (Math.Abs(denominator) < 1e-6f)
+        {
+            hit = planePoint;
+            return false;
+        }
+
+        float t = Vector3.Dot(planePoint - ray.Origin, planeNormal) / denominator;
+        if (t < 0f)
+        {
+            hit = planePoint;
+            return false;
+        }
+
+        hit = ray.Origin + rayDir * t;
+        return true;
     }
 
     public bool OnPointerMoved(GizmoPointerEvent e)
