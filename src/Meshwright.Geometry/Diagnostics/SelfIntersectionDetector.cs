@@ -1,11 +1,18 @@
 using g3;
+using Meshwright.Geometry.Spatial;
 
 namespace Meshwright.Geometry.Diagnostics;
 
 /// <summary>
 /// Flags pairs of non-adjacent triangles whose geometry actually intersects.
-/// Uses a straightforward O(n^2) all-pairs check; broadphase acceleration
-/// (e.g. <see cref="DMeshAABBTree3"/>) is out of scope for M1.
+///
+/// <para>
+/// The search itself lives in <see cref="SelfIntersectionSearch"/>, shared with
+/// <c>SelfIntersectionRepair</c>. It was an all-pairs O(n^2) scan until the real-world corpus
+/// (M4-1) made the cost visible: 2.5s on a 5,800-triangle mesh, against §6.4's budget of 5s for a
+/// 500,000-triangle auto-repair, and hours on the corpus's larger models. The broadphase the repair
+/// side already used brings it in line.
+/// </para>
 /// </summary>
 public sealed class SelfIntersectionDetector : IMeshDetector
 {
@@ -14,40 +21,16 @@ public sealed class SelfIntersectionDetector : IMeshDetector
     public IReadOnlyList<MeshIssue> Detect(DMesh3 mesh)
     {
         var issues = new List<MeshIssue>();
-        int[] triangleIds = mesh.TriangleIndices().ToArray();
 
-        for (int i = 0; i < triangleIds.Length; i++)
+        foreach ((int a, int b) in SelfIntersectionSearch.FindPairs(mesh))
         {
-            int ti = triangleIds[i];
-            Index3i triI = mesh.GetTriangle(ti);
-
-            for (int j = i + 1; j < triangleIds.Length; j++)
-            {
-                int tj = triangleIds[j];
-                Index3i triJ = mesh.GetTriangle(tj);
-
-                if (SharesVertex(triI, triJ))
-                    continue;
-
-                IntrTriangle3Triangle3 intr = MeshQueries.TrianglesIntersection(mesh, ti, mesh, tj);
-                if (intr == null || !intr.Find())
-                    continue;
-
-                issues.Add(new MeshIssue(
-                    Category,
-                    MeshIssueSeverity.Error,
-                    $"Self-intersection between triangle {ti} and triangle {tj}",
-                    TriangleIds: new[] { ti, tj }));
-            }
+            issues.Add(new MeshIssue(
+                Category,
+                MeshIssueSeverity.Error,
+                $"Self-intersection between triangle {a} and triangle {b}",
+                TriangleIds: new[] { a, b }));
         }
 
         return issues;
-    }
-
-    private static bool SharesVertex(Index3i a, Index3i b)
-    {
-        return a.a == b.a || a.a == b.b || a.a == b.c
-            || a.b == b.a || a.b == b.b || a.b == b.c
-            || a.c == b.a || a.c == b.b || a.c == b.c;
     }
 }

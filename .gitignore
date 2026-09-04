@@ -24,3 +24,6 @@ Thumbs.db
 reports/*/*/*.log
 /.tools/
 TestResults/
+
+# Real-world test corpus: fetched by scripts/fetch-corpus.sh, never committed (see tests/corpus/manifest.tsv).
+tests/corpus/files/
