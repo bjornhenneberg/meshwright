@@ -448,8 +448,28 @@ any real GUI rendering (no way to see a window from this environment — only
 process-start was smoke-tested). See
 `reports/M4/20260904T214856Z-batch-linux-packaging-ci/report.md`.
 
-Remaining M4 batches (Windows/macOS CI + packaging, still under M4-3;
-docs/release — M4-4) are not yet started — see `reports/M4/` as they land.
+Batch M4-4 (docs/release, first pass) complete: a `docs/index.html` static
+project site (GitHub Pages, served from `/docs` on `main` — no build step,
+no external dependencies), a `samples/` directory with two small original
+STL fixtures (`sample-tetrahedron.stl` clean, `broken-cube.stl` with three
+deliberate defects, both already used as test fixtures elsewhere so no new
+licensing surface) so a first-time user has something to try Inspect/Repair
+on without hunting down a real file, and an expanded `README.md` (build/run/
+test/package instructions, links to the site and samples). Scoped to what's
+actually true today: no binaries are published anywhere, so the site's "Try
+it" section is honest about that and points at building from source rather
+than a nonexistent download link. Verified by rendering `docs/index.html`
+in headless Chromium and reviewing the screenshots (layout, both theme
+branches present in the CSS, all internal links resolve to real anchors);
+GitHub Pages itself was not exercised since no remote is pushed yet from
+this session. See the name-search finding below and
+`reports/M4/20260904T230000Z-batch-docs-release/report.md`.
+
+Remaining M4 work: Windows/macOS CI + packaging (still under M4-3, not
+started), and further M4-4 polish once the project is actually pushed to
+GitHub (verify Pages renders live, add real in-app screenshots once there's
+a way to capture them, revisit "Meshwright" as a name before any paid
+release per the finding below).
 432 unit tests + 8 GPU tests passing.
 
 **M5+**
@@ -489,6 +509,13 @@ source, and matches how this audience already buys tools.
 ## 10. Open questions
 
 - Name and domain availability — "Meshwright" is a placeholder, deferred until later.
+  A quick check during M4-4 found an active Florida LLC, "MeshWright, LLC,"
+  selling unrelated wire-mesh reinforcement design software under
+  "MeshWright Designer" — same spelling, same broad category (design
+  software), different industry (construction rebar vs. 3D-print mesh
+  repair). Low risk for a free/open-source hobby project with no
+  commercial use of the name today; worth a real look (trademark search,
+  not just a web search) before any paid release under §8's plan.
 - Which permissive licence: MPL-2.0 (file-level copyleft, keeps improvements public)
   or Apache-2.0 (maximum adoption)?
 - Ship Manifold as a prebuilt native binary per platform, or build it from source in
@@ -597,3 +624,9 @@ M0.
     Export... menu item/toolbar button in `MainWindow`, round-tripped against
     the full M4-1 corpus. See §7 M4 and
     `reports/M4/20260904T213615Z-batch2-mesh-export/report.md`.
+11. ~~Docs/release, first pass (M4-4)~~ — done: `docs/index.html` (GitHub
+    Pages site), `samples/` (two small original meshes to try immediately),
+    an expanded `README.md`. Not yet done: pushing the repo to GitHub itself
+    (no remote configured this session) and confirming Pages actually
+    serves the site live. Windows/macOS packaging (M4-3) is the largest
+    remaining M4 gap.

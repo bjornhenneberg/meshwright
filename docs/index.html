@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Meshwright — repair meshes for 3D printing</title>
+<meta name="description" content="A focused, cross-platform desktop tool for repairing and preparing meshes for 3D printing. Open source, in active development.">
+<style>
+  :root {
+    --bg: #faf9f7;
+    --bg-raised: #ffffff;
+    --text: #1c1a17;
+    --text-muted: #5c574f;
+    --border: #e4e0d8;
+    --accent: #b5502e;
+    --accent-text: #ffffff;
+    --code-bg: #f1ede4;
+    --shadow: 0 1px 2px rgba(28, 26, 23, 0.06);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #16140f;
+      --bg-raised: #1f1c16;
+      --text: #f1ede2;
+      --text-muted: #b3ab9c;
+      --border: #353026;
+      --accent: #e18456;
+      --accent-text: #1c1a17;
+      --code-bg: #262119;
+      --shadow: none;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #16140f;
+    --bg-raised: #1f1c16;
+    --text: #f1ede2;
+    --text-muted: #b3ab9c;
+    --border: #353026;
+    --accent: #e18456;
+    --accent-text: #1c1a17;
+    --code-bg: #262119;
+    --shadow: none;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.55;
+  }
+  a { color: var(--accent); }
+  .wrap {
+    max-width: 780px;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+
+  header.top {
+    border-bottom: 1px solid var(--border);
+  }
+  header.top .wrap {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-top: 18px;
+    padding-bottom: 18px;
+  }
+  .brand {
+    font-weight: 700;
+    font-size: 1.05rem;
+    letter-spacing: -0.01em;
+    color: var(--text);
+    text-decoration: none;
+  }
+  .top-links a {
+    margin-left: 20px;
+    font-size: 0.9rem;
+    text-decoration: none;
+    color: var(--text-muted);
+  }
+  .top-links a:hover { color: var(--accent); }
+
+  .hero {
+    padding: 64px 0 40px;
+  }
+  .badge {
+    display: inline-block;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+    border-radius: 100px;
+    padding: 4px 12px;
+    margin-bottom: 18px;
+  }
+  h1 {
+    font-size: 2.5rem;
+    line-height: 1.12;
+    letter-spacing: -0.02em;
+    margin: 0 0 16px;
+  }
+  .lede {
+    font-size: 1.15rem;
+    color: var(--text-muted);
+    max-width: 60ch;
+    margin: 0 0 28px;
+  }
+  .cta-row {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .btn {
+    display: inline-block;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 0.95rem;
+    text-decoration: none;
+    border: 1px solid var(--border);
+  }
+  .btn-primary {
+    background: var(--accent);
+    color: var(--accent-text);
+    border-color: var(--accent);
+  }
+  .btn-secondary {
+    color: var(--text);
+    background: var(--bg-raised);
+  }
+
+  section {
+    padding: 40px 0;
+    border-top: 1px solid var(--border);
+  }
+  h2 {
+    font-size: 1.3rem;
+    letter-spacing: -0.01em;
+    margin: 0 0 8px;
+  }
+  .section-lede {
+    color: var(--text-muted);
+    margin: 0 0 24px;
+    max-width: 65ch;
+  }
+
+  .not-goals {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 0 0 28px;
+    padding: 0;
+    list-style: none;
+  }
+  .not-goals li {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    background: var(--code-bg);
+    border-radius: 6px;
+    padding: 4px 10px;
+  }
+
+  .feature-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
+  }
+  @media (max-width: 560px) {
+    .feature-grid { grid-template-columns: 1fr; }
+    h1 { font-size: 2rem; }
+  }
+  .feature {
+    background: var(--bg-raised);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 20px;
+    box-shadow: var(--shadow);
+  }
+  .feature h3 {
+    margin: 0 0 6px;
+    font-size: 1rem;
+  }
+  .feature p {
+    margin: 0;
+    font-size: 0.9rem;
+    color: var(--text-muted);
+  }
+
+  .compare {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.88rem;
+  }
+  .compare th, .compare td {
+    text-align: left;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  .compare th {
+    color: var(--text-muted);
+    font-weight: 600;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+
+  .status-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    font-size: 0.92rem;
+  }
+  .status-list li {
+    display: flex;
+    gap: 10px;
+    padding: 7px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .status-list li:last-child { border-bottom: none; }
+  .dot {
+    flex: none;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    margin-top: 6px;
+  }
+  .dot-done { background: #3f8f5f; }
+  .dot-progress { background: var(--accent); }
+  .dot-todo { background: var(--border); }
+  .status-label { font-weight: 600; }
+  .status-desc { color: var(--text-muted); }
+
+  code, pre {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.85em;
+  }
+  pre {
+    background: var(--code-bg);
+    border-radius: 8px;
+    padding: 14px 16px;
+    overflow-x: auto;
+  }
+  code {
+    background: var(--code-bg);
+    border-radius: 4px;
+    padding: 1px 5px;
+  }
+  pre code { background: none; padding: 0; }
+
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 28px 0 48px;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+  }
+  footer a { color: var(--text-muted); }
+  footer a:hover { color: var(--accent); }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="#">Meshwright</a>
+    <nav class="top-links">
+      <a href="https://github.com/bjornhenneberg/meshwright">GitHub</a>
+      <a href="#get-started">Build it</a>
+      <a href="#status">Status</a>
+    </nav>
+  </div>
+</header>
+
+<div class="wrap">
+  <section class="hero" style="border-top:none;">
+    <span class="badge">Open source · early development</span>
+    <h1>Fix a broken mesh. Get it printing.</h1>
+    <p class="lede">
+      Meshmixer was discontinued in 2021 and never replaced. Meshwright is a
+      focused, cross-platform desktop tool that takes a mesh from
+      "downloaded or scanned" to "ready to slice" — inspect, repair, and edit,
+      with no account, no cloud, and no telemetry.
+    </p>
+    <div class="cta-row">
+      <a class="btn btn-primary" href="#get-started">Build from source</a>
+      <a class="btn btn-secondary" href="https://github.com/bjornhenneberg/meshwright">View on GitHub</a>
+    </div>
+  </section>
+
+  <section>
+    <h2>Why this exists</h2>
+    <p class="section-lede">
+      Meshmixer is still the tool recommended in 3D printing communities for
+      repair, still distributed from an archive page, and increasingly
+      broken on modern operating systems. Nothing has filled the gap.
+    </p>
+    <table class="compare">
+      <tr><th>Tool</th><th>Why it doesn't fill the gap</th></tr>
+      <tr><td>Blender</td><td>An artist's tool with an artist's UI — repair needs add-ons and tribal knowledge.</td></tr>
+      <tr><td>Netfabb</td><td>Moved to Autodesk enterprise pricing, out of reach for makers and small shops.</td></tr>
+      <tr><td>MeshLab</td><td>Research-grade UI, unpredictable, no printing-oriented workflow.</td></tr>
+      <tr><td>Slicers</td><td>Excellent at slicing, deliberately don't repair or edit geometry beyond trivial cases.</td></tr>
+      <tr><td>Microsoft 3D Builder</td><td>Abandoned, Windows-only, very limited.</td></tr>
+    </table>
+    <ul class="not-goals" style="margin-top:20px;">
+      <li>Not a CAD package</li>
+      <li>Not a sculpting suite</li>
+      <li>Not a slicer</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>What it does</h2>
+    <p class="section-lede">The v1.0 scope, in short.</p>
+    <div class="feature-grid">
+      <div class="feature">
+        <h3>Inspect</h3>
+        <p>Finds non-manifold edges, boundary holes, self-intersections, flipped normals, degenerate triangles, duplicate vertices, and stray shells — reported in plain language, not just an error count.</p>
+      </div>
+      <div class="feature">
+        <h3>Repair</h3>
+        <p>One-click Auto Repair, or run each step individually: hole filling, normal unification, small-shell removal, self-intersection resolution, and voxel remesh as a last-resort fallback.</p>
+      </div>
+      <div class="feature">
+        <h3>Edit</h3>
+        <p>Plane cut, boolean union/difference/intersection, transforms, hollowing to a wall thickness, and drain-hole placement — every spatial parameter set with a 3D gizmo, not a textbox.</p>
+      </div>
+      <div class="feature">
+        <h3>Simplify</h3>
+        <p>Quadric edge-collapse decimation targeting a triangle count or percentage, with a live before/after count.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="status">
+    <h2>Status</h2>
+    <p class="section-lede">
+      Built in public, milestone by milestone. See the full
+      <a href="https://github.com/bjornhenneberg/meshwright/blob/main/SPECIFICATION.md">specification</a> for the complete
+      roadmap and decision log.
+    </p>
+    <ul class="status-list">
+      <li><span class="dot dot-done"></span><div><span class="status-label">M0 — Skeleton.</span> <span class="status-desc">Solution scaffolding, STL import, Avalonia + Silk.NET viewport.</span></div></li>
+      <li><span class="dot dot-done"></span><div><span class="status-label">M1 — Inspect.</span> <span class="status-desc">All v1.0 defect detectors, diagnostics UI, GPU-verified error highlighting.</span></div></li>
+      <li><span class="dot dot-done"></span><div><span class="status-label">M2 — Repair.</span> <span class="status-desc">Undo stack, all repair operations, Auto Repair pipeline, STL/OBJ export.</span></div></li>
+      <li><span class="dot dot-done"></span><div><span class="status-label">M3 — Edit.</span> <span class="status-desc">Plane cut, booleans (via Manifold), transforms, hollow, drain holes, decimation.</span></div></li>
+      <li><span class="dot dot-progress"></span><div><span class="status-label">M4 — Polish and release.</span> <span class="status-desc">Gizmo-first UI wiring, a real-world test corpus, Linux CI + packaging done; Windows/macOS packaging and a public 1.0 release are still ahead.</span></div></li>
+    </ul>
+  </section>
+
+  <section id="get-started">
+    <h2>Try it</h2>
+    <p class="section-lede">
+      No public release yet — no signed installers, no download link that
+      works today. This is a real snapshot of an open-source project, not a
+      product page: the only honest way to try it right now is from source.
+    </p>
+    <pre><code>sudo apt install dotnet-sdk-10.0
+git clone https://github.com/bjornhenneberg/meshwright.git
+cd meshwright
+dotnet run --project src/Meshwright.App</code></pre>
+    <p style="margin-top:16px; color:var(--text-muted); font-size:0.9rem;">
+      A packaged Linux <code>.deb</code> can be built locally with
+      <code>scripts/package-linux.sh</code>. Two small sample meshes — one
+      clean, one deliberately broken — live in <code>samples/</code> if you
+      want something to try Inspect and Auto Repair on immediately.
+    </p>
+  </section>
+
+  <section>
+    <h2>Licensing plan</h2>
+    <p class="section-lede">
+      Open source core, paid convenience — prebuilt, signed binaries sold as
+      a one-time purchase, same binary as the free build, editing gated
+      behind a licence key. Inspection and diagnostics stay free always. The
+      specific permissive licence (MPL-2.0 vs. Apache-2.0) isn't finalised
+      yet — check the repository for the current <code>LICENSE</code> file
+      before relying on it.
+    </p>
+  </section>
+</div>
+
+<footer>
+  <div class="wrap">
+    Meshwright is open source and built in public.
+    <a href="https://github.com/bjornhenneberg/meshwright">Source on GitHub</a> ·
+    <a href="https://github.com/bjornhenneberg/meshwright/blob/main/SPECIFICATION.md">Full specification</a>
+  </div>
+</footer>
+
+</body>
+</html>
