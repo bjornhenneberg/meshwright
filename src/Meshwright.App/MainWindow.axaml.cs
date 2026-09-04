@@ -8,6 +8,8 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using g3;
+using Meshwright.App.Gizmos;
+using Meshwright.App.Views.Edit;
 using Meshwright.Core;
 using Meshwright.Geometry.Diagnostics;
 using Meshwright.IO.Stl;
@@ -20,10 +22,36 @@ public partial class MainWindow : Window
 
     private readonly MeshDocument _document = new();
 
+    // Gizmos for interactive operations
+    private DrainHoleGizmo? _drainHoleGizmo;
+
     public MainWindow()
     {
         InitializeComponent();
+        InitializeEditPanels();
         LoadSampleMesh();
+    }
+
+    /// <summary>Initialize all edit operation panels with the document and gizmos.</summary>
+    private void InitializeEditPanels()
+    {
+        // Bind all panels to the document
+        PlaneCutPanel.SetDocument(_document);
+        TransformPanel.SetDocument(_document);
+        HollowPanel.SetDocument(_document);
+        DrainHolePanel.SetDocument(_document);
+        DecimatePanel.SetDocument(_document);
+        BooleanPanel.SetDocument(_document);
+
+        // Create and wire up the drain hole gizmo
+        _drainHoleGizmo = new DrainHoleGizmo(_document.Mesh ?? new DMesh3());
+        DrainHolePanel.SetGizmo(_drainHoleGizmo);
+
+        // Wire gizmo activation callbacks: when the panel wants to show/hide the gizmo,
+        // update the viewport accordingly
+        DrainHolePanel.SetGizmoActivationCallback(
+            onActivate: () => Viewport.Gizmo = _drainHoleGizmo,
+            onDeactivate: () => Viewport.Gizmo = null);
     }
 
     /// <summary>Diagnostics report for the currently loaded mesh, exposed for testing.</summary>
@@ -100,6 +128,25 @@ public partial class MainWindow : Window
 
         Viewport.Mesh = mesh;
         Viewport.Report = report;
+
+        // Update gizmos with the new mesh
+        if (_drainHoleGizmo is not null)
+        {
+            _drainHoleGizmo.Dispose();
+        }
+        _drainHoleGizmo = new DrainHoleGizmo(mesh);
+        DrainHolePanel.SetGizmo(_drainHoleGizmo);
+
+        // Clear any active gizmo from the viewport
+        Viewport.Gizmo = null;
+
+        // Update all panels with statistics from the new mesh
+        PlaneCutPanel.SetDocument(_document);
+        TransformPanel.SetDocument(_document);
+        HollowPanel.SetDocument(_document);
+        DrainHolePanel.SetDocument(_document);
+        DecimatePanel.SetDocument(_document);
+        BooleanPanel.SetDocument(_document);
 
         StatusText.Text = $"{statusPrefix} ({mesh.TriangleCount} triangles) — {report.Issues.Count} issues found";
         UpdateDiagnosticsPanel(report);

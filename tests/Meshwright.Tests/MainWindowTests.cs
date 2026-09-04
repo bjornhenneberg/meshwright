@@ -43,4 +43,15 @@ public class MainWindowTests
 
         Assert.Contains($"{window.CurrentReport!.Issues.Count} issues found", window.StatusMessage);
     }
+
+    [AvaloniaFact]
+    public void Constructing_MainWindow_WithEditPanels_DoesNotThrow()
+    {
+        // This test verifies that the new Edit panel initialization in MainWindow
+        // completes successfully without throwing exceptions.
+        var window = new MainWindow();
+
+        Assert.NotNull(window);
+        Assert.NotNull(window.CurrentReport);
+    }
 }

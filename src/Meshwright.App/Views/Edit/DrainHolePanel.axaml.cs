@@ -18,6 +18,8 @@ public partial class DrainHolePanel : UserControl
     private DrainHoleGizmo? _gizmo;
     private readonly ObservableCollection<string> _holesDisplay = new();
     private bool _gizmoActive;
+    private Action? _gizmoActivationCallback;
+    private Action? _gizmoDeactivationCallback;
 
     public DrainHolePanel()
     {
@@ -44,6 +46,16 @@ public partial class DrainHolePanel : UserControl
         _gizmo.HolePlaced += (s, e) => UpdateHolesList();
         _gizmo.HoleRemoved += (s, e) => UpdateHolesList();
         UpdateHolesList();
+    }
+
+    /// <summary>
+    /// Sets callbacks to activate/deactivate the gizmo on the viewport when the user
+    /// clicks the placement button.
+    /// </summary>
+    public void SetGizmoActivationCallback(Action? onActivate, Action? onDeactivate)
+    {
+        _gizmoActivationCallback = onActivate;
+        _gizmoDeactivationCallback = onDeactivate;
     }
 
     /// <summary>Current operation result message text, exposed for testing.</summary>
@@ -101,12 +113,14 @@ public partial class DrainHolePanel : UserControl
             _gizmoActive = true;
             ActivateGizmoButton.Content = "Done placing holes";
             GizmoStatusText.Text = "Click on the mesh surface to place drain holes.";
+            _gizmoActivationCallback?.Invoke();
         }
         else
         {
             _gizmoActive = false;
             ActivateGizmoButton.Content = "Place holes with gizmo";
             GizmoStatusText.Text = "";
+            _gizmoDeactivationCallback?.Invoke();
         }
     }
 

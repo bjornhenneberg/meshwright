@@ -1,9 +1,10 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:views="using:Meshwright.App.Views"
+        xmlns:edit="using:Meshwright.App.Views.Edit"
         x:Class="Meshwright.App.MainWindow"
         Title="Meshwright"
-        Width="1024"
+        Width="1400"
         Height="768">
   <DockPanel>
     <Border DockPanel.Dock="Top" Padding="8" Background="{DynamicResource SystemAltHighColor}">
@@ -12,6 +13,32 @@
         <TextBlock Name="StatusText" VerticalAlignment="Center" Text="Loaded sample tetrahedron" />
       </StackPanel>
     </Border>
+
+    <!-- Left sidebar: Edit operations panel with tabs -->
+    <Border DockPanel.Dock="Left" Width="320" Padding="0" Background="{DynamicResource SystemAltHighColor}">
+      <TabControl Name="EditTabControl">
+        <TabItem Header="Plane Cut">
+          <edit:PlaneCutPanel Name="PlaneCutPanel" />
+        </TabItem>
+        <TabItem Header="Transform">
+          <edit:TransformPanel Name="TransformPanel" />
+        </TabItem>
+        <TabItem Header="Hollow">
+          <edit:HollowPanel Name="HollowPanel" />
+        </TabItem>
+        <TabItem Header="Drain Holes">
+          <edit:DrainHolePanel Name="DrainHolePanel" />
+        </TabItem>
+        <TabItem Header="Decimate">
+          <edit:DecimatePanel Name="DecimatePanel" />
+        </TabItem>
+        <TabItem Header="Boolean">
+          <edit:BooleanPanel Name="BooleanPanel" />
+        </TabItem>
+      </TabControl>
+    </Border>
+
+    <!-- Right sidebar: Diagnostics panel -->
     <Border DockPanel.Dock="Right" Width="300" Padding="8" Background="{DynamicResource SystemAltHighColor}">
       <ScrollViewer>
         <StackPanel Spacing="8">
@@ -28,6 +55,8 @@
         </StackPanel>
       </ScrollViewer>
     </Border>
+
+    <!-- Center: Viewport -->
     <Panel>
       <views:MeshViewportControl Name="Viewport" />
       <!-- Transparent hit-test overlay: on Linux the GL surface doesn't reliably participate in
