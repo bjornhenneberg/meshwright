@@ -36,3 +36,17 @@ Trims:
 - `spatial/DenseGrid3.cs`: `DenseGrid3f.get_slice`/`set_slice` and `DenseGrid3i.get_slice`/`get_bitmap` are omitted. They pull in `DenseGrid2f`/`DenseGrid2i` (2D grid slicing, unused by marching-cubes/SDF generation) and `Bitmap3` (binary bitmap conversion, likewise unused here). Nothing in `MeshSignedDistanceGrid` or `MarchingCubes` calls them.
 
 No trims were needed in `spatial/MeshSignedDistanceGrid.cs`, `math/AxisAlignedBox3i.cs`, or `math/AxisAlignedBox2i.cs` — all their dependencies (`DMesh3`, `DMeshAABBTree3`, `MathUtil`, `gParallel`, `gIndices` (`math/IndexUtil.cs`), `Triangle3d`, `DistPoint3Triangle3`, `Vector2i`/`Vector3d`/`Vector3f`/`Vector3i`, `AxisAlignedBox3d`) were already vendored from M1.
+
+---
+
+Vendored 2026-09-02 from geometry3Sharp commit `ece336493111ffe372a4bfc7fee5026d4127dade` (https://github.com/gradientspace/geometry3Sharp), under the Boost Software License 1.0, for the quadric edge-collapse decimation operation (SPECIFICATION.md §6.2, §5.1 Simplify).
+
+| Upstream source | Vendored type |
+| --- | --- |
+| `mesh/Reducer.cs` | `Reducer`, `QuadricError` |
+| `mesh/MeshRefinerBase.cs` | `MeshRefinerBase` (`Reducer`'s base class — shared flip/link-condition checks and constraint-aware collapse logic, also used by upstream's `Remesher`, not yet vendored) |
+| `mesh/MeshConstraints.cs` | `MeshConstraints`, `EdgeConstraint`, `VertexConstraint`, `EdgeRefineFlags` (referenced by `MeshRefinerBase`/`Reducer`'s optional constraint path; Meshwright's `DecimateOperation` does not currently set constraints, so this exercises the "no constraints" branch only, but the type is a hard compile-time dependency of `MeshRefinerBase`) |
+| `core/IndexPriorityQueue.cs` | `IndexPriorityQueue` (min-heap keyed by edge id, used to process edge collapses in increasing quadric-error order) |
+| `core/ProgressCancel.cs` | `ProgressCancel`, `ICancelSource`, `CancelFunction` (cancellation hook `MeshRefinerBase.Progress` is typed against) |
+
+No trims were needed — `Reducer.cs`'s own dependencies beyond the five files above (`DMesh3`, `MathUtil`, `IndexUtil`, `gParallel`, `DVector<T>`, `IProjectionTarget` (`spatial/SpatialInterfaces.cs`), `Vector3d`/`Index2i`/`Index3i`) were already vendored from M1/M2. `IProjectionTarget` in particular meant `Reducer`'s optional projection-target support (`SetProjectionTarget`) compiles as-is; `DecimateOperation` does not use it (no target surface concept exists yet in Meshwright), so the `TargetProjectionMode.NoProjection`/absent-target path is what's actually exercised.
