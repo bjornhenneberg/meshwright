@@ -2,6 +2,7 @@ using System;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using g3;
+using Meshwright.Core;
 using Meshwright.Core.Operations;
 
 namespace Meshwright.App.Views.Edit;
@@ -9,6 +10,7 @@ namespace Meshwright.App.Views.Edit;
 public partial class DecimatePanel : UserControl
 {
     private DMesh3? _mesh;
+    private MeshDocument? _document;
 
     public DecimatePanel()
     {
@@ -20,6 +22,13 @@ public partial class DecimatePanel : UserControl
         // Wire up input change handlers for live preview
         ModeCombo.SelectionChanged += (_, _) => OnModeOrTargetChanged();
         TargetInput.TextChanged += (_, _) => OnModeOrTargetChanged();
+    }
+
+    /// <summary>Binds this panel to a MeshDocument for integration with the main UI.</summary>
+    public void SetDocument(MeshDocument doc)
+    {
+        _document = doc;
+        Mesh = doc.Mesh;
     }
 
     /// <summary>The mesh this panel will operate on. Exposed for UI integration and testing.</summary>
@@ -93,7 +102,10 @@ public partial class DecimatePanel : UserControl
                 return;
             }
 
-            OperationResult result = operation.Apply(_mesh);
+            OperationResult result = _document is not null
+                ? _document.Apply(operation)
+                : operation.Apply(_mesh);
+
             ResultText.Text = result.Summary;
             ResultText.IsVisible = true;
 
