@@ -29,6 +29,11 @@ public partial class MainWindow : Window
     private PlaneCutGizmo? _planeCutGizmo;
     private TransformGizmo? _transformGizmo;
 
+    /// <summary>The currently active panel's "reset your own gizmo-active UI state" method, so
+    /// it can be told to stand down when a different panel takes the single viewport gizmo
+    /// slot (see <see cref="ActivateGizmoOwner"/>).</summary>
+    private Action? _deactivateCurrentGizmoOwner;
+
     public MainWindow()
     {
         InitializeComponent();
@@ -63,25 +68,61 @@ public partial class MainWindow : Window
         DrainHolePanel.SetGizmo(_drainHoleGizmo);
 
         // Wire gizmo activation callbacks: when the panel wants to show/hide the gizmo,
-        // update the viewport accordingly
+        // update the viewport accordingly. Viewport.Gizmo is a single slot shared by all
+        // three panels below, so activating one must force-deactivate whichever other
+        // panel previously held it - otherwise that panel's button/status text keeps
+        // claiming its gizmo is live after the viewport has silently moved on to a
+        // different one. ActivateGizmoOwner (below) is the arbiter for that hand-off.
         DrainHolePanel.SetGizmoActivationCallback(
-            onActivate: () => Viewport.Gizmo = _drainHoleGizmo,
-            onDeactivate: () => Viewport.Gizmo = null);
+            onActivate: () => ActivateGizmoOwner(_drainHoleGizmo, DrainHolePanel.ForceDeactivateGizmo),
+            onDeactivate: () => DeactivateGizmoOwner(DrainHolePanel.ForceDeactivateGizmo));
 
         // Create and wire up the plane cut gizmo
         _planeCutGizmo = new PlaneCutGizmo(ComputeMeshCenter(_document.Mesh));
         PlaneCutPanel.SetGizmo(_planeCutGizmo);
 
         PlaneCutPanel.SetGizmoActivationCallback(
-            onActivate: () => Viewport.Gizmo = _planeCutGizmo,
-            onDeactivate: () => Viewport.Gizmo = null);
+            onActivate: () => ActivateGizmoOwner(_planeCutGizmo, PlaneCutPanel.ForceDeactivateGizmo),
+            onDeactivate: () => DeactivateGizmoOwner(PlaneCutPanel.ForceDeactivateGizmo));
 
         // Create and wire up the transform gizmo (move/rotate/scale)
         _transformGizmo = new TransformGizmo(ComputeMeshCenter(_document.Mesh));
         TransformPanel.SetGizmo(_transformGizmo);
         TransformPanel.SetGizmoActivationCallback(
-            onActivate: () => Viewport.Gizmo = _transformGizmo,
-            onDeactivate: () => Viewport.Gizmo = null);
+            onActivate: () => ActivateGizmoOwner(_transformGizmo, TransformPanel.ForceDeactivateGizmo),
+            onDeactivate: () => DeactivateGizmoOwner(TransformPanel.ForceDeactivateGizmo));
+    }
+
+    /// <summary>
+    /// Hands the single <see cref="MeshViewportControl.Gizmo"/> slot to <paramref name="gizmo"/>.
+    /// If a different panel currently holds it, that panel is told to reset its own
+    /// "active" UI state first (via <paramref name="forceDeactivateSelf"/>) - without going
+    /// through its own deactivation callback, which would just call back into this method
+    /// and fight over the slot it's already losing.
+    /// </summary>
+    private void ActivateGizmoOwner(IViewportGizmo? gizmo, Action forceDeactivateSelf)
+    {
+        if (_deactivateCurrentGizmoOwner is not null && _deactivateCurrentGizmoOwner != forceDeactivateSelf)
+        {
+            _deactivateCurrentGizmoOwner();
+        }
+
+        Viewport.Gizmo = gizmo;
+        _deactivateCurrentGizmoOwner = forceDeactivateSelf;
+    }
+
+    /// <summary>Clears the viewport gizmo slot, but only if the panel deactivating is the one
+    /// that currently owns it (a panel that was already displaced by another one activating
+    /// has nothing to clear).</summary>
+    private void DeactivateGizmoOwner(Action forceDeactivateSelf)
+    {
+        if (_deactivateCurrentGizmoOwner != forceDeactivateSelf)
+        {
+            return;
+        }
+
+        Viewport.Gizmo = null;
+        _deactivateCurrentGizmoOwner = null;
     }
 
     private static Vector3 ComputeMeshCenter(DMesh3? mesh)

@@ -157,6 +157,25 @@ public partial class TransformPanel : UserControl
     }
 
     /// <summary>
+    /// Resets this panel's own "gizmo active" UI state without invoking the deactivation
+    /// callback. For the integrating view (MainWindow) to call when it's handing the single
+    /// viewport gizmo slot to a different panel - the panel whose gizmo is being displaced
+    /// needs to know it's no longer active, but the callback loop (panel -> MainWindow ->
+    /// Viewport.Gizmo) has already been handled by whoever is taking over.
+    /// </summary>
+    public void ForceDeactivateGizmo()
+    {
+        if (!_gizmoActive)
+        {
+            return;
+        }
+
+        _gizmoActive = false;
+        ActivateGizmoButton.Content = "Use gizmo";
+        GizmoStatusText.Text = "";
+    }
+
+    /// <summary>
     /// Mirrors the gizmo's live values into the visible textboxes so the displayed numbers always
     /// match what Apply is about to do.
     /// </summary>

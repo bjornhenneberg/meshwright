@@ -124,6 +124,25 @@ public partial class DrainHolePanel : UserControl
         }
     }
 
+    /// <summary>
+    /// Resets this panel's own "gizmo active" UI state without invoking the deactivation
+    /// callback. For the integrating view (MainWindow) to call when it's handing the single
+    /// viewport gizmo slot to a different panel - the panel whose gizmo is being displaced
+    /// needs to know it's no longer active, but the callback loop (panel -> MainWindow ->
+    /// Viewport.Gizmo) has already been handled by whoever is taking over.
+    /// </summary>
+    public void ForceDeactivateGizmo()
+    {
+        if (!_gizmoActive)
+        {
+            return;
+        }
+
+        _gizmoActive = false;
+        ActivateGizmoButton.Content = "Place holes with gizmo";
+        GizmoStatusText.Text = "";
+    }
+
     private void OnHoleSelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
         if (HolesList.SelectedIndex >= 0 && _gizmo is not null && _gizmo.Holes.Count > HolesList.SelectedIndex)

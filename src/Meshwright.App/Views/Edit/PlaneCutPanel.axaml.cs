@@ -136,6 +136,25 @@ public partial class PlaneCutPanel : UserControl
         }
     }
 
+    /// <summary>
+    /// Resets this panel's own "gizmo active" UI state without invoking the deactivation
+    /// callback. For the integrating view (MainWindow) to call when it's handing the single
+    /// viewport gizmo slot to a different panel - the panel whose gizmo is being displaced
+    /// needs to know it's no longer active, but the callback loop (panel -> MainWindow ->
+    /// Viewport.Gizmo) has already been handled by whoever is taking over.
+    /// </summary>
+    public void ForceDeactivateGizmo()
+    {
+        if (!_gizmoActive)
+        {
+            return;
+        }
+
+        _gizmoActive = false;
+        SetViaGizmoButton.Content = "Set Plane Via Gizmo";
+        UpdateGizmoStatusDisplay();
+    }
+
     private void OnApplyClick(object? sender, RoutedEventArgs e)
     {
         if (_document is null)

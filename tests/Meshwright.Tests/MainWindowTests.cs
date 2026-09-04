@@ -82,4 +82,41 @@ public class MainWindowTests
 
         Assert.Equal("Nothing to redo", window.StatusMessage);
     }
+
+    /// <summary>
+    /// Regression: Viewport.Gizmo is a single slot shared by DrainHolePanel, PlaneCutPanel and
+    /// TransformPanel. Before this fix, activating a second panel's gizmo silently stole the
+    /// viewport slot from whichever panel activated first, but that first panel's own
+    /// "gizmo active" UI state (button text, status text) was never told, so it kept claiming
+    /// its gizmo was live and interactive when the viewport had actually moved on.
+    /// </summary>
+    [AvaloniaFact]
+    public void ActivatingSecondPanelsGizmo_ForceDeactivatesTheFirst()
+    {
+        var window = new MainWindow();
+        object planeCutPanel = GetField(window, "PlaneCutPanel")!;
+        object transformPanel = GetField(window, "TransformPanel")!;
+
+        InvokePrivate(planeCutPanel, "OnSetViaGizmoClick", null, null);
+        Assert.True((bool)GetField(planeCutPanel, "_gizmoActive")!);
+
+        InvokePrivate(transformPanel, "OnActivateGizmoClick", null, null);
+
+        Assert.False((bool)GetField(planeCutPanel, "_gizmoActive")!, "PlaneCutPanel should have been force-deactivated once TransformPanel took the viewport gizmo slot.");
+        Assert.True((bool)GetField(transformPanel, "_gizmoActive")!);
+    }
+
+    private static object? GetField(object instance, string name)
+    {
+        FieldInfo field = instance.GetType().GetField(name, BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance)
+            ?? throw new MissingFieldException(instance.GetType().FullName, name);
+        return field.GetValue(instance);
+    }
+
+    private static void InvokePrivate(object instance, string methodName, params object?[] args)
+    {
+        MethodInfo method = instance.GetType().GetMethod(methodName, BindingFlags.NonPublic | BindingFlags.Instance)
+            ?? throw new MissingMethodException(instance.GetType().FullName, methodName);
+        method.Invoke(instance, args);
+    }
 }
