@@ -17,6 +17,21 @@
         </ComboBox>
       </StackPanel>
 
+      <!-- Gizmo activation: the viewport gizmo is the primary way to set Move/Rotate/Scale;
+           the textboxes below are a fallback for typing exact values. Mirror has no gizmo. -->
+      <StackPanel Spacing="4">
+        <Button Name="ActivateGizmoButton"
+                Content="Use gizmo"
+                Click="OnActivateGizmoClick"
+                HorizontalAlignment="Left"
+                Padding="12,6" />
+        <TextBlock Name="GizmoStatusText"
+                   Text=""
+                   TextWrapping="Wrap"
+                   FontSize="11"
+                   Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+      </StackPanel>
+
       <!-- Move mode parameters -->
       <StackPanel Name="MovePanel" Spacing="4">
         <TextBlock Text="Offset (mm)" FontWeight="SemiBold" />

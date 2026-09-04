@@ -13,6 +13,7 @@ using Meshwright.App.Views.Edit;
 using Meshwright.Core;
 using Meshwright.Geometry.Diagnostics;
 using Meshwright.IO.Stl;
+using Meshwright.Rendering.Gizmos;
 
 namespace Meshwright.App;
 
@@ -24,6 +25,7 @@ public partial class MainWindow : Window
 
     // Gizmos for interactive operations
     private DrainHoleGizmo? _drainHoleGizmo;
+    private TransformGizmo? _transformGizmo;
 
     public MainWindow()
     {
@@ -52,6 +54,24 @@ public partial class MainWindow : Window
         DrainHolePanel.SetGizmoActivationCallback(
             onActivate: () => Viewport.Gizmo = _drainHoleGizmo,
             onDeactivate: () => Viewport.Gizmo = null);
+
+        // Create and wire up the transform gizmo (move/rotate/scale)
+        _transformGizmo = new TransformGizmo(MeshCenter(_document.Mesh));
+        TransformPanel.SetGizmo(_transformGizmo);
+        TransformPanel.SetGizmoActivationCallback(
+            onActivate: () => Viewport.Gizmo = _transformGizmo,
+            onDeactivate: () => Viewport.Gizmo = null);
+    }
+
+    private static System.Numerics.Vector3 MeshCenter(DMesh3? mesh)
+    {
+        if (mesh is null)
+        {
+            return System.Numerics.Vector3.Zero;
+        }
+
+        Vector3d center = mesh.CachedBounds.Center;
+        return new System.Numerics.Vector3((float)center.x, (float)center.y, (float)center.z);
     }
 
     /// <summary>Diagnostics report for the currently loaded mesh, exposed for testing.</summary>
@@ -136,6 +156,13 @@ public partial class MainWindow : Window
         }
         _drainHoleGizmo = new DrainHoleGizmo(mesh);
         DrainHolePanel.SetGizmo(_drainHoleGizmo);
+
+        if (_transformGizmo is not null)
+        {
+            _transformGizmo.Dispose();
+        }
+        _transformGizmo = new TransformGizmo(MeshCenter(mesh));
+        TransformPanel.SetGizmo(_transformGizmo);
 
         // Clear any active gizmo from the viewport
         Viewport.Gizmo = null;
