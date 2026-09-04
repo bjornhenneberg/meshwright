@@ -1,9 +1,9 @@
 using System.Globalization;
 using g3;
-using Meshwright.IO.Obj;
+using Meshwright.IO.Wavefront;
 using Xunit;
 
-namespace Meshwright.Tests.Obj;
+namespace Meshwright.Tests.Wavefront;
 
 public class ObjWriterTests
 {

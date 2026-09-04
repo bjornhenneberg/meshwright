@@ -13,6 +13,7 @@ using Meshwright.App.Gizmos;
 using Meshwright.App.Views.Edit;
 using Meshwright.Core;
 using Meshwright.Geometry.Diagnostics;
+using Meshwright.IO;
 using Meshwright.IO.Stl;
 using Meshwright.Rendering.Gizmos;
 
@@ -145,12 +146,11 @@ public partial class MainWindow : Window
     /// <summary>Current diagnostics summary text, exposed for testing.</summary>
     public string? SummaryMessage => SummaryText.Text;
 
-    /// <summary>Loads an STL file by path through the real load pipeline, bypassing the file
+    /// <summary>Loads a mesh file by path through the real load pipeline, bypassing the file
     /// picker dialog; used by integration tests that can't drive an OS file picker headlessly.</summary>
     public void LoadFileForTesting(string path)
     {
-        using Stream stream = File.OpenRead(path);
-        var mesh = StlReader.Read(stream);
+        var mesh = MeshImporter.ImportFile(path);
         ApplyLoadedMesh(mesh, $"Loaded {Path.GetFileName(path)}");
     }
 
@@ -178,11 +178,13 @@ public partial class MainWindow : Window
 
         var files = await storageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {
-            Title = "Open STL file",
+            Title = "Open mesh file",
             AllowMultiple = false,
             FileTypeFilter = new[]
             {
+                new FilePickerFileType("Mesh files") { Patterns = MeshImporter.SupportedPatterns.ToArray() },
                 new FilePickerFileType("STL files") { Patterns = new[] { "*.stl" } },
+                new FilePickerFileType("OBJ files") { Patterns = new[] { "*.obj" } },
             },
         });
 
@@ -194,7 +196,7 @@ public partial class MainWindow : Window
         try
         {
             await using Stream stream = await files[0].OpenReadAsync();
-            var mesh = StlReader.Read(stream);
+            var mesh = MeshImporter.Import(stream, files[0].Name);
             ApplyLoadedMesh(mesh, $"Loaded {files[0].Name}");
         }
         catch (Exception ex)

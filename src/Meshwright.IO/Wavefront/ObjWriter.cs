@@ -1,7 +1,7 @@
 using System.Globalization;
 using g3;
 
-namespace Meshwright.IO.Obj;
+namespace Meshwright.IO.Wavefront;
 
 /// <summary>Writes indexed <see cref="g3.DMesh3"/> meshes as ASCII Wavefront OBJ (§5.1).</summary>
 public static class ObjWriter
