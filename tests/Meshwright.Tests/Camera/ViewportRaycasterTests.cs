@@ -38,6 +38,31 @@ public class ViewportRaycasterTests
     }
 
     [Fact]
+    public void ToRay3d_DirectionSatisfiesG3DoubleNormalizationTolerance()
+    {
+        // Regression: float normalization leaves |d|^2 off by ~1e-7, which fails g3's 1e-8
+        // MathUtil.ZeroTolerance and made DMeshAABBTree3.FindNearestHitTriangle throw
+        // "ray direction is not normalized" on the first click into a gizmo. Sweep a grid of
+        // pixels so we don't just test the (exactly axis-aligned, and therefore lucky) center.
+        var camera = new OrbitCamera();
+        var view = camera.GetViewMatrix();
+        var projection = camera.GetProjectionMatrix(ViewportSize.X / ViewportSize.Y);
+
+        for (int ix = 0; ix <= 8; ix++)
+        {
+            for (int iy = 0; iy <= 8; iy++)
+            {
+                var pixel = new Vector2(ViewportSize.X * ix / 8f, ViewportSize.Y * iy / 8f);
+                ViewportRay ray = ViewportRaycaster.Unproject(pixel, ViewportSize, view, projection);
+
+                g3.Ray3d ray3d = ray.ToRay3d();
+
+                Assert.True(ray3d.Direction.IsNormalized, $"Ray3d direction not normalized to g3 tolerance at pixel {pixel}; |d|={ray3d.Direction.Length}");
+            }
+        }
+    }
+
+    [Fact]
     public void Unproject_LeftRightPixels_ProducesRaysDivergingLeftRight()
     {
         var camera = new OrbitCamera();

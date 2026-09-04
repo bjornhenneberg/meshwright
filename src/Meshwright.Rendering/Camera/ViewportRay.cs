@@ -21,8 +21,15 @@ public readonly record struct ViewportRay(Vector3 Origin, Vector3 Direction)
     /// in g3Sharp's double-precision math types. Rendering is allowed to depend on Geometry types
     /// (see AGENTS.md §6.3 architecture) so this conversion lives on the Rendering-side type.
     /// </summary>
+    /// <remarks>
+    /// <see cref="Direction"/> is normalized only to float precision, which leaves |d|² off by up
+    /// to ~1e-7 — far outside the 1e-8 <c>MathUtil.ZeroTolerance</c> that g3's
+    /// <c>Vector3d.IsNormalized</c> (and hence <c>DMeshAABBTree3.FindNearestHitTriangle</c>) demands.
+    /// So we deliberately let the <see cref="g3.Ray3d"/> constructor re-normalize in double rather
+    /// than asserting <c>bIsNormalized: true</c>; g3's own float ray constructor does the same
+    /// ("float cast may not be normalized in double, is trouble in algorithms!", Ray3.cs:51).
+    /// </remarks>
     public g3.Ray3d ToRay3d() => new(
         new g3.Vector3d(Origin.X, Origin.Y, Origin.Z),
-        new g3.Vector3d(Direction.X, Direction.Y, Direction.Z),
-        bIsNormalized: true);
+        new g3.Vector3d(Direction.X, Direction.Y, Direction.Z));
 }
