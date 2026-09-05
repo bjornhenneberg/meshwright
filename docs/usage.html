@@ -494,8 +494,63 @@
         positioned; Repair's parameters are scalars.
       </li>
       <li>
-        <strong>No packaged release.</strong> Linux <code>.deb</code> packaging
-        exists; Windows and macOS packaging do not.
+        <strong>Several Import conveniences the spec describes don't exist
+        yet.</strong> There is no unit detection or mm/inch scaling on import —
+        every file is read at face value, so an STL modelled in inches loads 25.4x
+        undersized with no prompt to fix it. There is no drag-and-drop onto the
+        window, and no recent-files list in the File menu, which currently holds
+        only Open, Export and Exit. Check your model's scale after opening it, and
+        reopen files through <strong>File → Open</strong> each time.
+      </li>
+      <li>
+        <strong>The viewport is plainer than the feature list suggests.</strong>
+        The camera is perspective-only — there is no orthographic mode — and the
+        View menu has nothing but Reset View, so there are no front/top/side/iso
+        presets. There is no build-plate grid, no configurable printer size, and
+        therefore no warning when part of a model falls outside your printer's
+        bed. Of the four promised display modes, only shaded and the red/yellow
+        error highlight exist; there is no wireframe or x-ray toggle. Judge scale
+        and fit against your own printer's dimensions before slicing.
+      </li>
+      <li>
+        <strong>OBJ import does not weld coincident vertices, and nothing tells
+        you so.</strong> Unlike STL import, which has to weld triangle soup back
+        into an indexed mesh, OBJ import keeps the file's own vertex indexing
+        unchanged, so vertices that sit at the same position but were never
+        explicitly shared in the file stay separate. Nothing in the Open dialog
+        or status bar flags this — the only trace is a nonzero duplicate-vertex
+        count if you run Inspect afterward. Run Inspect right after opening an
+        OBJ, and expect duplicate vertices on files exported from most other
+        tools.
+      </li>
+      <li>
+        <strong>Import can silently cut a mesh's connectivity to load it.</strong>
+        Meshwright's mesh structure cannot represent an edge shared by more than
+        two triangles, so on a non-manifold file both readers duplicate the
+        vertices at the junction to keep the geometry rather than drop it — the
+        surface stays complete, but the seam is now cut where it used to be
+        joined. The status bar only warns when triangles are dropped outright,
+        which is expected to stay at zero; a file that was split loads with no
+        warning at all. Inspect still reports the junction correctly — its
+        detectors compare vertex positions rather than indices, so they see
+        through the split — but repair operations that walk raw connectivity do
+        not. Hole filling finds its boundary loops by vertex index, so an import
+        seam looks to it exactly like an open hole, and it can add geometry
+        across a junction Inspect correctly reported as no hole at all.
+      </li>
+      <li>
+        <strong>Packaging exists for Linux, Windows and macOS; nothing is signed
+        or released yet.</strong> <code>package-linux.sh</code> builds a
+        <code>.deb</code>; <code>package-windows.sh</code> and
+        <code>package-macos.sh</code> zip a self-contained build for their
+        platforms, and CI builds and runs the full test suite on all three
+        (Ubuntu, Windows and macOS runners) on every push. Still open,
+        deliberately: there is no Windows installer, just unzip-and-run, and
+        macOS builds are unsigned and un-notarised, so Gatekeeper will refuse to
+        open the app on first launch — right-click it and choose Open (or clear
+        the quarantine attribute) to get past that. There is also no tagged
+        release yet; building from a script is currently the only way to get a
+        package at all.
       </li>
     </ul>
   </section>
