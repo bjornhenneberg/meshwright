@@ -52,6 +52,38 @@ public class DecimateOperationTests
         AssertValidManifoldMesh(mesh);
     }
 
+    /// <summary>
+    /// Collapses that would create non-manifold geometry are refused, so on an already-broken mesh
+    /// the reducer stalls well above the target. Reporting only "reduced from N to M" presents
+    /// that as an unqualified success: on a real 139,989-triangle scan, a request for 100
+    /// triangles stopped at 55,817 and said nothing about it.
+    /// </summary>
+    [Fact]
+    public void WhenItCannotReachTheTarget_TheSummarySaysSoAndSuggestsRepair()
+    {
+        // A closed surface bottoms out at a tetrahedron, so a single triangle is unreachable and
+        // the reducer is guaranteed to stop short of it.
+        DMesh3 mesh = BuildGridBox(edgeVertices: 2);
+        const int target = 1;
+
+        OperationResult result = DecimateOperation.ToTriangleCount(target).Apply(mesh);
+
+        Assert.True(mesh.TriangleCount > target, "fixture should be unable to reach the target");
+        Assert.Contains("Short of the", result.Summary);
+        Assert.Contains("1-triangle target", result.Summary);
+        Assert.Contains("Repairing the mesh first", result.Summary);
+    }
+
+    [Fact]
+    public void WhenItReachesTheTarget_TheSummaryDoesNotClaimItFellShort()
+    {
+        DMesh3 mesh = BuildGridBox(edgeVertices: 17);
+
+        OperationResult result = DecimateOperation.ToTriangleCount(200).Apply(mesh);
+
+        Assert.DoesNotContain("Short of the", result.Summary);
+    }
+
     [Fact]
     public void ToPercentage_ComputesCorrectAbsoluteTargetCount()
     {

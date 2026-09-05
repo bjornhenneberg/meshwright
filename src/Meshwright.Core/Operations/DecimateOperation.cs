@@ -109,13 +109,28 @@ public sealed class DecimateOperation : MeshOperationBase
         }
 
         double percentOfOriginal = before > 0 ? 100.0 * after / before : 0.0;
-        return new OperationResult(
-            Changed: true,
-            Summary: string.Format(
-                CultureInfo.InvariantCulture,
-                "Reduced from {0} to {1} triangles ({2:0.#}% of original).",
-                before,
-                after,
-                percentOfOriginal));
+        string reduction = string.Format(
+            CultureInfo.InvariantCulture,
+            "Reduced from {0} to {1} triangles ({2:0.#}% of original).",
+            before,
+            after,
+            percentOfOriginal);
+
+        // Edge collapses that would create non-manifold geometry are refused, so on a mesh that is
+        // already broken the reducer can stall far short of what was asked for. Reporting only the
+        // before/after pair presents that as an unqualified success — the user asked for 100
+        // triangles, got 55,000, and was told the operation worked.
+        if (after > target)
+        {
+            return new OperationResult(
+                Changed: true,
+                Summary: string.Format(
+                    CultureInfo.InvariantCulture,
+                    "{0} Short of the {1}-triangle target: further collapses would have created invalid geometry. Repairing the mesh first usually allows a deeper reduction.",
+                    reduction,
+                    target));
+        }
+
+        return new OperationResult(Changed: true, Summary: reduction);
     }
 }
