@@ -46,16 +46,29 @@ public sealed class MeshViewportControl : OpenGlControlBase
             _mesh = value;
             _pendingMesh = value;
 
-            if (value is not null)
-            {
-                g3.AxisAlignedBox3d bounds = value.CachedBounds;
-                g3.Vector3d center = bounds.Center;
-                double radius = bounds.DiagonalLength / 2.0;
-                _camera.Frame(new System.Numerics.Vector3((float)center.x, (float)center.y, (float)center.z), (float)radius);
-            }
-
+            // Deliberately does not reframe the camera: this setter also runs after every edit
+            // operation, and snapping the view back to a default framing each time an operation
+            // is applied would throw away whatever the user had lined up. Callers that genuinely
+            // want a new framing (opening a file, Reset View) call FrameMesh explicitly.
             RequestNextFrameRendering();
         }
+    }
+
+    /// <summary>Frames the camera on the current mesh, so it fills the viewport at a default
+    /// orientation. Used when a file is opened and by Reset View, which is the way back when an
+    /// orbit or zoom has taken the mesh off screen.</summary>
+    public void FrameMesh()
+    {
+        if (_mesh is null)
+        {
+            return;
+        }
+
+        g3.AxisAlignedBox3d bounds = _mesh.CachedBounds;
+        g3.Vector3d center = bounds.Center;
+        double radius = bounds.DiagonalLength / 2.0;
+        _camera.Frame(new System.Numerics.Vector3((float)center.x, (float)center.y, (float)center.z), (float)radius);
+        RequestNextFrameRendering();
     }
 
     /// <summary>

@@ -76,8 +76,14 @@ public class ViewportRaycasterTests
         ViewportRay leftRay = ViewportRaycaster.Unproject(leftPixel, ViewportSize, view, proj);
         ViewportRay rightRay = ViewportRaycaster.Unproject(rightPixel, ViewportSize, view, proj);
 
-        // Left and right rays should have different x-components.
-        Assert.True(leftRay.Direction.X < rightRay.Direction.X, "Left pixel ray should have smaller x-component than right pixel ray");
+        // Divergence is along the camera's own right axis, not any fixed world axis: which world
+        // direction "screen right" corresponds to depends on the camera's yaw and up-axis
+        // convention, so asserting on world X would only be testing today's default orientation.
+        Vector3 cameraRight = new(view.M11, view.M21, view.M31);
+
+        Assert.True(
+            Vector3.Dot(leftRay.Direction, cameraRight) < Vector3.Dot(rightRay.Direction, cameraRight),
+            "Left pixel ray should point further along the camera's -right axis than the right pixel ray");
     }
 
     [Fact]
@@ -94,8 +100,12 @@ public class ViewportRaycasterTests
         ViewportRay topRay = ViewportRaycaster.Unproject(topPixel, ViewportSize, view, proj);
         ViewportRay bottomRay = ViewportRaycaster.Unproject(bottomPixel, ViewportSize, view, proj);
 
-        // Top and bottom rays should have different y-components (note: y is up in world space, down in screen space).
-        Assert.NotEqual(topRay.Direction.Y, bottomRay.Direction.Y);
+        // As above: measured along the camera's own up axis rather than a fixed world axis.
+        Vector3 cameraUp = new(view.M12, view.M22, view.M32);
+
+        Assert.True(
+            Vector3.Dot(topRay.Direction, cameraUp) > Vector3.Dot(bottomRay.Direction, cameraUp),
+            "Top pixel ray should point further along the camera's up axis than the bottom pixel ray");
     }
 
     [Fact]

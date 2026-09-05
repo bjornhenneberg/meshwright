@@ -27,9 +27,9 @@ public class GizmoScaleTests
         float worldSize = GizmoScale.ForFractionOfHeight(center, harness.View, harness.Projection, fraction);
 
         // Offset by that world size along the camera's own up axis, then measure the on-screen gap.
-        Vector3 up = Vector3.Normalize(Vector3.Cross(
-            Vector3.Normalize(Vector3.Cross(center - harness.Camera.Position, Vector3.UnitY)),
-            center - harness.Camera.Position));
+        // Taken from the view matrix so this stays correct whatever world axis the camera treats
+        // as up — rebuilding it from a hardcoded world-up would only track today's convention.
+        Vector3 up = new(harness.View.M12, harness.View.M22, harness.View.M32);
 
         Vector2 at = harness.RequireProjectToPixel(center);
         Vector2 offset = harness.RequireProjectToPixel(center + up * worldSize);

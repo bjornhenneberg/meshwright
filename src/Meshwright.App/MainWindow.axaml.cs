@@ -245,8 +245,14 @@ public partial class MainWindow : Window
     private void ApplyLoadedMesh(DMesh3 mesh, string statusPrefix)
     {
         _document.Load(mesh);
+
+        // A newly opened mesh is the one time the camera should be repositioned for the user;
+        // edits deliberately leave the view alone (see MeshViewportControl.Mesh).
+        Viewport.FrameMesh();
         SetStatus(statusPrefix);
     }
+
+    private void OnResetViewClick(object? sender, RoutedEventArgs e) => Viewport.FrameMesh();
 
     private async void OnExportFileClick(object? sender, RoutedEventArgs e)
     {

@@ -6,6 +6,12 @@ namespace Meshwright.Rendering.Camera;
 /// <summary>
 /// Arcball/orbit camera for CAD-style mesh viewing: rotates around a target point,
 /// pans the target, and zooms distance. All math uses single-precision System.Numerics.
+///
+/// Z is up, following the STL/3MF and print-bed convention rather than the Y-up one common in
+/// realtime graphics: a model authored for printing has its build direction along +Z, so a Y-up
+/// camera shows practically every real file lying on its side.
+/// <see cref="Pitch"/> is elevation above the XY ground plane and <see cref="Yaw"/> is rotation
+/// about Z.
 /// </summary>
 public sealed class OrbitCamera
 {
@@ -43,8 +49,8 @@ public sealed class OrbitCamera
             float cosPitch = MathF.Cos(Pitch);
             var offset = new Vector3(
                 cosPitch * MathF.Sin(Yaw),
-                MathF.Sin(Pitch),
-                cosPitch * MathF.Cos(Yaw));
+                cosPitch * MathF.Cos(Yaw),
+                MathF.Sin(Pitch));
             return Target + offset * Distance;
         }
     }
@@ -59,7 +65,7 @@ public sealed class OrbitCamera
     public void Pan(float deltaX, float deltaY)
     {
         Vector3 forward = Vector3.Normalize(Target - Position);
-        Vector3 right = Vector3.Normalize(Vector3.Cross(forward, Vector3.UnitY));
+        Vector3 right = Vector3.Normalize(Vector3.Cross(forward, Vector3.UnitZ));
         Vector3 up = Vector3.Normalize(Vector3.Cross(right, forward));
 
         float scale = Distance;
@@ -94,7 +100,7 @@ public sealed class OrbitCamera
 
     public Matrix4x4 GetViewMatrix()
     {
-        return Matrix4x4.CreateLookAt(Position, Target, Vector3.UnitY);
+        return Matrix4x4.CreateLookAt(Position, Target, Vector3.UnitZ);
     }
 
     public Matrix4x4 GetProjectionMatrix(float aspectRatio)
