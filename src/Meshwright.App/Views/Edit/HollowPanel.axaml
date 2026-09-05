@@ -12,6 +12,11 @@
         <TextBox Name="WallThicknessInput" Text="2.0" />
       </StackPanel>
 
+      <StackPanel Spacing="4">
+        <Button Name="ActivateGizmoButton" Content="Preview shell with gizmo" Click="OnActivateGizmoClick" />
+        <TextBlock Name="GizmoStatusText" TextWrapping="Wrap" FontStyle="Italic" FontSize="11" />
+      </StackPanel>
+
       <Button Name="ApplyButton" Content="Apply" Click="OnApplyClick" />
 
       <StackPanel Spacing="4">

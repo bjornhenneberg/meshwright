@@ -1,7 +1,9 @@
+using System;
 using System.Globalization;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using g3;
+using Meshwright.App.Gizmos;
 using Meshwright.Core;
 using Meshwright.Core.Operations;
 using Meshwright.Geometry.Diagnostics;
@@ -11,6 +13,10 @@ namespace Meshwright.App.Views.Edit;
 public partial class HollowPanel : UserControl
 {
     private MeshDocument? _document;
+    private HollowGizmo? _gizmo;
+    private bool _gizmoActive;
+    private Action? _gizmoActivationCallback;
+    private Action? _gizmoDeactivationCallback;
 
     public HollowPanel()
     {
@@ -27,11 +33,36 @@ public partial class HollowPanel : UserControl
         UpdateStatsDisplay();
     }
 
+    /// <summary>
+    /// Sets the gizmo that this panel will control. Typically called by the integrating view
+    /// to wire up the UI to the viewport gizmo.
+    /// </summary>
+    public void SetGizmo(HollowGizmo gizmo)
+    {
+        _gizmo = gizmo;
+        _gizmo.Changed += (s, e) => UpdateGizmoStatusDisplay();
+        UpdateGizmoStatusDisplay();
+    }
+
+    /// <summary>
+    /// Sets callbacks to activate/deactivate the gizmo on the viewport when the user
+    /// clicks the "Preview shell with gizmo" button.
+    /// </summary>
+    public void SetGizmoActivationCallback(Action? onActivate, Action? onDeactivate)
+    {
+        _gizmoActivationCallback = onActivate;
+        _gizmoDeactivationCallback = onDeactivate;
+    }
+
     /// <summary>Diagnostics report for the currently loaded mesh, exposed for testing.</summary>
     public MeshDiagnosticsReport? CurrentReport => _document?.Report;
 
     /// <summary>Current operation result message text, exposed for testing.</summary>
     public string? OperationResultMessage => ResultMessageText?.Text;
+
+    /// <summary>Whether the gizmo has been dragged and its wall thickness will win over the
+    /// textbox on Apply, exposed for testing.</summary>
+    public bool UsingGizmoValues => _gizmo?.WasTouched ?? false;
 
     private void UpdateStatsDisplay()
     {
@@ -49,6 +80,65 @@ public partial class HollowPanel : UserControl
             stats.TriangleCount,
             stats.Volume);
         AfterStats.Text = "(Not applied yet)";
+    }
+
+    private void UpdateGizmoStatusDisplay()
+    {
+        if (GizmoStatusText is null || _gizmo is null)
+        {
+            return;
+        }
+
+        GizmoStatusText.Text = string.Format(
+            CultureInfo.InvariantCulture,
+            "Wall thickness set via gizmo: {0:0.###}mm",
+            _gizmo.WallThickness);
+    }
+
+    private void OnActivateGizmoClick(object? sender, RoutedEventArgs e)
+    {
+        if (_gizmo is null)
+        {
+            if (ResultMessageText is not null)
+            {
+                ResultMessageText.Text = "Gizmo not set up. Cannot activate.";
+            }
+            return;
+        }
+
+        if (!_gizmoActive)
+        {
+            _gizmoActive = true;
+            ActivateGizmoButton.Content = "Done previewing shell";
+            GizmoStatusText.Text = "Drag the inner marker to set wall thickness.";
+            _gizmoActivationCallback?.Invoke();
+        }
+        else
+        {
+            _gizmoActive = false;
+            ActivateGizmoButton.Content = "Preview shell with gizmo";
+            UpdateGizmoStatusDisplay();
+            _gizmoDeactivationCallback?.Invoke();
+        }
+    }
+
+    /// <summary>
+    /// Resets this panel's own "gizmo active" UI state without invoking the deactivation
+    /// callback. For the integrating view (MainWindow) to call when it's handing the single
+    /// viewport gizmo slot to a different panel - the panel whose gizmo is being displaced
+    /// needs to know it's no longer active, but the callback loop (panel -> MainWindow ->
+    /// Viewport.Gizmo) has already been handled by whoever is taking over.
+    /// </summary>
+    public void ForceDeactivateGizmo()
+    {
+        if (!_gizmoActive)
+        {
+            return;
+        }
+
+        _gizmoActive = false;
+        ActivateGizmoButton.Content = "Preview shell with gizmo";
+        UpdateGizmoStatusDisplay();
     }
 
     private void OnApplyClick(object? sender, RoutedEventArgs e)
@@ -71,7 +161,14 @@ public partial class HollowPanel : UserControl
             return;
         }
 
-        if (!double.TryParse(WallThicknessInput.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out double wallThickness))
+        double wallThickness;
+        if (_gizmo is not null && _gizmo.WasTouched)
+        {
+            // Gizmo-first: once the gizmo has been dragged, its value wins outright over
+            // whatever is (possibly stale) in the textbox (SPECIFICATION.md §11, 2026-09-04).
+            wallThickness = _gizmo.WallThickness;
+        }
+        else if (!double.TryParse(WallThicknessInput.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out wallThickness))
         {
             if (ResultMessageText is not null)
             {
