@@ -54,6 +54,33 @@ To build a self-contained Linux `.deb`:
 ./scripts/package-linux.sh
 ```
 
+### Windows and macOS
+
+Windows and macOS builds exist (CI jobs, `scripts/package-windows.sh`,
+`scripts/package-macos.sh`) but are **unverified** — written on a Linux dev
+host with no Windows or macOS machine available to actually run them on.
+`dotnet publish -r win-x64/osx-arm64/osx-x64` is confirmed to build cleanly
+cross-target from Linux, but building and running an app are different
+things — the first real test of the packaged output happens in CI on
+those platforms. See `reports/M4/` for the exact verification split.
+
+**Booleans do not work in the Windows/macOS packages yet.** Manifold's
+native library is only built for `linux-x64` today (committed at
+`runtimes/linux-x64/native/`); Windows and macOS CI build it from source
+per-platform (`scripts/build-manifold-native-windows.sh`,
+`scripts/build-manifold-native-macos.sh`) but nothing is committed for
+those RIDs, so a package built without that CI step (e.g. running
+`package-windows.sh`/`package-macos.sh` standalone) ships with the Boolean
+operation disabled — it throws rather than silently doing the wrong thing,
+and the package includes a `NOTICE.txt` saying so. Every other feature
+(Inspect, the rest of Repair, plane cut, transforms, hollow, drain holes,
+decimation, import/export) is unaffected.
+
+No code signing or notarization for macOS — deliberately out of scope
+until there's a reason to want it (see §9 of the specification); an
+unsigned `.app` will need a Gatekeeper override (right-click → Open) to
+launch.
+
 ## Licence
 
 To be finalised — permissive (MPL-2.0 or Apache-2.0) core, with paid prebuilt

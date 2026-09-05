@@ -11,13 +11,69 @@
     runtimes/<rid>/native/ exists under a project's own output directory.
     Meshwright.Geometry's Manifold P/Invoke isn't packed as a NuGet
     package (the usual way that convention gets wired up automatically),
-    so every executable/test project needs the loose libmanifoldc.so /
-    libmanifold.so.3 built by scripts/build-manifold-native.sh copied into
+    so every executable/test project needs the loose libmanifoldc.*/
+    libmanifold.* built by scripts/build-manifold-native*.sh copied into
     its own bin output explicitly.
+
+    Which runtimes/<rid>/native/ to copy from depends on what's actually
+    being built:
+      - a publish with an explicit -r/-p:RuntimeIdentifier=<rid> should get
+        that rid's native assets (or none, if that rid has no native build
+        yet - see below), never another platform's;
+      - a plain build/test run (no RuntimeIdentifier set) should get the
+        assets for the machine actually running it.
+    Before this resolved to a hardcoded "linux-x64", so a win-x64/osx-*
+    publish from this (Linux) dev host still bundled the Linux .so under
+    runtimes/linux-x64/native/ into a Windows/macOS output - wrong-platform
+    files that would never load, alongside the real problem that no
+    win-x64/osx-* native build exists yet at all (M4-3 Windows/macOS
+    follow-up; see reports/M4 for the current state). Resolving per-target
+    RID means a Windows/macOS publish today copies nothing (Boolean will
+    throw DllNotFoundException there until that native build lands) instead
+    of silently shipping a Linux binary that can't be loaded either way.
+
+    osx-arm64 is assumed for a RuntimeIdentifier-less build on macOS
+    (Apple Silicon is the default GitHub-hosted macos-latest runner and the
+    current Apple Mac majority); an Intel Mac doing a plain `dotnet build`
+    should pass -p:RuntimeIdentifier=osx-x64 explicitly to pick up
+    runtimes/osx-x64/native instead.
+
+    Restricted to the three projects that actually run as a process
+    (Meshwright.App and the two test projects) for a second reason, found
+    while fixing the above: a `-r <rid>` passed to `dotnet publish
+    App.csproj` does NOT propagate as RuntimeIdentifier down to
+    Meshwright.App's own ProjectReferences (Core/Geometry/IO/Rendering keep
+    building with no RID at all, i.e. the host-OS fallback branches above).
+    Left unrestricted, those library projects would each resolve
+    _MeshwrightNativeRid to the *host* OS regardless of what RID the final
+    publish targets, copy that host's native libs into their own bin
+    output, and P2P output-item propagation would carry those into the
+    App's publish directory anyway - silently reintroducing the exact
+    wrong-platform bundling this file exists to prevent. Library projects
+    never run standalone, so they don't need their own copy in the first
+    place: only the process entry point's output directory matters for the
+    native library to be found at P/Invoke time.
+
+    Gated on $(MSBuildProjectName) rather than $(OutputType): this file is
+    imported before the SDK sets OutputType's default and before the
+    project body's own <OutputType> element is evaluated, so a Condition
+    checked here would see OutputType empty for every project (a
+    Target-based approach that waits for full evaluation was tried and
+    works for the property, but breaks the accompanying Link metadata's
+    %(Filename)/%(Extension) batching - MSB3024, empty destination
+    filenames - when the items are added from inside a Target instead of
+    statically). MSBuildProjectName has no such ordering problem.
   -->
-  <ItemGroup>
-    <None Include="$(MSBuildThisFileDirectory)runtimes/linux-x64/native/*.so;$(MSBuildThisFileDirectory)runtimes/linux-x64/native/*.so.*" Condition="Exists('$(MSBuildThisFileDirectory)runtimes/linux-x64/native')">
-      <Link>runtimes/linux-x64/native/%(Filename)%(Extension)</Link>
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'Meshwright.App' Or '$(MSBuildProjectName)' == 'Meshwright.Tests' Or '$(MSBuildProjectName)' == 'Meshwright.Tests.Gpu'">
+    <_MeshwrightNativeRid Condition="'$(RuntimeIdentifier)' != ''">$(RuntimeIdentifier)</_MeshwrightNativeRid>
+    <_MeshwrightNativeRid Condition="'$(_MeshwrightNativeRid)' == '' And $([MSBuild]::IsOSPlatform('Windows'))">win-x64</_MeshwrightNativeRid>
+    <_MeshwrightNativeRid Condition="'$(_MeshwrightNativeRid)' == '' And $([MSBuild]::IsOSPlatform('Linux'))">linux-x64</_MeshwrightNativeRid>
+    <_MeshwrightNativeRid Condition="'$(_MeshwrightNativeRid)' == '' And $([MSBuild]::IsOSPlatform('OSX'))">osx-arm64</_MeshwrightNativeRid>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(_MeshwrightNativeRid)' != '' And Exists('$(MSBuildThisFileDirectory)runtimes/$(_MeshwrightNativeRid)/native')">
+    <None Include="$(MSBuildThisFileDirectory)runtimes/$(_MeshwrightNativeRid)/native/*.so;$(MSBuildThisFileDirectory)runtimes/$(_MeshwrightNativeRid)/native/*.so.*;$(MSBuildThisFileDirectory)runtimes/$(_MeshwrightNativeRid)/native/*.dll;$(MSBuildThisFileDirectory)runtimes/$(_MeshwrightNativeRid)/native/*.dylib">
+      <Link>runtimes/$(_MeshwrightNativeRid)/native/%(Filename)%(Extension)</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>

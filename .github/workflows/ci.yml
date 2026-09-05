@@ -6,8 +6,15 @@ on:
   pull_request:
     branches: [main]
 
-# Linux only for now — see SPECIFICATION.md §7 M4-3. Windows/macOS CI is a
-# follow-up once packaging for those platforms exists.
+# Linux (build-and-test) is verified: it has actually run on this repo's
+# GitHub Actions. build-and-test-windows and build-and-test-macos below are
+# UNVERIFIED — written and reviewed on a Linux dev host with no access to a
+# Windows or macOS machine to run them against; see reports/M4 for exactly
+# what was and wasn't exercised before these jobs were added, in particular
+# around the Manifold native library (built from source per-platform as a
+# job step — win-x64/osx-* prebuilt binaries don't exist yet, unlike
+# linux-x64's, which is committed to git). Their first real run is whatever
+# push/PR triggers them first.
 jobs:
   build-and-test:
     runs-on: ubuntu-24.04
@@ -48,3 +55,84 @@ jobs:
 
       - name: Test
         run: xvfb-run --auto-servernum dotnet test Meshwright.sln --configuration Release --no-build --logger "console;verbosity=normal"
+
+  # UNVERIFIED — see the top-of-file comment. Builds Manifold's native
+  # library from source on the runner itself (scripts/build-manifold-
+  # native-windows.sh), since no win-x64 native binary is committed to git
+  # the way linux-x64's is. Deliberately does NOT run
+  # tests/Meshwright.Tests.Gpu (see SPECIFICATION.md / M4 notes — GitHub
+  # runners have no GPU, and that suite was only just fixed for a
+  # parallelism hang on the one platform it does run on).
+  build-and-test-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      # windows-latest ships CMake and a Visual Studio 2022 toolchain
+      # already; this script uses the "Visual Studio 17 2022" CMake
+      # generator specifically so it doesn't need a Developer Command
+      # Prompt / vcvars environment to find cl.exe. Run under bash (Git
+      # Bash, present on windows-latest) so the script itself can stay
+      # portable shell rather than PowerShell.
+      - name: Build Manifold native library
+        shell: bash
+        run: scripts/build-manifold-native-windows.sh
+
+      - name: Restore
+        run: dotnet restore Meshwright.sln
+
+      - name: Build
+        run: dotnet build Meshwright.sln --configuration Release --no-restore
+
+      - name: Cache test corpus
+        id: cache-corpus
+        uses: actions/cache@v4
+        with:
+          path: tests/corpus/files
+          key: corpus-${{ hashFiles('tests/corpus/manifest.tsv') }}
+
+      - name: Fetch test corpus
+        shell: bash
+        run: scripts/fetch-corpus.sh
+
+      - name: Test
+        run: dotnet test tests/Meshwright.Tests --configuration Release --no-build --logger "console;verbosity=normal"
+
+  # UNVERIFIED — see the top-of-file comment. macos-latest is Apple
+  # Silicon, so this builds/tests osx-arm64 only; osx-x64 coverage would
+  # need a separate Intel runner (not added — see reports/M4). Same GPU-
+  # suite exclusion as the Windows job, for the same reason.
+  build-and-test-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Build Manifold native library
+        run: scripts/build-manifold-native-macos.sh
+
+      - name: Restore
+        run: dotnet restore Meshwright.sln
+
+      - name: Build
+        run: dotnet build Meshwright.sln --configuration Release --no-restore
+
+      - name: Cache test corpus
+        id: cache-corpus
+        uses: actions/cache@v4
+        with:
+          path: tests/corpus/files
+          key: corpus-${{ hashFiles('tests/corpus/manifest.tsv') }}
+
+      - name: Fetch test corpus
+        run: scripts/fetch-corpus.sh
+
+      - name: Test
+        run: dotnet test tests/Meshwright.Tests --configuration Release --no-build --logger "console;verbosity=normal"
