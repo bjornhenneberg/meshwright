@@ -8,8 +8,10 @@ and verified; see `reports/M0/SUMMARY.md`, `reports/M1/SUMMARY.md`,
 underway — batches M4-0 (Manifold RPATH/interop fix), M4-1 (real-world test
 corpus), M4-2 (gizmo wiring + menu/undo-redo UI), M4-6 (corpus ground
 truth), M4-7 (non-manifold import fix), M4-3 (Linux CI + packaging), M4-4
-(docs/release) and M4-8 (make the app do what it says) are complete,
-453/453 tests + 8/8 GPU passing; see the M4 entry in §11 and §7.
+(docs/release), M4-8 (make the app do what it says) and M4-9 (correctness
+gaps closed) are complete, 495/495 unit tests passing; see the M4 entry in
+§11 and §7. The 8 GPU tests were last run green in M4-8 and were not re-run
+in M4-9.
 
 **Caveat on "complete":** M4-8 found that M2's repair operations and M3's
 edit operations had been called complete while being unreachable or invisible
@@ -524,6 +526,31 @@ presenting a 558× shortfall as success; a command-line file argument; and
 "known rough edges" section listing what is still wrong.
 453 unit tests + 8 GPU tests passing.
 
+Batch M4-9 (correctness gaps closed) complete: three of the five gaps handed
+off after M4-8 — the multi-loop cut cap (item 12), booleans between loaded
+meshes (item 14), and gizmo coverage for Hollow (item 16). 453 → 495 unit
+tests, 0 skipped. The GPU suite is *not* included in that figure: it hung
+past ten minutes on the dev host and was abandoned rather than reported as
+passing. Two further GPU test hosts from earlier sessions were found already
+hung on the same machine, so this looks environmental rather than caused by
+this batch — but it is unverified either way, and worth its own look. See §11
+for the decisions each item produced.
+
+The headline fix is the cut cap. Cutting the sample Menger sponge — a mesh the
+app itself reported as having zero issues — used to yield 892: 70 non-manifold
+edges, 804 self-intersections and 17 flipped faces, all of it in the cap. It
+now yields none, with the volume, bounds and shell count unchanged.
+
+Every item in this batch was verified by driving the running application, and
+that is the reason the batch is worth recording. The Hollow gizmo came back
+green from its author and wrong on screen: it anchored along -Y, from before
+the same day's Z-up decision, and its tests asserted `point.Y == 1`, so they
+passed while the handle pointed sideways out of the model. Three further
+defects were found only by looking, none of them in the work being reviewed —
+uppercase `.STL` files were invisible in the file dialogs, Reset View does
+nothing, and every panel's before/after readout compares the mesh with itself.
+The last two are now items 17 and 18. None would have surfaced from the suite.
+
 Remaining M4 work: Windows/macOS CI + packaging (still under M4-3, not
 started); the outstanding correctness and UX gaps listed under "Immediate
 next steps" below; and revisiting "Meshwright" as a name before any paid
@@ -617,6 +644,10 @@ source, and matches how this audience already buys tools.
 | 2026-09-05 | Geometry tests assert invariants, not existence. `PlaneCutTests` asserted `TriangleCount > 0` after a cut, which passes just as happily when the operation appends its result on top of the half it was asked to discard. The invariants that actually catch these are bounding box, volume, shell count and issue count compared before and after — a cut must leave nothing on the discarded side, a split must preserve total volume, and a cut must produce a closed shell |
 | 2026-09-05 | A repair that cannot fix something must say so rather than delete it. Auto Repair's small-shell step removed a cut model's fragmented end as if it were debris, hole filling sealed the stump, and the pipeline reported "0 issues found" while the model had silently lost 11% of its height — a worse outcome than the damage it was asked to repair, and invisible except in the bounding box. Decimation had the same shape of bug, reporting a 558× shortfall as plain success; it now names the target it missed and why |
 | 2026-09-05 | Documentation records what is wrong as well as what works. `docs/usage.html` carries a "known rough edges" section and its screenshots are real sessions including unflattering ones, because the first version of that page used a screenshot of a mesh Auto Repair had quietly mutilated as its success story |
+| 2026-09-05 | A cut cross-section is recovered from real edge connectivity, never by sorting intersection points by angle. Angular sorting can only describe one star-shaped loop, so any cut through a model with a hole in it produced a cap zig-zagging between separate boundary loops. Cutting the sample Menger sponge — a clean mesh reported as having zero issues — produced 892 issues: 70 non-manifold edges, 804 self-intersections and 17 flipped faces. Loops are now nested by parity, so a loop inside an odd number of others is a hole in the cap and one inside an even number is filled. |
+| 2026-09-05 | Cap correctness is asserted by area, not just by closure. The multi-loop cap tests compute the cross-section's true area by hand (256/81 for the level-2 sponge cut at z=0.5) and compare, because a cap that spans the model's holes still produces a closed, single-shell, correct-volume result and passes every other invariant. |
+| 2026-09-05 | File-picker patterns list every case variant of each extension. GTK matches `FilePickerFileType` patterns case-sensitively, so the lower-case-only list hid `Model.STL` — routine CAD exporter output, and the form of this project's own Eiffel tower corpus file — from the Open dialog with nothing explaining why. Import and export already accepted any case; only the dialog was affected. |
+| 2026-09-05 | Gizmos anchor along +Z, not +Y. The Hollow gizmo shipped its first round casting its anchor ray along -Y with a +Y fallback, a leftover from before the Z-up decision earlier the same day, so the handle pointed sideways out of the model; its tests asserted `point.Y == 1` and so passed while the feature was visibly wrong. A surface anchor also cannot rely on a single ray through the bounding-box centre: on a Menger sponge that ray goes straight through the hole in the middle of each face and the no-hit fallback placed the handle in mid-air, attached to nothing. |
 
 ## 12. Development environment
 
@@ -695,32 +726,40 @@ M0.
     `.github/workflows/static.yml`, which was uploading the repo root and so
     served a 404 until it was pointed at `docs/`. `docs/usage.html` (M4-8)
     now documents the actual workflow with screenshots from real sessions.
-12. **Cap multi-loop cut cross-sections** — `ExtractCapLoop`
-    (`src/Meshwright.Geometry/Edit/PlaneCut.cs`) builds a single loop by
-    sorting intersection vertices angularly around the plane, so a cut
-    crossing several separate boundary loops at once — anything with holes
-    through it — caps across all of them and self-intersects. The `CutEdge`
-    records it consumes are built with `VertexAId == VertexBId`, carrying no
-    connectivity for a loop walk to follow. Needs real edge connectivity,
-    extraction into multiple closed loops, and capping each with correct
-    per-side winding. §5.1 promises "cut with optional cap"; single-loop
-    cross-sections now close correctly, multi-loop ones do not.
+12. ~~**Cap multi-loop cut cross-sections**~~ — done, M4-9. Extracted caps now
+    walk real edge connectivity instead of sorting vertices by angle, so cuts
+    through models with holes produce correct multi-loop caps with proper
+    per-loop winding and parity nesting.
 13. **Run long operations off the UI thread** — every operation is
     synchronous, so Auto Repair or decimation on a six-figure-triangle mesh
     freezes the window for tens of seconds with no progress indication. A
     large part of why the app felt like it "wasn't doing anything" even
     where it worked. Relates to §6.4's performance targets, which are about
     throughput and say nothing about responsiveness.
-14. **Boolean needs a second loaded mesh** — §5.1 specifies booleans
-    "between loaded meshes", but `BooleanPanel` calls
-    `CreateTestFixtureCube()`: the second operand is a cube hardcoded in the
-    panel, so the whole panel is a demo. Needs multi-mesh loading through
-    the same storage-provider flow as `OnOpenFileClick`. The last v1.0
-    feature the site advertises that a user cannot actually use.
-15. **`HoleFillMode.Smooth` is not smooth** — `CapSmooth` delegates
-    straight to `CapPlanar`. It produces a correct cap, just not the
-    smoothed one §5.1 lists under hole filling.
-16. **Gizmo coverage against the gizmo-first decision** — Plane Cut,
-    Transform and Drain Hole are wired (§11, 2026-09-04). Hollow still has
-    no visual preview of the resulting shell. `MainWindow` holds exactly one
-    gizmo slot, so anything new must go through `ActivateGizmoOwner`.
+14. ~~**Boolean needs a second loaded mesh**~~ — done, M4-9. Multi-mesh
+    loading now works through the `BooleanPanel`'s own "Load Secondary
+    Mesh…" button, and the operation buttons stay disabled with a
+    status line explaining why until a secondary mesh is loaded.
+15. **`HoleFillMode.Smooth` is not smooth** — the plane-cut rewrite routes
+    capping through `CutCrossSection`, where `Smooth` and `Planar` are the
+    same path and `Flat` is the only distinct one. This is defensible for a
+    *cut* — a cut cross-section is planar by definition — so the remaining
+    gap is in `HoleFillRepair.FillSmooth`, which adds a single centroid vertex
+    relaxed onto the average of three fixed boundary corners and is barely
+    distinguishable from a planar fill.
+16. ~~**Gizmo coverage against the gizmo-first decision**~~ — done, M4-9.
+    Plane Cut, Transform, Drain Hole and Hollow all have gizmos. Hollow
+    shows wall thickness by dragging a handle in the viewport.
+17. **Reset View does nothing.** The toolbar button and its `Ctrl+0` shortcut
+    both leave the camera untouched — verified on a fresh load with no
+    operation applied, the screenshots pixel-identical before and after. §11's
+    2026-09-05 row added it precisely because orbiting or zooming could put
+    the mesh off screen with no way back short of reopening the file, so the
+    escape hatch that row describes does not exist.
+18. **Edit panels report "Before" equal to "After".** Every panel's before/after
+    summary re-reads its "before" figures from the already-mutated document,
+    so the two always match: Plane Cut showed "Before: 1309 triangles / 2.195"
+    after cutting a 2112-triangle, 4.39-volume mesh, and Boolean showed
+    "Before: 36 / 1875" after a 12-triangle input. No panel can show that an
+    operation removed anything, which is the same dishonest-reporting failure
+    as the Auto Repair row already in §11.

@@ -355,7 +355,7 @@
     </p>
     <ul>
       <li><strong>Remove Small Shells</strong> — the smallest shell to keep, as a fraction of total mesh volume (default <code>0.01</code>, so anything under 1% goes). Raise it to be more aggressive about stray fragments; lower it if the model legitimately has small separate parts.</li>
-      <li><strong>Fill Holes</strong> — the triangulation style. <em>Planar</em> (the default) fits a best-fit plane and is correct for non-convex holes. <em>Flat</em> fans from the hole's centre, which is cheaper but can overlap on large holes. <em>Smooth</em> currently falls back to planar.</li>
+      <li><strong>Fill Holes</strong> — the triangulation style. <em>Planar</em> (the default) fits a best-fit plane and is correct for non-convex holes. <em>Flat</em> fans from the hole's centre, which is cheaper but can overlap on large holes. <em>Smooth</em> adds one interior vertex relaxed onto the average of three boundary corners and is only marginally different from planar.</li>
     </ul>
 
     <h3>Voxel remesh</h3>
@@ -402,7 +402,7 @@
     <h3>Transform, Hollow, Drain Holes, Boolean</h3>
     <ul>
       <li><strong>Transform</strong> — move, rotate, scale and mirror, with a viewport gizmo, plus an <strong>Align to Bed</strong> button that drops the model onto Z=0.</li>
-      <li><strong>Hollow</strong> — shells the model out to a given wall thickness in millimetres, to save material.</li>
+      <li><strong>Hollow</strong> — shells the model out to a given wall thickness in millimetres, to save material. Wall thickness can be set by dragging a handle in the viewport or typed numerically.</li>
       <li><strong>Drain Holes</strong> — places holes so resin or powder can escape from a hollowed model. Click the model in the viewport to position one.</li>
       <li><strong>Boolean</strong> — union, difference and intersection against a second mesh you load from disk with the panel's own <strong>Load Secondary Mesh…</strong> button. The operation buttons stay disabled, with a status line explaining why, until a secondary mesh is loaded.</li>
     </ul>
@@ -458,15 +458,6 @@
     </p>
     <ul>
       <li>
-        <strong>Cutting through a complex cross-section leaves a bad cap.</strong>
-        A cut whose cross-section is a single loop closes correctly. Where the
-        plane passes through several separate loops at once — the Menger sponge
-        screenshot above, or any model with holes through it — the cap is built
-        as one loop across all of them, which leaves self-intersections along the
-        cut. The cut itself is sound: the model keeps its bounds and volume, and
-        the damage is confined to the cap.
-      </li>
-      <li>
         <strong>Repair can remove geometry it mistakes for debris.</strong>
         Auto Repair's small-shell step deletes shells under 1% of total volume,
         and it cannot tell a genuine stray fragment from a real part of a model
@@ -496,11 +487,26 @@
       </li>
       <li>
         <strong>Not every spatial parameter has a gizmo yet.</strong> Plane cut,
-        transform and drain-hole placement do; the rest are still numeric fields.
+        transform, drain-hole placement and hollow wall thickness have gizmos.
+        Decimate has no spatial parameter; Boolean's secondary mesh cannot be
+        positioned; Repair's parameters are scalars.
       </li>
       <li>
         <strong>No packaged release.</strong> Linux <code>.deb</code> packaging
         exists; Windows and macOS packaging do not.
+      </li>
+      <li>
+        <strong>Reset View does nothing.</strong> The toolbar button and the
+        <code>Ctrl+0</code> keyboard shortcut both leave the camera untouched,
+        even on a fresh load. If orbiting or zooming puts the mesh off screen,
+        reopening the file is currently the only way back.
+      </li>
+      <li>
+        <strong>The panels' Before/After figures are always identical.</strong>
+        Every edit panel re-reads its "before" figures from the already-mutated
+        document, so they always match what the "after" shows. Plane Cut showed
+        "Before: 1309 triangles / 2.195" after cutting a 2112-triangle,
+        4.39-volume mesh. No panel can reveal what an operation actually removed.
       </li>
     </ul>
   </section>
