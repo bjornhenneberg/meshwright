@@ -86,10 +86,11 @@ either CI builds them per-platform or Boolean cannot ship on those platforms —
 and the packaging must say so rather than shipping a package that crashes when
 the user clicks Boolean. Treat anything it left behind as unreviewed.
 
-### Agent C — docs "Known rough edges" pass: PRODUCED NOTHING
+### Agent C — docs "Known rough edges" pass: DONE (after a false start)
 
-Returned a placeholder ("I'll wait for the background test run") without doing
-the work. No branch, no edits. **Re-dispatch from scratch.** Task below.
+Its first return was a placeholder with no work behind it; re-driven, it
+produced a fully cited per-entry audit. The stale entries it found are already
+fixed and committed (`74edf10`). See the backlog entry below for what is left.
 
 ## How to work
 
@@ -156,15 +157,17 @@ captured from a mesh produced by the *old, broken* plane cut (fixed as item
 screenshot was taken. The message it illustrates is still correct; the mesh is
 not. Retake against current `main`.
 
-**Re-dispatch the `docs/usage.html` "Known rough edges" pass. (Sonnet.)**
-Read the section end to end against what the app actually does now; entries
-were touched piecemeal as items 12–18 landed and none has been reviewed as a
-whole. Every claim kept or written must be traceable to code actually read.
-Worth checking specifically: whether Boolean works at all on non-Linux
-platforms, OBJ import deliberately not welding vertices, import splitting
-non-manifold geometry at the offending vertices, voxel remesh being excluded
-from Auto Repair, and that progress/Cancel is real only for
-`AutoRepairPipeline` and an honest indeterminate spinner everywhere else.
+**`docs/usage.html` "Known rough edges" — AUDITED AND PARTLY LANDED.**
+All 15 entries were re-verified against source with file:line citations. The
+two stale ones ("Reset View does nothing" and "Before/After figures are always
+identical", both fixed by items 17 and 18) were removed in `74edf10`. The
+other 13 were each confirmed still accurate and were left alone — including
+Boolean having no way to reposition the secondary mesh, only Auto Repair
+having real progress/cancel, OBJ import not welding, import splitting
+non-manifold geometry, voxel remesh excluded from Auto Repair, and no
+Windows/macOS packaging. What remains is the *additive* half: look for real
+current limitations that are missing from the list entirely. Do not re-audit
+the 13; they are settled.
 
 **A broader UX pass.** With 12–18 landed, sit down with the real app for a
 while (no synthetic scripting) and look for the next tier of "reports success
