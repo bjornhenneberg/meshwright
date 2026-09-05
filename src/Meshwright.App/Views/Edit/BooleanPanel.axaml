@@ -17,8 +17,9 @@
         </StackPanel>
 
         <StackPanel Spacing="4">
-          <TextBlock Text="Note: Secondary mesh is loaded as a test fixture. Multi-mesh loading is a v1.x feature."
-                     FontSize="10" Foreground="Gray" TextWrapping="Wrap" />
+          <TextBlock Text="Secondary mesh:" />
+          <TextBlock Name="SecondaryMeshStatusText" TextWrapping="Wrap" FontSize="11" Foreground="Gray" />
+          <Button Name="LoadSecondaryButton" Content="Load Secondary Mesh..." Click="OnLoadSecondaryClick" />
         </StackPanel>
 
         <Button Name="ApplyButton" Content="Apply" Click="OnApplyClick" />

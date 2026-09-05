@@ -101,12 +101,35 @@ public class MeshExporterTests
     }
 
     [Fact]
-    public void SupportedPatternsCoverEverySupportedExtension()
+    public void SupportedPatternsCoverEverySupportedExtensionInLowerAndUpperCase()
     {
         // The save-file picker builds its filter from SupportedPatterns; if the two lists drift,
-        // the picker silently stops offering a format the exporter actually handles.
-        Assert.Equal(
-            MeshExporter.SupportedExtensions.Select(e => "*" + e).OrderBy(p => p),
-            MeshExporter.SupportedPatterns.OrderBy(p => p));
+        // the picker silently stops offering a format the exporter actually handles. GTK matches
+        // these patterns case-sensitively, so both the lower-case and upper-case spelling of
+        // every extension must be present, not just the canonical lower-case one.
+        foreach (string extension in MeshExporter.SupportedExtensions)
+        {
+            Assert.Contains("*" + extension, MeshExporter.SupportedPatterns);
+            Assert.Contains("*" + extension.ToUpperInvariant(), MeshExporter.SupportedPatterns);
+        }
+
+        // And nothing in SupportedPatterns should name a format the exporter doesn't handle.
+        foreach (string pattern in MeshExporter.SupportedPatterns)
+        {
+            string extension = pattern.TrimStart('*').ToLowerInvariant();
+            Assert.Contains(extension, MeshExporter.SupportedExtensions);
+        }
+    }
+
+    [Theory]
+    [InlineData("Eiffel_tower_sample.STL")]
+    [InlineData("part.OBJ")]
+    public void SupportedPatterns_MatchUppercaseExtensionFileNames(string fileName)
+    {
+        // Mirrors the same fix in MeshImporterTests: GTK's save dialog matches patterns
+        // case-sensitively too, so an uppercase target extension must still be offered.
+        Assert.Contains(
+            MeshExporter.SupportedPatterns,
+            pattern => fileName.EndsWith(pattern.TrimStart('*'), StringComparison.Ordinal));
     }
 }
