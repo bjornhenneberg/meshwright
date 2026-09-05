@@ -14,8 +14,19 @@ public static class MeshImporter
     /// <summary>Extensions this importer accepts, lower-case and dot-prefixed.</summary>
     public static IReadOnlyList<string> SupportedExtensions { get; } = new[] { ".stl", ".obj" };
 
-    /// <summary>File-picker patterns for the supported formats, in the order they should be offered.</summary>
-    public static IReadOnlyList<string> SupportedPatterns { get; } = new[] { "*.stl", "*.obj" };
+    /// <summary>
+    /// File-picker patterns for the supported formats. GTK's (and other Linux toolkits') file
+    /// choosers match <c>FilePickerFileType</c> patterns case-sensitively, so a lower-case-only
+    /// pattern list makes a file like "Model.STL" — routine output from CAD exporters — simply
+    /// not appear in the dialog, with nothing telling the user why. Each extension is therefore
+    /// listed in lower-case, upper-case, and capitalized form; import itself already accepts any
+    /// case (see <see cref="ImportWithDiagnostics"/>), so this only affects what the dialog shows.
+    /// </summary>
+    public static IReadOnlyList<string> SupportedPatterns { get; } = new[]
+    {
+        "*.stl", "*.STL", "*.Stl",
+        "*.obj", "*.OBJ", "*.Obj",
+    };
 
     public static bool CanImport(string fileName) =>
         SupportedExtensions.Contains(Path.GetExtension(fileName).ToLowerInvariant());

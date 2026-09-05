@@ -404,7 +404,7 @@
       <li><strong>Transform</strong> — move, rotate, scale and mirror, with a viewport gizmo, plus an <strong>Align to Bed</strong> button that drops the model onto Z=0.</li>
       <li><strong>Hollow</strong> — shells the model out to a given wall thickness in millimetres, to save material.</li>
       <li><strong>Drain Holes</strong> — places holes so resin or powder can escape from a hollowed model. Click the model in the viewport to position one.</li>
-      <li><strong>Boolean</strong> — union, difference and intersection. <strong>Not usable on your own geometry yet:</strong> the second operand is a fixed cube built into the app, because loading a second mesh is a post-1.0 feature. The buttons work, but only against that cube.</li>
+      <li><strong>Boolean</strong> — union, difference and intersection against a second mesh you load from disk with the panel's own <strong>Load Secondary Mesh…</strong> button. The operation buttons stay disabled, with a status line explaining why, until a secondary mesh is loaded.</li>
     </ul>
     <p>
       Every operation reports what it did, updates the viewport and diagnostics
@@ -475,9 +475,15 @@
         bounds in the diagnostics panel: if they shrink, something was deleted.
       </li>
       <li>
-        <strong>Boolean cannot use your own second mesh.</strong> It always
-        operates against a cube built into the app, so the panel is really a
-        demonstration until multi-mesh loading lands.
+        <strong>Boolean uses the secondary mesh's own file coordinates, with no
+        way to reposition it first.</strong> Loading a second mesh does not
+        move it to overlap the primary — it operates wherever its file placed
+        it. If the two models don't already occupy the same space in the
+        outside world, Union produces two disconnected shells instead of one
+        merged one, and Difference or Intersection can silently produce an
+        empty result. There is no gizmo or numeric offset for the secondary
+        mesh yet; if a boolean looks wrong, check both models' bounds in a
+        third-party tool first.
       </li>
       <li>
         <strong>Hole fill "Smooth" is planar.</strong> It produces a correct cap,

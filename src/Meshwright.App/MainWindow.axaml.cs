@@ -158,6 +158,10 @@ public partial class MainWindow : Window
     /// <summary>Current diagnostics summary text, exposed for testing.</summary>
     public string? SummaryMessage => SummaryText.Text;
 
+    /// <summary>The Boolean operations panel, exposed for testing since it isn't otherwise
+    /// reachable from outside the generated partial class.</summary>
+    public BooleanPanel BooleanPanelForTesting => BooleanPanel;
+
     /// <summary>Loads a mesh file by path through the real load pipeline, bypassing the file
     /// picker dialog. Used for the command-line file argument and by integration tests that
     /// can't drive an OS file picker headlessly. Reports failure on the status line rather

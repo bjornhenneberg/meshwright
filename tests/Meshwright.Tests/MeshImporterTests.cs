@@ -79,12 +79,36 @@ public class MeshImporterTests
     }
 
     [Fact]
-    public void SupportedPatternsCoverEverySupportedExtension()
+    public void SupportedPatternsCoverEverySupportedExtensionInLowerAndUpperCase()
     {
         // The file picker builds its filter from SupportedPatterns; if the two lists drift, the
-        // picker silently stops offering a format the importer actually handles.
-        Assert.Equal(
-            MeshImporter.SupportedExtensions.Select(e => "*" + e).OrderBy(p => p),
-            MeshImporter.SupportedPatterns.OrderBy(p => p));
+        // picker silently stops offering a format the importer actually handles. GTK matches
+        // these patterns case-sensitively, so both the lower-case and upper-case spelling of
+        // every extension must be present, not just the canonical lower-case one.
+        foreach (string extension in MeshImporter.SupportedExtensions)
+        {
+            Assert.Contains("*" + extension, MeshImporter.SupportedPatterns);
+            Assert.Contains("*" + extension.ToUpperInvariant(), MeshImporter.SupportedPatterns);
+        }
+
+        // And nothing in SupportedPatterns should name a format the importer doesn't handle.
+        foreach (string pattern in MeshImporter.SupportedPatterns)
+        {
+            string extension = pattern.TrimStart('*').ToLowerInvariant();
+            Assert.Contains(extension, MeshImporter.SupportedExtensions);
+        }
+    }
+
+    [Theory]
+    [InlineData("Eiffel_tower_sample.STL")]
+    [InlineData("part.OBJ")]
+    public void SupportedPatterns_MatchUppercaseExtensionFileNames(string fileName)
+    {
+        // Reproduces a real bug: GTK's file chooser matches FilePickerFileType patterns
+        // case-sensitively, so a lower-case-only pattern list left files like this one — the
+        // Eiffel Tower corpus sample SPECIFICATION.md references — invisible in the Open dialog.
+        Assert.Contains(
+            MeshImporter.SupportedPatterns,
+            pattern => fileName.EndsWith(pattern.TrimStart('*'), StringComparison.Ordinal));
     }
 }
