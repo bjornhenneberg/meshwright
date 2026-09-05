@@ -7,7 +7,8 @@ and verified; see `reports/M0/SUMMARY.md`, `reports/M1/SUMMARY.md`,
 `reports/M2/SUMMARY.md`, and `reports/M3/`. M4 (Polish and release) is
 underway — batches M4-0 (Manifold RPATH/interop fix), M4-1 (real-world test
 corpus), M4-2 (gizmo wiring + menu/undo-redo UI), M4-6 (corpus ground
-truth), M4-7 (non-manifold import fix), M4-3 (Linux CI + packaging), M4-4
+truth), M4-7 (non-manifold import fix), M4-3 (CI + packaging,
+all three platforms), M4-4
 (docs/release), M4-8 (make the app do what it says) and M4-9 (correctness
 gaps closed) are complete, 520/520 unit tests passing; see the M4 entry in
 §11 and §7. The 8 GPU tests pass (re-run 2026-09-05, after fixing a test
@@ -438,7 +439,7 @@ count can legitimately differ from what was exported — so "export loses no
 triangles, reimport drops none" is what was actually asserted. See
 `reports/M4/20260904T213615Z-batch2-mesh-export/report.md`.
 
-Batch M4-3 (Linux CI + packaging) complete, scoped to Linux only by explicit
+Batch M4-3 (CI + packaging) complete for Linux first, scoped that way by explicit
 decision — Windows/macOS CI and packaging are a follow-up batch, since
 neither can be built or verified on this dev host. Delivered
 `.github/workflows/ci.yml` (GitHub Actions on `ubuntu-24.04`: restore,
@@ -562,10 +563,8 @@ change, the busy-indicator label, which is covered by a test asserting the
 running operation's name is reported and is not the previous change's — but
 was not confirmed on screen, because the display was needed elsewhere.
 
-Remaining M4 work: Windows/macOS CI + packaging (still under M4-3, not
-started); the outstanding correctness and UX gaps listed under "Immediate
-next steps" below; and revisiting "Meshwright" as a name before any paid
-release per the finding below.
+Windows/macOS CI + packaging landed later and is now green on all three
+platforms; see the 2026-09-05 and 2026-09-06 rows in §11.
 
 **M5+**
 v1.x features, then the resin module.
@@ -663,7 +662,8 @@ source, and matches how this audience already buys tools.
 | 2026-09-05 | Item 13 (long operations off the UI thread): `MeshDocument.ApplyAsync` runs the operation via `Task.Run` and awaits it with the calling context captured, so `Changed`/`BusyChanged`/`Progress` all fire back on the caller's own thread (the UI thread, in practice) — no explicit `Dispatcher.Invoke` needed, and `Meshwright.Core` stays Avalonia-agnostic. `IsBusy` blocks `Apply`/`Undo`/`Redo` from running concurrently with the background mutation, closing the Ctrl+Z-mid-operation race. Progress is real only for `AutoRepairPipeline` (`IProgressReportingMeshOperation`, step-based, so cancellation is honoured between steps too); every other operation is one opaque call into vendored/native geometry code with no safe midpoint, so the UI shows an honest indeterminate spinner with Cancel disabled for those rather than a percentage that isn't tracking anything (§4). Verified live on the real GUI: orbiting the viewport mid-drag while a 25-second Hollow ran on the Menger sponge sample actually rotated the model on screen, and Auto Repair on the 139,989-triangle Eiffel tower sample completed correctly (36,708 → 6,162 issues) while showing the busy indicator throughout |
 | 2026-09-05 | A "smooth" fill has to be measurably smoother than a planar one, and flat where the surface is flat. `HoleFillMode.Smooth` ear-clipped the loop and added one centroid vertex relaxed onto three *fixed* boundary corners, so the relaxation converged in a single step and the result was indistinguishable from `Planar` — a distinct mode in §5.1 that did nothing distinct. It now refines the patch for interior degrees of freedom and displaces it by a curvature-derived sagitta, sampling curvature one ring in from the boundary because a boundary vertex's one-ring is missing the hole side entirely and measured about five times too curved. The tests pin the *improvement*, not the implementation: closer to a test sphere than planar by a clear margin, a flat plate staying flat to 1e-9, and all three modes differing measurably, so none can quietly collapse into another again |
 | 2026-09-05 | The GPU suite's hangs were xunit parallelism, not the GPU. Three test classes each took their own `IClassFixture<GpuTestFixture>`, and xunit runs collections in parallel by default, so several fixtures called `Glfw.CreateWindow` concurrently; GLFW/GLX window creation on Linux is not thread-safe and the race hangs forever, which is why the suite was green at M4-8 with fewer GPU test classes to race. Diagnosed from managed stacks off a live hung host showing two threads stopped inside `GpuTestFixture..ctor` — captured through the .NET diagnostic IPC sockets in `/tmp`, since `ptrace_scope=1` blocks gdb from attaching to a non-descendant without sudo. The tell that it was never a driver stall: 22 s of CPU over 94 minutes and no thread in a DRM ioctl. Fixed by `DisableTestParallelization` for that assembly; the suite now completes in 483 ms rather than hanging past ten minutes. Always run it under `timeout`, or a hang orphans a test host — five had accumulated on the dev host, one for 22 hours |
-| 2026-09-05 | M4-3's Windows/macOS half landed **unverified by construction**, and says so. The 2026-09-04 Linux-only decision held on the point that mattered — this dev host cannot *run* a Windows or macOS build — but its implied corollary was wrong: GitHub's `windows-latest`/`macos-latest` runners are real machines with their own toolchains, so CI can build Manifold per-platform rather than shipping a placeholder. New `build-and-test-windows`/`build-and-test-macos` jobs build Manifold from source (no prebuilt binary is committed for those platforms, unlike `linux-x64`) and run `Meshwright.Tests` only, excluding the GPU suite since the runners have no GPU. Packaging (`package-windows.sh` zip, `package-macos.sh` unsigned `.app` zip; no MSI, no notarisation) ships honestly: a build without the native library disables Boolean behind a `NOTICE.txt` instead of crashing when the user clicks it. Two real bugs were found while verifying rather than assuming: `Directory.Build.props` unconditionally bundled the Linux `.so` into Windows/macOS publishes, so a Windows package carried unloadable Linux binaries (now RID-gated, and checked in both directions — a Windows publish now carries no natives, a Linux one still carries both); and `fetch-corpus.sh` verified checksums with `sha256sum`, which stock macOS does not have, where both call sites treated the missing tool as a checksum mismatch and would have failed the macOS job with 53 bogus mismatches blaming the corpus. The DllImport naming reasoning — `libmanifoldc.dll`/`libmanifoldc.dylib` matching .NET's default probing, so no `SetDllImportResolver` is needed — is untested and is the first thing to suspect if Boolean fails on those platforms |
+| 2026-09-05 | M4-3's Windows/macOS half landed **unverified by construction**, and says so. The 2026-09-04 Linux-only decision held on the point that mattered — this dev host cannot *run* a Windows or macOS build — but its implied corollary was wrong: GitHub's `windows-latest`/`macos-latest` runners are real machines with their own toolchains, so CI can build Manifold per-platform rather than shipping a placeholder. New `build-and-test-windows`/`build-and-test-macos` jobs build Manifold from source (no prebuilt binary is committed for those platforms, unlike `linux-x64`) and run `Meshwright.Tests` only, excluding the GPU suite since the runners have no GPU. Packaging (`package-windows.sh` zip, `package-macos.sh` unsigned `.app` zip; no MSI, no notarisation) ships honestly: a build without the native library disables Boolean behind a `NOTICE.txt` instead of crashing when the user clicks it. Two real bugs were found while verifying rather than assuming: `Directory.Build.props` unconditionally bundled the Linux `.so` into Windows/macOS publishes, so a Windows package carried unloadable Linux binaries (now RID-gated, and checked in both directions — a Windows publish now carries no natives, a Linux one still carries both); and `fetch-corpus.sh` verified checksums with `sha256sum`, which stock macOS does not have, where both call sites treated the missing tool as a checksum mismatch and would have failed the macOS job with 53 bogus mismatches blaming the corpus. The DllImport naming reasoning — `libmanifoldc.dll`/`libmanifoldc.dylib` matching .NET's default probing — held; what it missed was the *location* rather than the name, which cost two further CI rounds (see the 2026-09-06 row) |
+| 2026-09-06 | Native libraries are copied **next to the managed assemblies**, not only into `runtimes/<rid>/native/`. Every Manifold test failed on macOS with `DllNotFoundException` while the dylib sat correctly under `runtimes/osx-arm64/native/` in the test output. CI diagnostics eliminated every other explanation: the file was arm64, ad-hoc signed, carried `@loader_path` on its `LC_RPATH`, had its dependency resolving, and a plain `ctypes.CDLL` of that exact path printed `dlopen OK`. The library was always loadable; .NET never looked there. `runtimes/<rid>/native/` is a deps.json contract and these loose files are not in deps.json, so the fact that it works on Linux is incidental rather than guaranteed — which is why the gap survived until a second platform ran the same code. Both libraries are copied, not just the entry point, since `libmanifoldc` records its dependency on `libmanifold` as `@rpath`-relative and the two must sit together. Verified without a Mac: hiding `runtimes/` in the Linux test output reproduces the macOS condition exactly — the interop tests failed that way before the change and pass on the flat copy after it |
 
 ## 12. Development environment
 
@@ -727,15 +727,18 @@ M0.
    ground truth (M4-6)~~ — both done; see `reports/M4/CORPUS.md`.
    ~~Outstanding: import cannot load non-manifold geometry~~ — fixed in M4-7 by
    splitting at the offending vertices; all 53 corpus files now load complete.
-9. ~~Packaging & CI (M4-3)~~ — Linux done and verified: `.github/workflows/ci.yml`
-    fetches and caches the corpus via `scripts/fetch-corpus.sh`, and
-    `scripts/package-linux.sh` builds a self-contained `.deb`. Windows/macOS CI
-    and packaging now exist too, but are **unverified by construction** — no such
-    machine is available on this dev host, so nothing in them has ever executed.
-    **The next step is to trigger the first Windows/macOS CI run on GitHub and read
-    the result.** If the native-build scripts fail, suspect the CMake
-    generator/target-name assumptions first; if Manifold builds but the boolean
-    tests fail, suspect the DllImport naming convention next.
+9. ~~Packaging & CI (M4-3)~~ — **done on all three platforms, and verified
+    by real CI runs.** `.github/workflows/ci.yml` builds and tests on Linux,
+    Windows and macOS; Windows and macOS build the Manifold native library
+    from source in the job (only `linux-x64` ships a prebuilt binary in the
+    repo), and all 520 tests pass on each. Packaging exists for all three:
+    `package-linux.sh` (`.deb`), `package-windows.sh` (zip) and
+    `package-macos.sh` (unsigned `.app` zip). Still open, deliberately: an
+    MSI for Windows, and macOS signing/notarisation (§9 defers that until
+    there is revenue). Getting the first green run took four rounds — a
+    hardcoded VS 2022 generator, `sha256sum` missing on macOS, Ninja keeping
+    the `lib` prefix, a normalised dylib dependency name, and finally the
+    native-library probing path in §11 above.
 10. ~~Export is entirely absent from the UI~~ — done: `MeshExporter` + a File >
     Export... menu item/toolbar button in `MainWindow`, round-tripped against
     the full M4-1 corpus. See §7 M4 and
