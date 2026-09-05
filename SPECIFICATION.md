@@ -764,16 +764,14 @@ M0.
 16. ~~**Gizmo coverage against the gizmo-first decision**~~ — done, M4-9.
     Plane Cut, Transform, Drain Hole and Hollow all have gizmos. Hollow
     shows wall thickness by dragging a handle in the viewport.
-17. **Reset View does nothing.** The toolbar button and its `Ctrl+0` shortcut
-    both leave the camera untouched — verified on a fresh load with no
-    operation applied, the screenshots pixel-identical before and after. §11's
-    2026-09-05 row added it precisely because orbiting or zooming could put
-    the mesh off screen with no way back short of reopening the file, so the
-    escape hatch that row describes does not exist.
-18. **Edit panels report "Before" equal to "After".** Every panel's before/after
-    summary re-reads its "before" figures from the already-mutated document,
-    so the two always match: Plane Cut showed "Before: 1309 triangles / 2.195"
-    after cutting a 2112-triangle, 4.39-volume mesh, and Boolean showed
-    "Before: 36 / 1875" after a 12-triangle input. No panel can show that an
-    operation removed anything, which is the same dishonest-reporting failure
-    as the Auto Repair row already in §11.
+17. ~~**Reset View does nothing**~~ — done. Two independent causes fixed:
+    `OrbitCamera.Frame()` reset Target/Distance but never Yaw/Pitch, so an
+    orbit alone left it looking like a no-op, and the menu's `HotKey="Ctrl+0"`
+    parsed to `Key.None` (Avalonia wants the digit-key name `D0`), so the
+    shortcut had never been bound to anything. Both verified live: orbit away,
+    click Reset View or press Ctrl+0, camera returns to the framed pose.
+18. ~~**Edit panels report "Before" equal to "After"**~~ — done. Every panel
+    now snapshots its statistics immediately before calling `Apply` and
+    rewrites the display afterward. Plane Cut on a 2112-triangle, 4.39-volume
+    mesh now correctly reports "Before: 2112 / 4.39" rather than repeating
+    the after figures — verified live.
