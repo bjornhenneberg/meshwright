@@ -38,6 +38,9 @@
     <!-- Left sidebar: Edit operations panel with tabs -->
     <Border DockPanel.Dock="Left" Width="320" Padding="0" Background="{DynamicResource SystemAltHighColor}">
       <TabControl Name="EditTabControl">
+        <TabItem Header="Repair">
+          <edit:RepairPanel Name="RepairPanel" />
+        </TabItem>
         <TabItem Header="Plane Cut">
           <edit:PlaneCutPanel Name="PlaneCutPanel" />
         </TabItem>

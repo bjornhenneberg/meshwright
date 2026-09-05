@@ -68,6 +68,7 @@ public partial class MainWindow : Window
     private void InitializeEditPanels()
     {
         // Bind all panels to the document
+        RepairPanel.SetDocument(_document);
         PlaneCutPanel.SetDocument(_document);
         TransformPanel.SetDocument(_document);
         HollowPanel.SetDocument(_document);
@@ -404,6 +405,7 @@ public partial class MainWindow : Window
         Viewport.Gizmo = null;
 
         // Update all panels with statistics from the new mesh
+        RepairPanel.SetDocument(_document);
         PlaneCutPanel.SetDocument(_document);
         TransformPanel.SetDocument(_document);
         HollowPanel.SetDocument(_document);
