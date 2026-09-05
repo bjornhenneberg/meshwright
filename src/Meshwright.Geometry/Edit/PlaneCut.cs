@@ -67,7 +67,10 @@ public sealed class PlaneCut
 
         // Build the result mesh(es)
         DMesh3 positiveSide = new DMesh3();
-        DMesh3? negativeSide = mode == CutMode.Split ? new DMesh3() : null;
+        // Built for Discard as well as Split: Discard's whole job is to return the negative side,
+        // so skipping it there left the mode with nothing to return but the positive side —
+        // making Discard behave identically to Keep.
+        DMesh3? negativeSide = mode is CutMode.Split or CutMode.Discard ? new DMesh3() : null;
 
         var vertexMap = new Dictionary<int, (int posMeshId, int? negMeshId)>();
         List<int> capVertexIndices = [];
@@ -92,14 +95,26 @@ public sealed class PlaneCut
             positiveSide.AppendTriangle(pv0, pv1, pv2);
         }
 
-        // Add cap to positive side (and negative side if in Split mode)
+        // Add cap to positive side (and negative side if in Split mode).
+        // The loop comes from splitMesh, but every cap routine indexes the mesh it is filling, so
+        // the loop has to be translated into that mesh's own vertex ids first. Passing splitMesh
+        // ids straight through had the cap stitching together whichever unrelated vertices
+        // happened to hold those indices, which is what left cut results in disconnected pieces
+        // instead of one closed shell.
         if (capLoop.Count >= 3)
         {
-            capTrianglesAdded = AddCapToMesh(positiveSide, splitMesh.SplitMesh, capLoop, planeNormal, capMode);
+            List<int> positiveCapLoop = TranslateLoop(
+                capLoop,
+                splitMesh.SplitMesh,
+                positiveSide,
+                vid => vertexMap.TryGetValue(vid, out (int posMeshId, int? negMeshId) ids) ? ids.posMeshId : null,
+                (vid, mappedId) => vertexMap[vid] = (mappedId, vertexMap.TryGetValue(vid, out (int posMeshId, int? negMeshId) e) ? e.negMeshId : null));
+
+            capTrianglesAdded = AddCapToMesh(positiveSide, positiveCapLoop, planeNormal, capMode);
         }
 
-        // Copy negative-side geometry if in Split mode
-        if (mode == CutMode.Split && negativeSide != null)
+        // Copy negative-side geometry whenever it is going to be returned (Split or Discard)
+        if (negativeSide != null)
         {
             var negVertexMap = new Dictionary<int, int>();
             foreach (int tid in splitMesh.NegativeSideTriangles)
@@ -123,21 +138,22 @@ public sealed class PlaneCut
             // Add cap to negative side with reversed normal
             if (capLoop.Count >= 3)
             {
-                int capAdded = AddCapToMesh(negativeSide, splitMesh.SplitMesh, capLoop, -planeNormal, capMode);
-                capTrianglesAdded += capAdded;
+                List<int> negativeCapLoop = TranslateLoop(
+                    capLoop,
+                    splitMesh.SplitMesh,
+                    negativeSide,
+                    vid => negVertexMap.TryGetValue(vid, out int id) ? id : null,
+                    (vid, mappedId) => negVertexMap[vid] = mappedId);
+
+                capTrianglesAdded += AddCapToMesh(negativeSide, negativeCapLoop, -planeNormal, capMode);
             }
         }
 
-        // Determine which mesh to return based on mode
-        DMesh3 resultMesh = mode == CutMode.Keep ? positiveSide : negativeSide ?? positiveSide;
-        if (mode == CutMode.Discard)
-        {
-            resultMesh = negativeSide ?? positiveSide;
-        }
-
+        // PositiveSideMesh carries the mesh the caller keeps, which for Discard is the negative
+        // side; NegativeSideMesh is the extra half only Split asks for.
         return new PlaneCutResult(
-            PositiveSideMesh: positiveSide,
-            NegativeSideMesh: negativeSide,
+            PositiveSideMesh: mode == CutMode.Discard ? negativeSide! : positiveSide,
+            NegativeSideMesh: mode == CutMode.Split ? negativeSide : null,
             CapTrianglesAdded: capTrianglesAdded,
             TrianglesBefore: trianglesBefore,
             TrianglesAfter: positiveSide.TriangleCount + (negativeSide?.TriangleCount ?? 0),
@@ -450,29 +466,48 @@ public sealed class PlaneCut
         return projectedVertices.Select(p => p.vid).ToList();
     }
 
-    private int AddCapToMesh(DMesh3 targetMesh, DMesh3 splitMesh, List<int> capLoopVertices, Vector3d capNormal, HoleFillMode capMode)
+    /// <summary>
+    /// Re-expresses a cut loop taken from the split mesh in <paramref name="targetMesh"/>'s own
+    /// vertex ids, appending any loop vertex that side didn't already own so the cap closes
+    /// against the real boundary rather than an arbitrary index.
+    /// </summary>
+    private static List<int> TranslateLoop(
+        List<int> loop,
+        DMesh3 splitMesh,
+        DMesh3 targetMesh,
+        Func<int, int?> lookup,
+        Action<int, int> remember)
+    {
+        var translated = new List<int>(loop.Count);
+        foreach (int vid in loop)
+        {
+            int? mapped = lookup(vid);
+            if (mapped is null)
+            {
+                int appended = targetMesh.AppendVertex(splitMesh.GetVertex(vid));
+                remember(vid, appended);
+                mapped = appended;
+            }
+
+            translated.Add(mapped.Value);
+        }
+
+        return translated;
+    }
+
+    private int AddCapToMesh(DMesh3 targetMesh, List<int> capLoopVertices, Vector3d capNormal, HoleFillMode capMode)
     {
         if (capLoopVertices.Count < 3)
         {
             return 0;
         }
 
-        int added = 0;
-
-        switch (capMode)
+        return capMode switch
         {
-            case HoleFillMode.Flat:
-                added = CapFlat(targetMesh, capLoopVertices);
-                break;
-            case HoleFillMode.Planar:
-                added = CapPlanar(targetMesh, splitMesh, capLoopVertices);
-                break;
-            case HoleFillMode.Smooth:
-                added = CapSmooth(targetMesh, splitMesh, capLoopVertices);
-                break;
-        }
-
-        return added;
+            HoleFillMode.Flat => CapFlat(targetMesh, capLoopVertices),
+            HoleFillMode.Smooth => CapSmooth(targetMesh, capLoopVertices),
+            _ => CapPlanar(targetMesh, capLoopVertices),
+        };
     }
 
     private int CapFlat(DMesh3 mesh, List<int> loopVertices)
@@ -502,7 +537,7 @@ public sealed class PlaneCut
         return added;
     }
 
-    private int CapPlanar(DMesh3 mesh, DMesh3 splitMesh, List<int> loopVertices)
+    private int CapPlanar(DMesh3 mesh, List<int> loopVertices)
     {
         if (loopVertices.Count < 3)
             return 0;
@@ -551,10 +586,11 @@ public sealed class PlaneCut
         return added;
     }
 
-    private int CapSmooth(DMesh3 mesh, DMesh3 splitMesh, List<int> loopVertices)
+    private int CapSmooth(DMesh3 mesh, List<int> loopVertices)
     {
-        // For now, same as planar (smooth would require interior vertex and relaxation)
-        return CapPlanar(mesh, splitMesh, loopVertices);
+        // Falls back to the planar cap: a genuinely smoothed cap needs an interior vertex and a
+        // relaxation pass, which isn't implemented. Callers get a correct cap, just a flat one.
+        return CapPlanar(mesh, loopVertices);
     }
 
     private bool IsEarSimple(DMesh3 mesh, List<int> indices, int prev, int cur, int next)

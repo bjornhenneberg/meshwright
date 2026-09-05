@@ -42,23 +42,9 @@ public sealed class PlaneCutKeepSideOperation : MeshOperationBase
                 Summary: "Plane passed through no geometry — mesh left unchanged.");
         }
 
-        // Replace the input mesh with the positive side result by swapping internal data
-        // Get all vertices and triangles from result and rebuild mesh
-        var vertexMap = new Dictionary<int, int>();
-        var newTriangles = new List<Index3i>();
-
-        // Collect vertices and triangles from result
-        foreach (int vid in result.PositiveSideMesh.VertexIndices())
-        {
-            vertexMap[vid] = mesh.AppendVertex(result.PositiveSideMesh.GetVertex(vid));
-        }
-        foreach (int tid in result.PositiveSideMesh.TriangleIndices())
-        {
-            Index3i tri = result.PositiveSideMesh.GetTriangle(tid);
-            mesh.AppendTriangle(vertexMap[tri.a], vertexMap[tri.b], vertexMap[tri.c]);
-        }
-
-        // Compact the mesh to remove old orphaned data
+        // Replace the mesh's contents with the kept side. Appending instead would leave the
+        // half this cut was asked to discard sitting in the mesh alongside the result.
+        mesh.Copy(result.PositiveSideMesh);
         mesh.CompactInPlace();
 
         return new OperationResult(

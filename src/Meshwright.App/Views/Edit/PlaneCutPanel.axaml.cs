@@ -237,7 +237,7 @@ public partial class PlaneCutPanel : UserControl
             {
                 CutMode.Keep => new PlaneCutKeepSideOperation(_currentPlanePoint, _currentPlaneNormal, capMode),
                 CutMode.Discard => new PlaneCutDiscardSideOperation(_currentPlanePoint, _currentPlaneNormal, capMode),
-                CutMode.Split => new PlaneCutKeepSideOperation(_currentPlanePoint, _currentPlaneNormal, capMode), // For now, just use Keep for Split mode
+                CutMode.Split => new PlaneCutSplitOperation(_currentPlanePoint, _currentPlaneNormal, capMode),
                 _ => new PlaneCutKeepSideOperation(_currentPlanePoint, _currentPlaneNormal, capMode),
             };
 

@@ -113,6 +113,111 @@ public class PlaneCutTests
         Assert.Equal(12, result.PositiveSideMesh.TriangleCount); // Original cube has 12 triangles
     }
 
+    /// <summary>
+    /// A cut has to remove the side it discarded. Asserting only that some triangles survive
+    /// passes just as happily when the operation appends the cut result on top of the geometry it
+    /// was supposed to replace, which leaves the discarded half sitting in the mesh.
+    /// </summary>
+    [Fact]
+    public void PlaneCutKeepSideOperation_LeavesNothingOnTheDiscardedSide()
+    {
+        var document = new MeshDocument();
+        document.Load(BuildCube(10.0));
+
+        var planePoint = new Vector3d(5.0, 5.0, 5.0);
+        Vector3d planeNormal = Vector3d.AxisZ.Normalized;
+        document.Apply(new PlaneCutKeepSideOperation(planePoint, planeNormal));
+
+        DMesh3 cut = document.Mesh!;
+        const double tolerance = 1e-6;
+        foreach (int tid in cut.TriangleIndices())
+        {
+            Vector3d centroid = cut.GetTriCentroid(tid);
+            double signedDistance = (centroid - planePoint).Dot(planeNormal);
+            Assert.True(
+                signedDistance > -tolerance,
+                $"Triangle {tid} sits {-signedDistance:0.###} below the cut plane, on the discarded side.");
+        }
+    }
+
+    [Fact]
+    public void PlaneCutDiscardSideOperation_LeavesNothingOnTheDiscardedSide()
+    {
+        var document = new MeshDocument();
+        document.Load(BuildCube(10.0));
+
+        var planePoint = new Vector3d(5.0, 5.0, 5.0);
+        Vector3d planeNormal = Vector3d.AxisZ.Normalized;
+        document.Apply(new PlaneCutDiscardSideOperation(planePoint, planeNormal));
+
+        DMesh3 cut = document.Mesh!;
+        const double tolerance = 1e-6;
+        foreach (int tid in cut.TriangleIndices())
+        {
+            Vector3d centroid = cut.GetTriCentroid(tid);
+            double signedDistance = (centroid - planePoint).Dot(planeNormal);
+            Assert.True(
+                signedDistance < tolerance,
+                $"Triangle {tid} sits {signedDistance:0.###} above the cut plane, on the discarded side.");
+        }
+    }
+
+    /// <summary>
+    /// Split is the mode that keeps both halves. It used to be wired to the Keep operation
+    /// behind a "for now" comment, so choosing it silently threw away the negative side.
+    /// </summary>
+    [Fact]
+    public void PlaneCutSplitOperation_KeepsBothSidesAsSeparateShells()
+    {
+        var document = new MeshDocument();
+        document.Load(BuildCube(10.0));
+
+        var planePoint = new Vector3d(5.0, 5.0, 5.0);
+        Vector3d planeNormal = Vector3d.AxisZ.Normalized;
+        OperationResult result = document.Apply(new PlaneCutSplitOperation(planePoint, planeNormal));
+
+        Assert.True(result.Changed);
+
+        DMesh3 cut = document.Mesh!;
+        int above = 0;
+        int below = 0;
+        foreach (int tid in cut.TriangleIndices())
+        {
+            double signedDistance = (cut.GetTriCentroid(tid) - planePoint).Dot(planeNormal);
+            if (signedDistance > 1e-6)
+            {
+                above++;
+            }
+            else if (signedDistance < -1e-6)
+            {
+                below++;
+            }
+        }
+
+        Assert.True(above > 0, "split should keep geometry on the positive side");
+        Assert.True(below > 0, "split should keep geometry on the negative side");
+    }
+
+    /// <summary>
+    /// Known defect, not yet fixed: a plane cut should leave closed shells — one for Keep/Discard,
+    /// two for Split — but the cut result comes back as one disconnected shell per face.
+    /// SplitCutTriangles welds correctly; the fault is upstream of the cap, in the cut-edge
+    /// records feeding ExtractCapLoop, which are built with VertexAId and VertexBId set to the
+    /// same vertex and so describe no connectivity for the loop to follow. Until that is fixed a
+    /// cut result is not watertight and needs a repair pass before it will print.
+    /// </summary>
+    [Fact(Skip = "Known defect: cut-edge records are degenerate, so cap loops don't close the shell.")]
+    public void PlaneCutKeepSideOperation_ProducesASingleClosedShell()
+    {
+        var document = new MeshDocument();
+        document.Load(BuildCube(10.0));
+
+        document.Apply(new PlaneCutKeepSideOperation(new Vector3d(5.0, 5.0, 5.0), Vector3d.AxisZ.Normalized));
+
+        Assert.Equal(1, document.Report!.Statistics.ShellCount);
+        Assert.Empty(document.Report.Issues.Where(issue => issue.Category == "BoundaryHole"));
+    }
+
     [Fact]
     public void PlaneCutKeepSideOperation_AppliesSuccessfully()
     {

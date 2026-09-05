@@ -46,19 +46,9 @@ public sealed class PlaneCutDiscardSideOperation : MeshOperationBase
         // (the Cut method returns both sides in PositiveSideMesh/NegativeSideMesh based on mode)
         DMesh3 resultMesh = result.PositiveSideMesh;
 
-        // Replace the input mesh with the result by appending its geometry
-        var vertexMap = new Dictionary<int, int>();
-        foreach (int vid in resultMesh.VertexIndices())
-        {
-            vertexMap[vid] = mesh.AppendVertex(resultMesh.GetVertex(vid));
-        }
-        foreach (int tid in resultMesh.TriangleIndices())
-        {
-            Index3i tri = resultMesh.GetTriangle(tid);
-            mesh.AppendTriangle(vertexMap[tri.a], vertexMap[tri.b], vertexMap[tri.c]);
-        }
-
-        // Compact the mesh to remove old orphaned data
+        // Replace the mesh's contents with the kept side. Appending instead would leave the
+        // half this cut was asked to discard sitting in the mesh alongside the result.
+        mesh.Copy(resultMesh);
         mesh.CompactInPlace();
 
         return new OperationResult(
