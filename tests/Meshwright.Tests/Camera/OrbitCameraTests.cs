@@ -182,6 +182,38 @@ public class OrbitCameraTests
         Assert.True(camera.FarPlane > camera.NearPlane);
     }
 
+    [Fact]
+    public void Frame_AfterOrbit_RestoresPoseFromInitialFraming()
+    {
+        // Regression for Reset View doing nothing after an orbit: Frame() used to leave Yaw/Pitch
+        // untouched, so re-framing after an orbit (no pan/zoom) recomputed the same Target and
+        // Distance and produced a camera pose identical to the one just before Reset View was
+        // clicked - i.e. Reset View looked like a no-op. Frame() must reset orientation too, so
+        // the pose after Reset View matches the pose framing produced on initial load.
+        var loadCamera = new OrbitCamera();
+        var center = new Vector3(1f, 2f, 3f);
+        const float radius = 5f;
+        loadCamera.Frame(center, radius);
+        Vector3 poseOnLoad = loadCamera.Position;
+        float yawOnLoad = loadCamera.Yaw;
+        float pitchOnLoad = loadCamera.Pitch;
+
+        var driftedCamera = new OrbitCamera();
+        driftedCamera.Frame(center, radius);
+        driftedCamera.Orbit(1.3f, 0.4f);
+        Assert.NotEqual(poseOnLoad, driftedCamera.Position);
+
+        // Reset View re-frames on the same mesh bounds.
+        driftedCamera.Frame(center, radius);
+
+        Assert.Equal(yawOnLoad, driftedCamera.Yaw, 5);
+        Assert.Equal(pitchOnLoad, driftedCamera.Pitch, 5);
+        Assert.Equal(poseOnLoad.X, driftedCamera.Position.X, 4);
+        Assert.Equal(poseOnLoad.Y, driftedCamera.Position.Y, 4);
+        Assert.Equal(poseOnLoad.Z, driftedCamera.Position.Z, 4);
+        Assert.Equal(center, driftedCamera.Target);
+    }
+
     [Theory]
     [InlineData(0.01f)]
     [InlineData(1f)]

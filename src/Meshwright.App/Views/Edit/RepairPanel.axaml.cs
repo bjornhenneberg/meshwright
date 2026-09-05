@@ -138,8 +138,16 @@ public partial class RepairPanel : UserControl
         try
         {
             IMeshOperation operation = buildOperation();
+
+            // Captured before Apply: Apply raises MeshDocument.Changed synchronously, which
+            // MainWindow uses to refresh every panel's stats display from the (now mutated)
+            // document, clobbering BeforeStats with post-operation figures. Restoring the
+            // pre-operation snapshot below undoes that clobber.
+            string before = DescribeCurrentMesh();
+
             OperationResult result = _document.Apply(operation);
 
+            BeforeStats.Text = before;
             AfterStats.Text = DescribeCurrentMesh();
             SetResultMessage(result.Changed
                 ? result.Summary

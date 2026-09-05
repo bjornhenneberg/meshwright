@@ -218,9 +218,20 @@ public partial class BooleanPanel : UserControl
                 _ => throw new InvalidOperationException("Unknown operation")
             };
 
+            // Captured before Apply: Apply raises MeshDocument.Changed synchronously, which
+            // MainWindow uses to refresh every panel's stats display from the (now mutated)
+            // document, clobbering BeforeStats with post-operation figures. Restoring the
+            // pre-operation snapshot below undoes that clobber.
+            var statsBefore = MeshStatistics.Compute(_document.Mesh);
+
             OperationResult result = _document.Apply(operation);
 
             var statsAfter = MeshStatistics.Compute(_document.Mesh);
+            BeforeStats.Text = string.Format(
+                CultureInfo.InvariantCulture,
+                "Triangles: {0}\nVolume: {1:0.###}",
+                statsBefore.TriangleCount,
+                statsBefore.Volume);
             AfterStats.Text = string.Format(
                 CultureInfo.InvariantCulture,
                 "Triangles: {0}\nVolume: {1:0.###}",

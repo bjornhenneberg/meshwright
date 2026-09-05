@@ -38,6 +38,10 @@ public sealed class MeshViewportControl : OpenGlControlBase
     private Point _lastPointerPosition;
     private IViewportGizmo? _gizmo;
 
+    /// <summary>The camera driving this viewport, exposed for testing (asserting on Reset View's
+    /// effect requires reading actual camera pose, not just observing that FrameMesh ran).</summary>
+    public OrbitCamera Camera => _camera;
+
     public g3.DMesh3? Mesh
     {
         get => _mesh;
