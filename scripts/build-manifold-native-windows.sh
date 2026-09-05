@@ -91,34 +91,44 @@ echo "==> Building manifoldc target (Release)"
 cmake --build "$BUILD_DIR" --target manifoldc --config Release
 
 # --- 3. Install into the repo's native-asset layout -------------------------
-# CMake's default MSVC output name for the manifoldc shared library target
-# is "manifoldc.dll" (no "lib" prefix - that's a Unix convention CMake
-# doesn't apply on Windows). .NET's default DllImport probing on Windows
+# CMake's default output name for the manifoldc shared library target
+# depends on the generator: the Visual Studio generator drops the "lib"
+# prefix (Unix convention not applied there), but the Ninja generator
+# keeps CMake's default "lib" prefix even when targeting MSVC - so the
+# built file is "manifoldc.dll" under Visual Studio but "libmanifoldc.dll"
+# under Ninja. Accept either. .NET's default DllImport probing on Windows
 # tries the P/Invoke name exactly, then that name + ".dll" - it does NOT add
 # a "lib" prefix the way Unix probing does. ManifoldInterop.cs declares
 # `LibraryName = "libmanifoldc"`, so the file must be named
 # "libmanifoldc.dll" (with the prefix) for probing to find it without a
 # custom NativeLibrary.SetDllImportResolver - the same reason the Linux
 # script renames its .so output rather than leaving CMake's own filename.
-BUILT_DLL=$(find "$BUILD_DIR" -iname 'manifoldc.dll' -print -quit)
+BUILT_DLL=$(find "$BUILD_DIR" \( -iname 'manifoldc.dll' -o -iname 'libmanifoldc.dll' \) -print -quit)
 if [ -z "$BUILT_DLL" ]; then
-  echo "error: manifoldc.dll not found under $BUILD_DIR" >&2
+  echo "error: manifoldc.dll (or libmanifoldc.dll) not found under $BUILD_DIR" >&2
   exit 1
 fi
 
-# manifold.dll is the separate shared library manifoldc.dll depends on at
+# manifold.dll (or libmanifold.dll, same generator-dependent naming as
+# above) is the separate shared library manifoldc.dll depends on at
 # runtime (equivalent to libmanifold.so.3 on Linux). Windows has no RPATH
 # to fix up: the default DLL search order checks the loading module's own
 # directory first, so shipping it alongside manifoldc.dll in the same
 # folder is sufficient - no build-tree-path issue to work around here.
-BUILT_MANIFOLD_DLL=$(find "$BUILD_DIR" -iname 'manifold.dll' -print -quit)
+# Unlike libmanifoldc.dll, this one must keep its real built name rather
+# than being normalised: manifoldc.dll's import table records whatever
+# filename it actually linked against, so renaming it here would leave
+# manifoldc.dll unable to find its dependency at load time (the same
+# failure mode the macOS build hit by normalising libmanifold.dylib).
+BUILT_MANIFOLD_DLL=$(find "$BUILD_DIR" \( -iname 'manifold.dll' -o -iname 'libmanifold.dll' \) -print -quit)
 if [ -z "$BUILT_MANIFOLD_DLL" ]; then
-  echo "error: manifold.dll not found under $BUILD_DIR" >&2
+  echo "error: manifold.dll (or libmanifold.dll) not found under $BUILD_DIR" >&2
   exit 1
 fi
+MANIFOLD_DLL_NAME="$(basename "$BUILT_MANIFOLD_DLL")"
 
 rm -rf "$OUT_DIR"
 mkdir -p "$OUT_DIR"
 cp "$BUILT_DLL" "$OUT_DIR/libmanifoldc.dll"
-cp "$BUILT_MANIFOLD_DLL" "$OUT_DIR/manifold.dll"
-echo "==> Installed libmanifoldc.dll and manifold.dll to $OUT_DIR"
+cp "$BUILT_MANIFOLD_DLL" "$OUT_DIR/$MANIFOLD_DLL_NAME"
+echo "==> Installed libmanifoldc.dll and $MANIFOLD_DLL_NAME to $OUT_DIR"

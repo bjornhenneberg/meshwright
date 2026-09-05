@@ -92,27 +92,77 @@ if [ -z "$BUILT_DYLIB" ]; then
 fi
 
 # libmanifold.dylib is the separate shared library libmanifoldc.dylib
-# depends on at runtime (equivalent to libmanifold.so.3 on Linux).
-BUILT_MANIFOLD_DYLIB=$(find "$BUILD_DIR" -maxdepth 3 \( -name 'libmanifold.dylib' -o -name 'libmanifold.*.dylib' \) -print 2>/dev/null | grep -v manifoldc | head -n1)
-if [ -z "$BUILT_MANIFOLD_DYLIB" ]; then
-  echo "error: libmanifold*.dylib (not manifoldc) not found under $BUILD_DIR" >&2
+# depends on at runtime (equivalent to libmanifold.so.3 on Linux). CMake
+# builds it with a *versioned* soname/install_name - `-install_name
+# @rpath/libmanifold.3.dylib`, backed by a real file
+# libmanifold.3.5.2.dylib with libmanifold.3.dylib and libmanifold.dylib
+# as symlinks CMake also creates alongside it. libmanifoldc.dylib's own
+# dependency, recorded at link time, is the exact install_name string
+# above: @rpath/libmanifold.3.dylib - *not* whichever of the three names
+# a plain filename search happens to pick. So the file must be installed
+# under that exact versioned name; normalising it to "libmanifold.dylib"
+# (as this script used to) leaves the real dependency name missing from
+# $OUT_DIR, and libmanifoldc.dylib fails to load even though a
+# same-content file sits right next to it under the wrong name. This
+# mirrors the Linux script, which deliberately keeps its versioned soname
+# (libmanifold.so.3) rather than normalising it - do the same here instead
+# of copying to a fixed "libmanifold.dylib" name.
+#
+# Read the exact dependency name libmanifoldc.dylib actually needs at
+# load time straight off its own LC_LOAD_DYLIB command, rather than
+# guessing which of libmanifold.dylib / libmanifold.3.dylib /
+# libmanifold.3.5.2.dylib is the right one to install.
+MANIFOLD_DEP_NAME=$(otool -L "$BUILT_DYLIB" | tail -n +2 | awk '{print $1}' | grep -E '^(@rpath|@loader_path)/libmanifold\.' | head -n1 | xargs -I{} basename {})
+if [ -z "$MANIFOLD_DEP_NAME" ]; then
+  echo "error: libmanifoldc.dylib records no @rpath/@loader_path dependency on libmanifold under $BUILD_DIR" >&2
+  otool -L "$BUILT_DYLIB" >&2
+  exit 1
+fi
+BUILT_MANIFOLD_DEP=$(find "$BUILD_DIR" -maxdepth 3 -name "$MANIFOLD_DEP_NAME" -print 2>/dev/null | grep -v manifoldc | head -n1)
+if [ -z "$BUILT_MANIFOLD_DEP" ]; then
+  echo "error: $MANIFOLD_DEP_NAME (the exact name libmanifoldc.dylib depends on) not found under $BUILD_DIR" >&2
   exit 1
 fi
 
 rm -rf "$OUT_DIR"
 mkdir -p "$OUT_DIR"
 cp "$BUILT_DYLIB" "$OUT_DIR/libmanifoldc.dylib"
-cp "$BUILT_MANIFOLD_DYLIB" "$OUT_DIR/libmanifold.dylib"
-echo "==> Installed libmanifoldc.dylib and libmanifold.dylib to $OUT_DIR"
+cp "$BUILT_MANIFOLD_DEP" "$OUT_DIR/$MANIFOLD_DEP_NAME"
+echo "==> Installed libmanifoldc.dylib and $MANIFOLD_DEP_NAME to $OUT_DIR"
 
 # install_name_tool sanity check: confirm libmanifoldc.dylib's dependency
 # on libmanifold points at a loader-relative path, not an absolute
 # build-tree path (the macOS equivalent of the Linux script's RUNPATH
-# check).
+# check) - AND that every @rpath/@loader_path dependency it names
+# actually exists in $OUT_DIR. The absolute-path check alone would have
+# passed while shipping a libmanifoldc.dylib that referenced
+# libmanifold.3.dylib and had no such file next to it (this is exactly
+# what happened before this fix) - it printed "==> Verified ..." while
+# shipping an unloadable library, and the 22 resulting DllNotFoundException
+# failures only showed up later, in the test run.
 DEPS=$(otool -L "$OUT_DIR/libmanifoldc.dylib" | tail -n +2)
 if echo "$DEPS" | grep -q "$TOOLS_DIR"; then
   echo "error: libmanifoldc.dylib still references an absolute build-tree path:" >&2
   echo "$DEPS" >&2
   exit 1
 fi
-echo "==> Verified libmanifoldc.dylib has no absolute build-tree dependency path"
+# otool -L's first line after the header is the library's own id
+# (LC_ID_DYLIB, e.g. @rpath/libmanifoldc.3.dylib - not the "libmanifoldc.dylib"
+# name it was actually installed under) rather than a real dependency, so
+# skip it here; only the lines after it are things libmanifoldc.dylib
+# needs to find at load time.
+while read -r DEP_PATH; do
+  [ -z "$DEP_PATH" ] && continue
+  case "$DEP_PATH" in
+    @rpath/*|@loader_path/*)
+      DEP_NAME="${DEP_PATH#@rpath/}"
+      DEP_NAME="${DEP_NAME#@loader_path/}"
+      if [ ! -e "$OUT_DIR/$DEP_NAME" ]; then
+        echo "error: libmanifoldc.dylib depends on $DEP_PATH but $OUT_DIR/$DEP_NAME does not exist:" >&2
+        echo "$DEPS" >&2
+        exit 1
+      fi
+      ;;
+  esac
+done <<< "$(echo "$DEPS" | tail -n +2 | awk '{print $1}')"
+echo "==> Verified libmanifoldc.dylib has no absolute build-tree dependency path, and every @rpath/@loader_path dependency resolves in $OUT_DIR"
