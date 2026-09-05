@@ -172,6 +172,15 @@ jobs:
           echo "--- otool -L on the installed dylib:"
 
           otool -L runtimes/osx-arm64/native/libmanifoldc.dylib 2>/dev/null || true
+          echo "--- architecture and signature:"
+          NATIVE=tests/Meshwright.Tests/bin/Release/net10.0/runtimes/osx-arm64/native
+          file "$NATIVE/libmanifoldc.dylib" || true
+          lipo -info "$NATIVE/libmanifoldc.dylib" 2>/dev/null || true
+          codesign -dv "$NATIVE/libmanifoldc.dylib" 2>&1 | head -5 || true
+          echo "--- LC_RPATH entries (otool -L does not show these):"
+          otool -l "$NATIVE/libmanifoldc.dylib" | grep -A2 LC_RPATH || true
+          echo "--- the real dyld error, which DllNotFoundException swallows:"
+          python3 -c "import ctypes; ctypes.CDLL('$PWD/$NATIVE/libmanifoldc.dylib'); print('dlopen OK')" || true
 
 
       - name: Test
