@@ -284,10 +284,25 @@ public partial class TransformPanel : UserControl
                 return;
             }
 
+            // Captured before Apply: Apply raises MeshDocument.Changed synchronously, which
+            // MainWindow uses to refresh every panel's stats display from the (now mutated)
+            // document, clobbering BeforeStatsText with post-operation figures. Restoring the
+            // pre-operation snapshot below undoes that clobber.
+            var statsBefore = MeshStatistics.Compute(_document.Mesh);
+            var boundsBefore = _document.Mesh.CachedBounds;
+
             OperationResult result = _document.Apply(operation);
 
             var statsAfter = MeshStatistics.Compute(_document.Mesh);
             var boundsAfter = _document.Mesh.CachedBounds;
+            BeforeStatsText.Text = string.Format(
+                CultureInfo.InvariantCulture,
+                "{0} tris, {1:0.##} mm³, bounds: {2:0.#} × {3:0.#} × {4:0.#}",
+                statsBefore.TriangleCount,
+                statsBefore.Volume,
+                boundsBefore.Extents.x,
+                boundsBefore.Extents.y,
+                boundsBefore.Extents.z);
             AfterStatsText.Text = string.Format(
                 CultureInfo.InvariantCulture,
                 "{0} tris, {1:0.##} mm³, bounds: {2:0.#} × {3:0.#} × {4:0.#}",
@@ -423,10 +438,26 @@ public partial class TransformPanel : UserControl
         try
         {
             var operation = new AlignToBedOperation();
+
+            // Captured before Apply: Apply raises MeshDocument.Changed synchronously, which
+            // MainWindow uses to refresh every panel's stats display from the (now mutated)
+            // document, clobbering BeforeStatsText with post-operation figures. Restoring the
+            // pre-operation snapshot below undoes that clobber.
+            var statsBefore = MeshStatistics.Compute(_document.Mesh);
+            var boundsBefore = _document.Mesh.CachedBounds;
+
             OperationResult result = _document.Apply(operation);
 
             var statsAfter = MeshStatistics.Compute(_document.Mesh);
             var boundsAfter = _document.Mesh.CachedBounds;
+            BeforeStatsText.Text = string.Format(
+                CultureInfo.InvariantCulture,
+                "{0} tris, {1:0.##} mm³, bounds: {2:0.#} × {3:0.#} × {4:0.#}",
+                statsBefore.TriangleCount,
+                statsBefore.Volume,
+                boundsBefore.Extents.x,
+                boundsBefore.Extents.y,
+                boundsBefore.Extents.z);
             AfterStatsText.Text = string.Format(
                 CultureInfo.InvariantCulture,
                 "{0} tris, {1:0.##} mm³, bounds: {2:0.#} × {3:0.#} × {4:0.#}",

@@ -18,6 +18,9 @@ public sealed class OrbitCamera
     private const float MinPitch = -MathF.PI / 2f + 0.01f;
     private const float MaxPitch = MathF.PI / 2f - 0.01f;
 
+    private const float DefaultYaw = MathF.PI / 4f;
+    private const float DefaultPitch = MathF.PI / 6f;
+
     public float MinDistance { get; set; } = 0.01f;
     public float MaxDistance { get; set; } = 1000f;
 
@@ -34,8 +37,8 @@ public sealed class OrbitCamera
     {
         Target = Vector3.Zero;
         Distance = 5f;
-        Yaw = MathF.PI / 4f;
-        Pitch = MathF.PI / 6f;
+        Yaw = DefaultYaw;
+        Pitch = DefaultPitch;
         FovRadians = MathF.PI / 4f;
         NearPlane = 0.01f;
         FarPlane = 1000f;
@@ -79,13 +82,20 @@ public sealed class OrbitCamera
 
     /// <summary>
     /// Frames the camera on a bounding sphere: centers the target, sets Distance so the sphere
-    /// fits within the vertical FOV, and rescales the distance/clip-plane ranges to the mesh's
-    /// scale so wildly different sized meshes (millimeters to meters) don't clip or feel wrong.
+    /// fits within the vertical FOV, resets orientation to the default yaw/pitch, and rescales
+    /// the distance/clip-plane ranges to the mesh's scale so wildly different sized meshes
+    /// (millimeters to meters) don't clip or feel wrong.
+    ///
+    /// Resetting Yaw/Pitch here (not just Target/Distance) matters: this is the method Reset View
+    /// calls, and an orbit alone (no pan/zoom) leaves Target and the fitted Distance unchanged, so
+    /// without resetting orientation too, Reset View would look like it did nothing.
     /// </summary>
     public void Frame(Vector3 center, float radius)
     {
         radius = MathF.Max(radius, 0.001f);
         Target = center;
+        Yaw = DefaultYaw;
+        Pitch = DefaultPitch;
 
         const float marginFactor = 1.25f;
         Distance = radius / MathF.Sin(FovRadians / 2f) * marginFactor;

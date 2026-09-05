@@ -20,7 +20,7 @@
         <MenuItem Name="RedoMenuItem" Header="_Redo" Click="OnRedoClick" HotKey="Ctrl+Y" />
       </MenuItem>
       <MenuItem Header="_View">
-        <MenuItem Header="_Reset View" Click="OnResetViewClick" HotKey="Ctrl+0" />
+        <MenuItem Name="ResetViewMenuItem" Header="_Reset View" Click="OnResetViewClick" HotKey="Ctrl+D0" />
       </MenuItem>
     </Menu>
 
