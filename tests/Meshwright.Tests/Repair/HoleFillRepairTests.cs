@@ -104,7 +104,11 @@ public class HoleFillRepairTests
     [Theory]
     [InlineData(HoleFillMode.Flat, 4)]
     [InlineData(HoleFillMode.Planar, 2)]
-    [InlineData(HoleFillMode.Smooth, 4)]
+    // A cube face's boundary loop is a single quad: its diagonal (~1.41x the edge length) falls
+    // under Smooth's refinement threshold (1.5x), so no interior vertex is added, and the sharp
+    // 90-degree fold at a cube corner isn't the kind of continuous curvature Smooth models -- it
+    // correctly matches Planar's ear-clip fill here rather than inventing a false bulge.
+    [InlineData(HoleFillMode.Smooth, 2)]
     public void Fill_CubeMissingOneFace_ClosesTheHole(HoleFillMode mode, int expectedTrianglesAdded)
     {
         DMesh3 mesh = BuildCubeMissingOneFace();
@@ -160,6 +164,14 @@ public class HoleFillRepairTests
         Assert.Equal(0, BoundaryLoopCount(mesh));
     }
 
+    /// <summary>
+    /// This hole sits in a flat face, so Smooth's curvature bulge is a no-op here (see
+    /// <see cref="HoleFillSmoothTests.Smooth_FlatPlateHole_InteriorVerticesStayInThePlane"/> for
+    /// that invariant on a cleaner example) -- what's worth pinning down on this particular
+    /// non-convex loop is that its longest ear-clip diagonal (~2.24, crossing the L-shape) exceeds
+    /// the refinement threshold (1.5x the ~1-unit boundary edge length) exactly once, adding
+    /// exactly one interior vertex via a single edge split.
+    /// </summary>
     [Fact]
     public void Fill_NonConvexInteriorHole_Smooth_AddsOneInteriorVertex()
     {
@@ -174,7 +186,7 @@ public class HoleFillRepairTests
 
         Assert.Equal(1, result.HolesFilled);
         Assert.Equal(expectedTriangles, result.TrianglesAdded);
-        Assert.Equal(vertsBefore + 1, mesh.VertexCount); // exactly one new (smoothed) interior vertex
+        Assert.Equal(vertsBefore + 1, mesh.VertexCount); // exactly one new interior (refinement) vertex
         Assert.Equal(trisBefore + expectedTriangles, mesh.TriangleCount);
         Assert.Equal(0, BoundaryLoopCount(mesh));
     }
