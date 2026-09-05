@@ -295,6 +295,17 @@
     </ul>
 
     <figure>
+      <img src="images/inspect-broken.png" width="1740" height="1032"
+           alt="Meshwright showing the broken-cube sample: a hole outlined in yellow, three faces in
+                red, and a diagnostics list naming one hole, three flipped faces and one stray shell.">
+      <figcaption>
+        <code>samples/broken-cube.stl</code>, shipped for exactly this: a missing
+        face, three flipped normals and a stray tetrahedron, each named and
+        located. Small enough to see every defect at once.
+      </figcaption>
+    </figure>
+
+    <figure>
       <img src="images/inspect-clean.png" width="1740" height="1032"
            alt="Meshwright showing a Menger sponge model with the diagnostics panel reporting one
                 shell and no issues found.">
@@ -327,11 +338,13 @@
 
     <figure>
       <img src="images/auto-repair.png" width="1740" height="1032"
-           alt="Meshwright after running Auto Repair: the status line reads 1024 triangles with 0
-                issues found, and the diagnostics panel reports one shell and no issues.">
+           alt="Meshwright after running Auto Repair on the broken cube: the status line reads 12
+                triangles with 0 issues found, and the diagnostics panel reports one shell and no
+                issues.">
       <figcaption>
-        The same mesh after Auto Repair: 856 issues and 66 shells reduced to
-        <em>No issues found</em> and a single closed shell.
+        The broken cube above after one click: the stray shell gone, the missing
+        face closed, normals unified — one shell, <em>No issues found</em>, and a
+        volume of exactly 8 for a 2 × 2 × 2 cube.
       </figcaption>
     </figure>
 
@@ -377,11 +390,12 @@
     <figure>
       <img src="images/plane-cut.png" width="1740" height="1032"
            alt="Meshwright after a plane cut: the Menger sponge is halved, bounds now read 2 x 2 x 1,
-                and the diagnostics panel lists non-manifold edges introduced along the cut.">
+                the diagnostics panel reports a single shell, and some defects remain along the cut.">
       <figcaption>
-        A cut through the middle: 2,112 triangles down to 1,182, bounds from
-        2 × 2 × 2 to 2 × 2 × 1. Note the defects introduced along the cut —
-        see <a href="#known">known rough edges</a>.
+        A cut through the middle: bounds from 2 × 2 × 2 to 2 × 2 × 1, still a
+        single shell. The remaining defects are all in the cap, because this
+        cross-section is many separate loops — see
+        <a href="#known">known rough edges</a>.
       </figcaption>
     </figure>
 
@@ -444,11 +458,21 @@
     </p>
     <ul>
       <li>
-        <strong>Plane cut results are not watertight yet.</strong> The cap does not
-        close the shell properly, so a cut leaves non-manifold edges and stray
-        shells behind — visible in the plane-cut screenshot above. Run
-        <strong>Auto Repair</strong> after a cut and it cleans up to a single
-        closed shell.
+        <strong>Cutting through a complex cross-section leaves a bad cap.</strong>
+        A cut whose cross-section is a single loop closes correctly. Where the
+        plane passes through several separate loops at once — the Menger sponge
+        screenshot above, or any model with holes through it — the cap is built
+        as one loop across all of them, which leaves self-intersections along the
+        cut. The cut itself is sound: the model keeps its bounds and volume, and
+        the damage is confined to the cap.
+      </li>
+      <li>
+        <strong>Repair can remove geometry it mistakes for debris.</strong>
+        Auto Repair's small-shell step deletes shells under 1% of total volume,
+        and it cannot tell a genuine stray fragment from a real part of a model
+        that arrived in pieces. On a model with legitimately small separate
+        parts, lower the threshold or run the steps individually. Watch the
+        bounds in the diagnostics panel: if they shrink, something was deleted.
       </li>
       <li>
         <strong>Boolean cannot use your own second mesh.</strong> It always
