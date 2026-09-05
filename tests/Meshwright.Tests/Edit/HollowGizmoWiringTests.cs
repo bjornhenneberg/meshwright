@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Threading.Tasks;
 using Avalonia.Headless.XUnit;
 using g3;
 using Meshwright.App.Gizmos;
@@ -73,7 +74,7 @@ public class HollowGizmoWiringTests
     }
 
     [AvaloniaFact]
-    public void HollowPanel_Apply_AfterGizmoDragged_UsesGizmoValueNotTextbox()
+    public async Task HollowPanel_Apply_AfterGizmoDragged_UsesGizmoValueNotTextbox()
     {
         var panel = new HollowPanel();
         var document = new MeshDocument();
@@ -92,7 +93,7 @@ public class HollowGizmoWiringTests
         Assert.True(System.MathF.Abs(3f - gizmo.WallThickness) <= 0.05f,
             $"Expected wall thickness near 3mm, got {gizmo.WallThickness}mm.");
 
-        InvokeApplyClick(panel);
+        await InvokeApplyClick(panel);
 
         // The result summary should mention the gizmo's thickness, not the stale textbox
         // default (2.0mm) — formatted the same way HollowOperation formats it ("0.###").
@@ -101,9 +102,16 @@ public class HollowGizmoWiringTests
         Assert.DoesNotContain("2mm wall thickness", panel.OperationResultMessage);
     }
 
-    private static void InvokeApplyClick(HollowPanel panel)
+    /// <summary>Apply now runs the operation off the UI thread (backlog item 13), so this awaits
+    /// the panel's own record of the in-flight Task rather than asserting immediately after the
+    /// reflection call returns, which would race the background work.</summary>
+    private static async Task InvokeApplyClick(HollowPanel panel)
     {
         System.Reflection.MethodInfo method = typeof(HollowPanel).GetMethod("OnApplyClick", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
         method.Invoke(panel, new object?[] { null, null });
+        if (panel.PendingOperationForTesting is { } pending)
+        {
+            await pending;
+        }
     }
 }

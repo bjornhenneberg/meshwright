@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Threading.Tasks;
 using Avalonia.Headless.XUnit;
 using g3;
 using Meshwright.App;
@@ -112,7 +113,7 @@ public class BooleanPanelTests
     }
 
     [AvaloniaFact]
-    public void ApplyClick_WithoutSecondaryMesh_ExplainsWhyRatherThanFallingBackToAFixture()
+    public async Task ApplyClick_WithoutSecondaryMesh_ExplainsWhyRatherThanFallingBackToAFixture()
     {
         var document = new MeshDocument();
         document.Load(CreateUnitCube());
@@ -120,7 +121,7 @@ public class BooleanPanelTests
         var panel = new BooleanPanel();
         panel.SetDocument(document);
 
-        panel.InvokeApplyForTesting();
+        await panel.InvokeApplyForTesting();
 
         Assert.Contains("secondary mesh", panel.OperationResultMessage, StringComparison.OrdinalIgnoreCase);
         // The document must be untouched: no silent fixture-cube fallback.
@@ -129,7 +130,7 @@ public class BooleanPanelTests
     }
 
     [AvaloniaFact]
-    public void Union_OfLoadedMeshAndSecondFile_HasVolumeBetweenEitherAloneAndTheirSumAndUnionBoundingBox()
+    public async Task Union_OfLoadedMeshAndSecondFile_HasVolumeBetweenEitherAloneAndTheirSumAndUnionBoundingBox()
     {
         var document = new MeshDocument();
         var cubeA = CreateUnitCube();
@@ -146,7 +147,7 @@ public class BooleanPanelTests
         {
             panel.LoadSecondaryMeshFromPath(path);
             panel.SelectOperationForTesting(0); // Union
-            panel.InvokeApplyForTesting();
+            await panel.InvokeApplyForTesting();
         }
         finally
         {
@@ -175,7 +176,7 @@ public class BooleanPanelTests
     }
 
     [AvaloniaFact]
-    public void Difference_OfLoadedMeshAndSecondFile_HasVolumeLessThanPrimaryAndBoundsWithinPrimary()
+    public async Task Difference_OfLoadedMeshAndSecondFile_HasVolumeLessThanPrimaryAndBoundsWithinPrimary()
     {
         var document = new MeshDocument();
         var largeCube = CreateUnitCube();
@@ -191,7 +192,7 @@ public class BooleanPanelTests
         {
             panel.LoadSecondaryMeshFromPath(path);
             panel.SelectOperationForTesting(1); // Difference
-            panel.InvokeApplyForTesting();
+            await panel.InvokeApplyForTesting();
         }
         finally
         {
@@ -216,7 +217,7 @@ public class BooleanPanelTests
     }
 
     [AvaloniaFact]
-    public void Intersection_OfLoadedMeshAndSecondFile_HasVolumeLessThanEitherAndBoundsInsideBoth()
+    public async Task Intersection_OfLoadedMeshAndSecondFile_HasVolumeLessThanEitherAndBoundsInsideBoth()
     {
         var document = new MeshDocument();
         var cubeA = CreateUnitCube();
@@ -233,7 +234,7 @@ public class BooleanPanelTests
         {
             panel.LoadSecondaryMeshFromPath(path);
             panel.SelectOperationForTesting(2); // Intersection
-            panel.InvokeApplyForTesting();
+            await panel.InvokeApplyForTesting();
         }
         finally
         {
@@ -262,7 +263,7 @@ public class BooleanPanelTests
     }
 
     [AvaloniaFact]
-    public void MainWindow_BooleanPanel_LoadingSecondaryMeshAndApplying_UpdatesViewportThroughDocumentChanged()
+    public async Task MainWindow_BooleanPanel_LoadingSecondaryMeshAndApplying_UpdatesViewportThroughDocumentChanged()
     {
         // §11 (2026-09-05): every mesh change must announce itself through MeshDocument.Changed
         // so the viewport/diagnostics refresh; this proves the boolean panel's real (non-fixture)
@@ -281,7 +282,7 @@ public class BooleanPanelTests
             Assert.True(panel.HasSecondaryMesh);
 
             panel.SelectOperationForTesting(0); // Union
-            panel.InvokeApplyForTesting();
+            await panel.InvokeApplyForTesting();
 
             Assert.NotEqual(trianglesBefore, window.CurrentReport!.Statistics.TriangleCount);
             Assert.StartsWith("Boolean Union", window.StatusMessage);

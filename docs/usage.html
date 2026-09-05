@@ -477,9 +477,12 @@
         third-party tool first.
       </li>
       <li>
-        <strong>Operations are synchronous.</strong> On a six-figure-triangle mesh,
-        Auto Repair and decimation can take tens of seconds with no progress bar
-        and an unresponsive window.
+        <strong>Only Auto Repair can be cancelled or show real progress.</strong>
+        Operations now run in the background, so the window keeps repainting and
+        you can still orbit while one is working. Auto Repair runs as five steps,
+        so it shows how far along it is and its Cancel button works between
+        steps. Every other operation is a single call with no safe midpoint: you
+        get a working indicator with Cancel greyed out, and it has to finish.
       </li>
       <li>
         <strong>Not every spatial parameter has a gizmo yet.</strong> Plane cut,

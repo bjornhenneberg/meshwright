@@ -1,5 +1,6 @@
 using System.Numerics;
 using System.Reflection;
+using System.Threading.Tasks;
 using Avalonia.Headless.XUnit;
 using g3;
 using Meshwright.App.Gizmos;
@@ -166,7 +167,7 @@ public class PlaneCutGizmoWiringTests
     }
 
     [AvaloniaFact]
-    public void PlaneCutPanel_Apply_AfterGizmoDragged_UsesGizmoValuesNotTextboxes()
+    public async Task PlaneCutPanel_Apply_AfterGizmoDragged_UsesGizmoValuesNotTextboxes()
     {
         var panel = new PlaneCutPanel();
         var document = new MeshDocument();
@@ -182,7 +183,7 @@ public class PlaneCutGizmoWiringTests
         gizmo.OnPointerMoved(MakeEvent(new Vector3(0.5f, 0.5f, 3f), new Vector3(0, 0.3f, -1f), GizmoPointerButton.None, GizmoModifierKeys.Shift));
         Assert.True(gizmo.WasTouched);
 
-        InvokeApplyClick(panel);
+        await InvokeApplyClick(panel);
 
         var expectedPoint = new Vector3d(gizmo.PlanePosition.X, gizmo.PlanePosition.Y, gizmo.PlanePosition.Z);
         var expectedNormal = new Vector3d(gizmo.PlaneNormal.X, gizmo.PlaneNormal.Y, gizmo.PlaneNormal.Z).Normalized;
@@ -198,9 +199,16 @@ public class PlaneCutGizmoWiringTests
         Assert.NotEqual(0.0, panel.CurrentPlanePoint.z, 3);
     }
 
-    private static void InvokeApplyClick(PlaneCutPanel panel)
+    /// <summary>Apply now runs the operation off the UI thread (backlog item 13), so this awaits
+    /// the panel's own record of the in-flight Task rather than asserting immediately after the
+    /// reflection call returns, which would race the background work.</summary>
+    private static async Task InvokeApplyClick(PlaneCutPanel panel)
     {
         MethodInfo method = typeof(PlaneCutPanel).GetMethod("OnApplyClick", BindingFlags.NonPublic | BindingFlags.Instance)!;
         method.Invoke(panel, new object?[] { null, null });
+        if (panel.PendingOperationForTesting is { } pending)
+        {
+            await pending;
+        }
     }
 }

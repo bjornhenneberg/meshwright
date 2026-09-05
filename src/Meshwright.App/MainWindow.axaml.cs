@@ -12,6 +12,7 @@ using g3;
 using Meshwright.App.Gizmos;
 using Meshwright.App.Views.Edit;
 using Meshwright.Core;
+using Meshwright.Core.Operations;
 using Meshwright.Geometry.Diagnostics;
 using Meshwright.IO;
 using Meshwright.IO.Stl;
@@ -50,6 +51,14 @@ public partial class MainWindow : Window
             RefreshFromDocument();
             SetStatus(_document.LastChangeDescription ?? "Updated");
         };
+
+        // One place to keep a second operation from starting while one is running, grey out
+        // Undo/Redo, and show/hide the busy indicator (§6.3, backlog item 13) — every Edit
+        // panel calls MeshDocument.ApplyAsync directly rather than routing through here, so this
+        // is the one subscription that has to catch all of them, mirroring the Changed handler
+        // above (§11, 2026-09-05).
+        _document.BusyChanged += (_, _) => RefreshBusyState();
+        _document.Progress += (_, progress) => ShowOperationProgress(progress);
 
         LoadSampleMesh();
     }
@@ -221,6 +230,14 @@ public partial class MainWindow : Window
 
     private async void OnOpenFileClick(object? sender, RoutedEventArgs e)
     {
+        // The toolbar button isn't disabled by IsEnabled alone as reliably as the menu item
+        // (RefreshBusyState sets both, but this guard is cheap insurance against loading a new
+        // mesh out from under a running operation).
+        if (_document.IsBusy)
+        {
+            return;
+        }
+
         var topLevel = TopLevel.GetTopLevel(this);
         if (topLevel?.StorageProvider is not { } storageProvider)
         {
@@ -270,6 +287,11 @@ public partial class MainWindow : Window
 
     private async void OnExportFileClick(object? sender, RoutedEventArgs e)
     {
+        if (_document.IsBusy)
+        {
+            return;
+        }
+
         if (_document.Mesh is not { } mesh)
         {
             StatusText.Text = "Nothing to export";
@@ -351,6 +373,16 @@ public partial class MainWindow : Window
 
     private void PerformUndo()
     {
+        // MeshDocument.Undo() already refuses while IsBusy (an operation may be mutating the
+        // mesh on a background thread right now), but the menu item's HotKey isn't guaranteed to
+        // respect IsEnabled, so check explicitly for an honest status message rather than the
+        // misleading "Nothing to undo".
+        if (_document.IsBusy)
+        {
+            StatusText.Text = "Can't undo while an operation is running.";
+            return;
+        }
+
         if (_document.Undo())
         {
             SetStatus("Undo");
@@ -364,6 +396,12 @@ public partial class MainWindow : Window
 
     private void PerformRedo()
     {
+        if (_document.IsBusy)
+        {
+            StatusText.Text = "Can't redo while an operation is running.";
+            return;
+        }
+
         if (_document.Redo())
         {
             SetStatus("Redo");
@@ -462,6 +500,65 @@ public partial class MainWindow : Window
             (false, false) => string.Empty,
         };
     }
+
+    /// <summary>Whether the busy indicator is currently shown, exposed for testing.</summary>
+    public bool IsOperationInProgress => OperationProgressPanel.IsVisible;
+
+    /// <summary>Current operation-progress status text, exposed for testing.</summary>
+    public string? OperationProgressMessage => OperationProgressText.Text;
+
+    /// <summary>
+    /// Disables the entire Edit tab strip, Undo/Redo, and Open/Export while an operation is
+    /// running (backlog item 13: the UI must not allow a second operation to start, and must
+    /// not let the mesh be swapped out or undone from under a running mutation), and shows or
+    /// hides the busy indicator. Runs on every <see cref="MeshDocument.BusyChanged"/>.
+    /// </summary>
+    private void RefreshBusyState()
+    {
+        bool busy = _document.IsBusy;
+
+        EditTabControl.IsEnabled = !busy;
+        OpenMenuItem.IsEnabled = !busy;
+        ExportMenuItem.IsEnabled = !busy;
+        OpenFileButton.IsEnabled = !busy;
+        ExportFileButton.IsEnabled = !busy;
+        RefreshUndoRedoState();
+
+        OperationProgressPanel.IsVisible = busy;
+        CancelOperationButton.IsEnabled = busy && _document.CanCancelCurrentOperation;
+
+        if (busy)
+        {
+            // Reset to an honest "no idea how far along this is" state every time a new
+            // operation starts. It only becomes a determinate bar if Progress actually fires —
+            // most operations never will, and showing a percentage that isn't tracking anything
+            // would violate §4.
+            OperationProgressBar.IsIndeterminate = true;
+            OperationProgressText.Text = $"Working: {_document.CurrentOperationName ?? "operation"}...";
+        }
+        else
+        {
+            OperationProgressBar.IsIndeterminate = true;
+            OperationProgressBar.Value = 0;
+        }
+    }
+
+    /// <summary>Switches the busy indicator to a determinate bar the first time real progress
+    /// arrives (see <see cref="MeshDocument.Progress"/>) and updates it after. Called on whatever
+    /// thread raised the event — safe here because <see cref="MeshDocument.ApplyAsync"/> only
+    /// ever raises it back on the caller's own context (the UI thread).</summary>
+    private void ShowOperationProgress(OperationProgress progress)
+    {
+        OperationProgressText.Text = progress.Description;
+        if (progress.FractionComplete is { } fraction)
+        {
+            OperationProgressBar.IsIndeterminate = false;
+            OperationProgressBar.Value = fraction;
+        }
+    }
+
+    private void OnCancelOperationClick(object? sender, RoutedEventArgs e) =>
+        _document.CancelCurrentOperation();
 
     private void UpdateDiagnosticsPanel(MeshDiagnosticsReport report)
     {

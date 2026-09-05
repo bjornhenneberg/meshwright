@@ -1,3 +1,4 @@
+using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.Interactivity;
@@ -54,11 +55,22 @@ public class RepairPanelTests
         return (panel, document);
     }
 
-    private static void Click(RepairPanel panel, string buttonName)
+    /// <summary>
+    /// Raises the button's Click event and awaits the resulting operation. Every button here now
+    /// runs its operation off the UI thread (backlog item 13), so a caller that just raised the
+    /// event and asserted immediately would be racing a background <c>Task.Run</c> — awaiting the
+    /// panel's <see cref="RepairPanel.PendingOperationForTesting"/> is what makes this a real test
+    /// of the outcome rather than a coin flip.
+    /// </summary>
+    private static async Task Click(RepairPanel panel, string buttonName)
     {
         Button? button = panel.FindControl<Button>(buttonName);
         Assert.NotNull(button);
         button!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        if (panel.PendingOperationForTesting is { } pending)
+        {
+            await pending;
+        }
     }
 
     [AvaloniaFact]
@@ -83,24 +95,24 @@ public class RepairPanelTests
     }
 
     [AvaloniaFact]
-    public void FillHoles_ClosesTheOpenFace()
+    public async Task FillHoles_ClosesTheOpenFace()
     {
         (RepairPanel panel, MeshDocument document) = PanelWithHolyCube();
         int holesBefore = CountHoleIssues(document);
         Assert.True(holesBefore > 0, "fixture should start with an open boundary");
 
-        Click(panel, "FillHolesButton");
+        await Click(panel, "FillHolesButton");
 
         Assert.Equal(0, CountHoleIssues(document));
         Assert.True(document.CanUndo);
     }
 
     [AvaloniaFact]
-    public void AutoRepair_RunsAsOneUndoableStepAndReportsWhatItDid()
+    public async Task AutoRepair_RunsAsOneUndoableStepAndReportsWhatItDid()
     {
         (RepairPanel panel, MeshDocument document) = PanelWithHolyCube();
 
-        Click(panel, "AutoRepairButton");
+        await Click(panel, "AutoRepairButton");
 
         Assert.Equal(0, CountHoleIssues(document));
         Assert.NotNull(panel.OperationResultMessage);
@@ -119,11 +131,11 @@ public class RepairPanelTests
     [InlineData("UnifyNormalsButton")]
     [InlineData("FillHolesButton")]
     [InlineData("AutoRepairButton")]
-    public void EveryRepairButton_ReachesAnOperationRatherThanErroring(string buttonName)
+    public async Task EveryRepairButton_ReachesAnOperationRatherThanErroring(string buttonName)
     {
         (RepairPanel panel, _) = PanelWithHolyCube();
 
-        Click(panel, buttonName);
+        await Click(panel, buttonName);
 
         Assert.NotNull(panel.OperationResultMessage);
         Assert.DoesNotContain("Error:", panel.OperationResultMessage!);
@@ -131,14 +143,14 @@ public class RepairPanelTests
     }
 
     [AvaloniaFact]
-    public void UnparseableParameter_ReportsItInsteadOfThrowing()
+    public async Task UnparseableParameter_ReportsItInsteadOfThrowing()
     {
         (RepairPanel panel, MeshDocument document) = PanelWithHolyCube();
         TextBox? input = panel.FindControl<TextBox>("MinVolumeFractionInput");
         Assert.NotNull(input);
         input!.Text = "not a number";
 
-        Click(panel, "RemoveSmallShellsButton");
+        await Click(panel, "RemoveSmallShellsButton");
 
         Assert.Contains("Error:", panel.OperationResultMessage!);
         Assert.False(document.CanUndo);

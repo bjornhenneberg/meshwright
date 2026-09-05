@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Meshwright.Core;
@@ -39,6 +40,13 @@ public partial class RepairPanel : UserControl
     /// <summary>Current operation result message text, exposed for testing.</summary>
     public string? OperationResultMessage => ResultMessageText?.Text;
 
+    /// <summary>
+    /// The in-flight Apply from the most recent button click, exposed so tests can await the
+    /// real completion of an operation that now runs off the UI thread instead of asserting
+    /// immediately after the click returns (which would race the background work).
+    /// </summary>
+    public Task? PendingOperationForTesting { get; private set; }
+
     private void UpdateStatsDisplay()
     {
         if (_document?.Mesh is null)
@@ -69,20 +77,20 @@ public partial class RepairPanel : UserControl
             issueCount);
     }
 
-    private void OnAutoRepairClick(object? sender, RoutedEventArgs e) =>
-        RunOperation(() => new AutoRepairPipeline());
+    private async void OnAutoRepairClick(object? sender, RoutedEventArgs e) =>
+        await RunOperation(() => new AutoRepairPipeline());
 
-    private void OnRemoveDegenerateClick(object? sender, RoutedEventArgs e) =>
-        RunOperation(() => new RemoveDegenerateAndDuplicatesOperation());
+    private async void OnRemoveDegenerateClick(object? sender, RoutedEventArgs e) =>
+        await RunOperation(() => new RemoveDegenerateAndDuplicatesOperation());
 
-    private void OnResolveSelfIntersectionsClick(object? sender, RoutedEventArgs e) =>
-        RunOperation(() => new ResolveSelfIntersectionsOperation());
+    private async void OnResolveSelfIntersectionsClick(object? sender, RoutedEventArgs e) =>
+        await RunOperation(() => new ResolveSelfIntersectionsOperation());
 
-    private void OnUnifyNormalsClick(object? sender, RoutedEventArgs e) =>
-        RunOperation(() => new UnifyNormalsOperation());
+    private async void OnUnifyNormalsClick(object? sender, RoutedEventArgs e) =>
+        await RunOperation(() => new UnifyNormalsOperation());
 
-    private void OnRemoveSmallShellsClick(object? sender, RoutedEventArgs e) =>
-        RunOperation(() =>
+    private async void OnRemoveSmallShellsClick(object? sender, RoutedEventArgs e) =>
+        await RunOperation(() =>
         {
             if (!double.TryParse(
                     MinVolumeFractionInput.Text,
@@ -96,11 +104,11 @@ public partial class RepairPanel : UserControl
             return new RemoveSmallShellsOperation(minVolumeFraction);
         });
 
-    private void OnFillHolesClick(object? sender, RoutedEventArgs e) =>
-        RunOperation(() => new FillHolesOperation(SelectedHoleFillMode()));
+    private async void OnFillHolesClick(object? sender, RoutedEventArgs e) =>
+        await RunOperation(() => new FillHolesOperation(SelectedHoleFillMode()));
 
-    private void OnVoxelRemeshClick(object? sender, RoutedEventArgs e) =>
-        RunOperation(() =>
+    private async void OnVoxelRemeshClick(object? sender, RoutedEventArgs e) =>
+        await RunOperation(() =>
         {
             if (!int.TryParse(
                     VoxelResolutionInput.Text,
@@ -124,10 +132,18 @@ public partial class RepairPanel : UserControl
     /// <summary>
     /// Shared apply path for every button here: builds the operation (parameter parsing included,
     /// so a bad value is reported the same way a failed repair is), applies it through the
-    /// document, and reports the outcome. The document raises Changed, which is what refreshes
-    /// the viewport and diagnostics.
+    /// document — off the UI thread, per §6.3/backlog item 13 — and reports the outcome. The
+    /// document raises Changed once the (possibly long) operation finishes, which is what
+    /// refreshes the viewport and diagnostics.
     /// </summary>
-    private void RunOperation(Func<IMeshOperation> buildOperation)
+    private Task RunOperation(Func<IMeshOperation> buildOperation)
+    {
+        Task task = RunOperationCore(buildOperation);
+        PendingOperationForTesting = task;
+        return task;
+    }
+
+    private async Task RunOperationCore(Func<IMeshOperation> buildOperation)
     {
         if (_document?.Mesh is null)
         {
@@ -139,13 +155,13 @@ public partial class RepairPanel : UserControl
         {
             IMeshOperation operation = buildOperation();
 
-            // Captured before Apply: Apply raises MeshDocument.Changed synchronously, which
-            // MainWindow uses to refresh every panel's stats display from the (now mutated)
-            // document, clobbering BeforeStats with post-operation figures. Restoring the
-            // pre-operation snapshot below undoes that clobber.
+            // Captured before Apply: Apply raises MeshDocument.Changed once the operation
+            // finishes, which MainWindow uses to refresh every panel's stats display from the
+            // (now mutated) document, clobbering BeforeStats with post-operation figures.
+            // Restoring the pre-operation snapshot below undoes that clobber.
             string before = DescribeCurrentMesh();
 
-            OperationResult result = _document.Apply(operation);
+            OperationResult result = await _document.ApplyAsync(operation);
 
             BeforeStats.Text = before;
             AfterStats.Text = DescribeCurrentMesh();

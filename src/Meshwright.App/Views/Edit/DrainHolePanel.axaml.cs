@@ -2,6 +2,7 @@ using System;
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Linq;
+using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using g3;
@@ -60,6 +61,10 @@ public partial class DrainHolePanel : UserControl
 
     /// <summary>Current operation result message text, exposed for testing.</summary>
     public string? OperationResultMessage => ResultMessageText?.Text;
+
+    /// <summary>The in-flight Apply from the most recent click, exposed so tests can await real
+    /// completion of an operation that now runs off the UI thread.</summary>
+    public Task? PendingOperationForTesting { get; private set; }
 
     private void UpdateStatsDisplay()
     {
@@ -152,7 +157,14 @@ public partial class DrainHolePanel : UserControl
         }
     }
 
-    private void OnApplySelectedClick(object? sender, RoutedEventArgs e)
+    private async void OnApplySelectedClick(object? sender, RoutedEventArgs e)
+    {
+        Task task = OnApplySelectedClickCore();
+        PendingOperationForTesting = task;
+        await task;
+    }
+
+    private async Task OnApplySelectedClickCore()
     {
         if (_document is null || _gizmo is null || _gizmo.SelectedHoleId is null)
         {
@@ -191,7 +203,7 @@ public partial class DrainHolePanel : UserControl
                 diameter,
                 countersink);
 
-            OperationResult result = _document.Apply(operation);
+            OperationResult result = await _document.ApplyAsync(operation);
             UpdateStatsDisplay();
 
             if (ResultMessageText is not null)
@@ -208,7 +220,14 @@ public partial class DrainHolePanel : UserControl
         }
     }
 
-    private void OnApplyAllClick(object? sender, RoutedEventArgs e)
+    private async void OnApplyAllClick(object? sender, RoutedEventArgs e)
+    {
+        Task task = OnApplyAllClickCore();
+        PendingOperationForTesting = task;
+        await task;
+    }
+
+    private async Task OnApplyAllClickCore()
     {
         if (_document is null || _gizmo is null || _gizmo.Holes.Count == 0)
         {
@@ -244,7 +263,7 @@ public partial class DrainHolePanel : UserControl
                     diameter,
                     countersink);
 
-                OperationResult result = _document.Apply(operation);
+                OperationResult result = await _document.ApplyAsync(operation);
                 if (result.Changed)
                 {
                     appliedCount++;

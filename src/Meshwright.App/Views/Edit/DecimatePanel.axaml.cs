@@ -1,4 +1,5 @@
 using System;
+using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using g3;
@@ -83,7 +84,18 @@ public partial class DecimatePanel : UserControl
             percentOfCurrent);
     }
 
-    private void OnApplyClick(object? sender, RoutedEventArgs e)
+    /// <summary>The in-flight Apply from the most recent click, exposed so tests can await real
+    /// completion of an operation that now runs off the UI thread.</summary>
+    public Task? PendingOperationForTesting { get; private set; }
+
+    private async void OnApplyClick(object? sender, RoutedEventArgs e)
+    {
+        Task task = OnApplyClickCore();
+        PendingOperationForTesting = task;
+        await task;
+    }
+
+    private async Task OnApplyClickCore()
     {
         if (_mesh is null || CurrentTriangleCount == 0)
         {
@@ -102,8 +114,12 @@ public partial class DecimatePanel : UserControl
                 return;
             }
 
+            // Decimation of a large mesh is the canonical slow operation (§6.3, backlog item 13),
+            // so route it through the document off the UI thread whenever one is bound. The
+            // synchronous fallback below only exists for the handful of unit tests that drive
+            // this panel via the Mesh setter without ever calling SetDocument.
             OperationResult result = _document is not null
-                ? _document.Apply(operation)
+                ? await _document.ApplyAsync(operation)
                 : operation.Apply(_mesh);
 
             ResultText.Text = result.Summary;

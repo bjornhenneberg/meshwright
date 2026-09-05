@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
@@ -68,9 +69,18 @@ public partial class BooleanPanel : UserControl
         }
     }
 
-    /// <summary>Invokes the Apply button's click handler directly, for use by tests that can't
-    /// drive UI input headlessly.</summary>
-    public void InvokeApplyForTesting() => OnApplyClick(this, new RoutedEventArgs());
+    /// <summary>Invokes the Apply button's click handler directly and returns the resulting task,
+    /// for use by tests that can't drive UI input headlessly and need to await the operation
+    /// (which now runs off the UI thread) before asserting on its outcome.</summary>
+    public Task InvokeApplyForTesting()
+    {
+        OnApplyClick(this, new RoutedEventArgs());
+        return PendingOperationForTesting ?? Task.CompletedTask;
+    }
+
+    /// <summary>The in-flight Apply from the most recent click, exposed so tests can await real
+    /// completion of an operation that now runs off the UI thread.</summary>
+    public Task? PendingOperationForTesting { get; private set; }
 
     /// <summary>
     /// Loads a mesh file by path as the secondary operand, bypassing the file picker dialog.
@@ -184,7 +194,14 @@ public partial class BooleanPanel : UserControl
         }
     }
 
-    private void OnApplyClick(object? sender, RoutedEventArgs e)
+    private async void OnApplyClick(object? sender, RoutedEventArgs e)
+    {
+        Task task = OnApplyClickCore();
+        PendingOperationForTesting = task;
+        await task;
+    }
+
+    private async Task OnApplyClickCore()
     {
         if (_document is null || _document.Mesh is null)
         {
@@ -218,13 +235,13 @@ public partial class BooleanPanel : UserControl
                 _ => throw new InvalidOperationException("Unknown operation")
             };
 
-            // Captured before Apply: Apply raises MeshDocument.Changed synchronously, which
-            // MainWindow uses to refresh every panel's stats display from the (now mutated)
-            // document, clobbering BeforeStats with post-operation figures. Restoring the
-            // pre-operation snapshot below undoes that clobber.
+            // Captured before Apply: Apply raises MeshDocument.Changed once the operation
+            // finishes, which MainWindow uses to refresh every panel's stats display from the
+            // (now mutated) document, clobbering BeforeStats with post-operation figures.
+            // Restoring the pre-operation snapshot below undoes that clobber.
             var statsBefore = MeshStatistics.Compute(_document.Mesh);
 
-            OperationResult result = _document.Apply(operation);
+            OperationResult result = await _document.ApplyAsync(operation);
 
             var statsAfter = MeshStatistics.Compute(_document.Mesh);
             BeforeStats.Text = string.Format(

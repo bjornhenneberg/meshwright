@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Controls.Documents;
 using Avalonia.Headless.XUnit;
@@ -66,10 +67,23 @@ public class BeforeAfterStatsTests
         document.Changed += (_, _) => setDocument.Invoke(panel, new object?[] { document });
     }
 
-    private static void InvokeOnApplyClick(object panel)
+    /// <summary>
+    /// Invokes the Click handler and awaits its operation. Apply now runs off the UI thread
+    /// (backlog item 13), so asserting immediately after the reflection call returns — as this
+    /// test file did before that change — would race the background <c>Task.Run</c> rather than
+    /// observing the real outcome; awaiting each panel's <c>PendingOperationForTesting</c> is
+    /// what keeps this regression test honest.
+    /// </summary>
+    private static async Task InvokeOnApplyClick(object panel)
     {
         MethodInfo method = panel.GetType().GetMethod("OnApplyClick", BindingFlags.NonPublic | BindingFlags.Instance)!;
         method.Invoke(panel, new object?[] { null, null });
+
+        PropertyInfo? pendingProperty = panel.GetType().GetProperty("PendingOperationForTesting", BindingFlags.Public | BindingFlags.Instance);
+        if (pendingProperty?.GetValue(panel) is Task pending)
+        {
+            await pending;
+        }
     }
 
     private static object? GetField(object instance, string name)
@@ -80,7 +94,7 @@ public class BeforeAfterStatsTests
     }
 
     [AvaloniaFact]
-    public void PlaneCutPanel_Apply_BeforeStatsKeepsPreOperationFigures()
+    public async Task PlaneCutPanel_Apply_BeforeStatsKeepsPreOperationFigures()
     {
         var document = new MeshDocument();
         document.Load(BuildCube(10.0));
@@ -89,7 +103,7 @@ public class BeforeAfterStatsTests
         panel.SetDocument(document);
 
         // Textbox defaults (point (0,0,0), normal (0,0,1), Keep mode) cut the cube clean in half.
-        InvokeOnApplyClick(panel);
+        await InvokeOnApplyClick(panel);
 
         string before = panel.FindControl<TextBlock>("BeforeStats")!.Text!;
         string after = panel.FindControl<TextBlock>("AfterStats")!.Text!;
@@ -100,7 +114,7 @@ public class BeforeAfterStatsTests
     }
 
     [AvaloniaFact]
-    public void HollowPanel_Apply_BeforeStatsKeepsPreOperationFigures()
+    public async Task HollowPanel_Apply_BeforeStatsKeepsPreOperationFigures()
     {
         var document = new MeshDocument();
         document.Load(BuildCube(20.0));
@@ -109,7 +123,7 @@ public class BeforeAfterStatsTests
         panel.SetDocument(document);
 
         panel.FindControl<TextBox>("WallThicknessInput")!.Text = "2.0";
-        InvokeOnApplyClick(panel);
+        await InvokeOnApplyClick(panel);
 
         string before = panel.FindControl<TextBlock>("BeforeStats")!.Text!;
         string after = panel.FindControl<TextBlock>("AfterStats")!.Text!;
@@ -119,7 +133,7 @@ public class BeforeAfterStatsTests
     }
 
     [AvaloniaFact]
-    public void BooleanPanel_Apply_BeforeStatsKeepsPreOperationFigures()
+    public async Task BooleanPanel_Apply_BeforeStatsKeepsPreOperationFigures()
     {
         var document = new MeshDocument();
         document.Load(BuildCube(1.0));
@@ -137,7 +151,7 @@ public class BeforeAfterStatsTests
         applySecondaryMesh.Invoke(panel, new object?[] { secondary, "secondary.stl", null });
         Assert.True(panel.IsApplyEnabled);
 
-        InvokeOnApplyClick(panel);
+        await InvokeOnApplyClick(panel);
 
         string before = panel.FindControl<TextBlock>("BeforeStats")!.Text!;
         string after = panel.FindControl<TextBlock>("AfterStats")!.Text!;
@@ -148,7 +162,7 @@ public class BeforeAfterStatsTests
     }
 
     [AvaloniaFact]
-    public void TransformPanel_ScaleApply_BeforeStatsKeepsPreOperationFigures()
+    public async Task TransformPanel_ScaleApply_BeforeStatsKeepsPreOperationFigures()
     {
         var document = new MeshDocument();
         document.Load(BuildCube(10.0));
@@ -163,7 +177,7 @@ public class BeforeAfterStatsTests
         panel.FindControl<TextBox>("ScaleCenterYInput")!.Text = "0";
         panel.FindControl<TextBox>("ScaleCenterZInput")!.Text = "0";
 
-        InvokeOnApplyClick(panel);
+        await InvokeOnApplyClick(panel);
 
         string before = ((Run)GetField(panel, "BeforeStatsText")!).Text!;
         string after = ((Run)GetField(panel, "AfterStatsText")!).Text!;
@@ -174,7 +188,7 @@ public class BeforeAfterStatsTests
     }
 
     [AvaloniaFact]
-    public void RepairPanel_RemoveSmallShells_BeforeStatsKeepsPreOperationFigures()
+    public async Task RepairPanel_RemoveSmallShells_BeforeStatsKeepsPreOperationFigures()
     {
         // A cube plus a tiny disconnected "noise" shell far away: RemoveSmallShells (with a
         // generous min-volume-fraction) discards the small shell and provably changes the mesh.
@@ -197,6 +211,10 @@ public class BeforeAfterStatsTests
         panel.FindControl<TextBox>("MinVolumeFractionInput")!.Text = "0.5";
         MethodInfo method = typeof(RepairPanel).GetMethod("OnRemoveSmallShellsClick", BindingFlags.NonPublic | BindingFlags.Instance)!;
         method.Invoke(panel, new object?[] { null, null });
+        if (panel.PendingOperationForTesting is { } pending)
+        {
+            await pending;
+        }
 
         string before = panel.FindControl<TextBlock>("BeforeStats")!.Text!;
         string after = panel.FindControl<TextBlock>("AfterStats")!.Text!;

@@ -1,3 +1,6 @@
+using System;
+using System.Collections.Generic;
+using System.Threading;
 using g3;
 
 namespace Meshwright.Core.Operations;
@@ -18,7 +21,7 @@ namespace Meshwright.Core.Operations;
 /// composes with <see cref="Meshwright.Core.MeshDocument.Apply"/> exactly like any single
 /// operation — undo/redo covers the whole pipeline run as one step, not five.
 /// </summary>
-public sealed class AutoRepairPipeline : MeshOperationBase
+public sealed class AutoRepairPipeline : MeshOperationBase, IProgressReportingMeshOperation
 {
     public override string Name => "Auto Repair";
 
@@ -46,14 +49,38 @@ public sealed class AutoRepairPipeline : MeshOperationBase
         new UnifyNormalsOperation(),
     };
 
-    protected override OperationResult Execute(DMesh3 mesh)
+    protected override OperationResult Execute(DMesh3 mesh) =>
+        RunSteps(mesh, progress: null, CancellationToken.None);
+
+    /// <summary>
+    /// Real, step-based progress and cooperative cancellation (§6.3, backlog item 13): each of
+    /// the five steps is a genuine checkpoint, so a step boundary is reported as a fraction of
+    /// the total and is the only place a cancellation request is honoured. A step already in
+    /// progress always runs to completion — there is no partial-step state to leave the mesh in.
+    /// </summary>
+    public OperationResult Apply(DMesh3 mesh, IProgress<OperationProgress> progress, CancellationToken cancellationToken) =>
+        RunSteps(mesh, progress, cancellationToken);
+
+    private OperationResult RunSteps(DMesh3 mesh, IProgress<OperationProgress>? progress, CancellationToken cancellationToken)
     {
         var changedSummaries = new List<string>();
         bool anyChanged = false;
+        int stepsRun = 0;
 
-        foreach (IMeshOperation step in _steps)
+        for (int i = 0; i < _steps.Count; i++)
         {
+            if (cancellationToken.IsCancellationRequested)
+            {
+                break;
+            }
+
+            IMeshOperation step = _steps[i];
+            progress?.Report(new OperationProgress(
+                $"{step.Name} ({i + 1}/{_steps.Count})",
+                (double)i / _steps.Count));
+
             OperationResult result = step.Apply(mesh);
+            stepsRun++;
             anyChanged |= result.Changed;
             if (result.Changed)
             {
@@ -61,9 +88,18 @@ public sealed class AutoRepairPipeline : MeshOperationBase
             }
         }
 
+        progress?.Report(new OperationProgress("Done", 1.0));
+
         string summary = changedSummaries.Count == 0
             ? "No repairs needed."
             : string.Join(" ", changedSummaries);
+
+        if (stepsRun < _steps.Count)
+        {
+            summary = changedSummaries.Count == 0
+                ? $"Cancelled after {stepsRun} of {_steps.Count} repair steps; no repairs were made."
+                : $"Cancelled after {stepsRun} of {_steps.Count} repair steps. {summary}";
+        }
 
         return new OperationResult(anyChanged, summary);
     }

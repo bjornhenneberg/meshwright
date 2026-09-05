@@ -9,7 +9,7 @@ underway — batches M4-0 (Manifold RPATH/interop fix), M4-1 (real-world test
 corpus), M4-2 (gizmo wiring + menu/undo-redo UI), M4-6 (corpus ground
 truth), M4-7 (non-manifold import fix), M4-3 (Linux CI + packaging), M4-4
 (docs/release), M4-8 (make the app do what it says) and M4-9 (correctness
-gaps closed) are complete, 495/495 unit tests passing; see the M4 entry in
+gaps closed) are complete, 520/520 unit tests passing; see the M4 entry in
 §11 and §7. The 8 GPU tests were last run green in M4-8 and were not re-run
 in M4-9.
 
@@ -222,6 +222,7 @@ reporting and cancellation.
 | Viewport navigation, 5M triangles | > 30 fps on integrated graphics |
 | Auto-repair, 500k triangles | < 5 s |
 | Memory | < 6× the raw triangle data size |
+| UI thread blocked per operation | < 100 ms, regardless of mesh size |
 
 ## 7. Milestones
 
@@ -526,9 +527,10 @@ presenting a 558× shortfall as success; a command-line file argument; and
 "known rough edges" section listing what is still wrong.
 453 unit tests + 8 GPU tests passing.
 
-Batch M4-9 (correctness gaps closed) complete: three of the five gaps handed
-off after M4-8 — the multi-loop cut cap (item 12), booleans between loaded
-meshes (item 14), and gizmo coverage for Hollow (item 16). 453 → 495 unit
+Batch M4-9 (correctness gaps closed) complete: all five gaps handed off after
+M4-8 — the multi-loop cut cap (item 12), long operations off the UI thread
+(item 13), booleans between loaded meshes (item 14), a genuinely smooth hole
+fill (item 15), and gizmo coverage for Hollow (item 16). 453 → 520 unit
 tests, 0 skipped. The GPU suite is *not* included in that figure: it hung
 past ten minutes on the dev host and was abandoned rather than reported as
 passing. Two further GPU test hosts from earlier sessions were found already
@@ -549,7 +551,16 @@ passed while the handle pointed sideways out of the model. Three further
 defects were found only by looking, none of them in the work being reviewed —
 uppercase `.STL` files were invisible in the file dialogs, Reset View does
 nothing, and every panel's before/after readout compares the mesh with itself.
-The last two are now items 17 and 18. None would have surfaced from the suite.
+The last two are now items 17 and 18, and were fixed in the same batch. A
+fourth, found the same way, is fixed here without its own item: the busy
+indicator introduced by item 13 read "Working: Loaded..." during a hollow,
+because it displayed the document's *last completed* change rather than the
+running operation's name. None of the four would have surfaced from the suite.
+
+Verification of this batch was done by driving the real GUI until the last
+change, the busy-indicator label, which is covered by a test asserting the
+running operation's name is reported and is not the previous change's — but
+was not confirmed on screen, because the display was needed elsewhere.
 
 Remaining M4 work: Windows/macOS CI + packaging (still under M4-3, not
 started); the outstanding correctness and UX gaps listed under "Immediate
@@ -648,6 +659,9 @@ source, and matches how this audience already buys tools.
 | 2026-09-05 | Cap correctness is asserted by area, not just by closure. The multi-loop cap tests compute the cross-section's true area by hand (256/81 for the level-2 sponge cut at z=0.5) and compare, because a cap that spans the model's holes still produces a closed, single-shell, correct-volume result and passes every other invariant. |
 | 2026-09-05 | File-picker patterns list every case variant of each extension. GTK matches `FilePickerFileType` patterns case-sensitively, so the lower-case-only list hid `Model.STL` — routine CAD exporter output, and the form of this project's own Eiffel tower corpus file — from the Open dialog with nothing explaining why. Import and export already accepted any case; only the dialog was affected. |
 | 2026-09-05 | Gizmos anchor along +Z, not +Y. The Hollow gizmo shipped its first round casting its anchor ray along -Y with a +Y fallback, a leftover from before the Z-up decision earlier the same day, so the handle pointed sideways out of the model; its tests asserted `point.Y == 1` and so passed while the feature was visibly wrong. A surface anchor also cannot rely on a single ray through the bounding-box centre: on a Menger sponge that ray goes straight through the hole in the middle of each face and the no-hit fallback placed the handle in mid-air, attached to nothing. |
+| 2026-09-05 | §6.4 gained a responsiveness target (UI thread blocked < 100 ms per operation) alongside its throughput targets. Throughput numbers alone let "Auto-repair, 500k triangles: < 5 s" pass even if every one of those 5 seconds froze the window — which, before item 13, it did: Hollow on a 2112-triangle mesh blocked the UI thread for ~25 s with no spinner, no repaint, no way to tell the app from a hang. A tool whose whole pitch is staying usable on meshes the target users' current tools choke on needs a number for "stays usable while working," not just "finishes quickly" |
+| 2026-09-05 | Item 13 (long operations off the UI thread): `MeshDocument.ApplyAsync` runs the operation via `Task.Run` and awaits it with the calling context captured, so `Changed`/`BusyChanged`/`Progress` all fire back on the caller's own thread (the UI thread, in practice) — no explicit `Dispatcher.Invoke` needed, and `Meshwright.Core` stays Avalonia-agnostic. `IsBusy` blocks `Apply`/`Undo`/`Redo` from running concurrently with the background mutation, closing the Ctrl+Z-mid-operation race. Progress is real only for `AutoRepairPipeline` (`IProgressReportingMeshOperation`, step-based, so cancellation is honoured between steps too); every other operation is one opaque call into vendored/native geometry code with no safe midpoint, so the UI shows an honest indeterminate spinner with Cancel disabled for those rather than a percentage that isn't tracking anything (§4). Verified live on the real GUI: orbiting the viewport mid-drag while a 25-second Hollow ran on the Menger sponge sample actually rotated the model on screen, and Auto Repair on the 139,989-triangle Eiffel tower sample completed correctly (36,708 → 6,162 issues) while showing the busy indicator throughout |
+| 2026-09-05 | A "smooth" fill has to be measurably smoother than a planar one, and flat where the surface is flat. `HoleFillMode.Smooth` ear-clipped the loop and added one centroid vertex relaxed onto three *fixed* boundary corners, so the relaxation converged in a single step and the result was indistinguishable from `Planar` — a distinct mode in §5.1 that did nothing distinct. It now refines the patch for interior degrees of freedom and displaces it by a curvature-derived sagitta, sampling curvature one ring in from the boundary because a boundary vertex's one-ring is missing the hole side entirely and measured about five times too curved. The tests pin the *improvement*, not the implementation: closer to a test sphere than planar by a clear margin, a flat plate staying flat to 1e-9, and all three modes differing measurably, so none can quietly collapse into another again |
 
 ## 12. Development environment
 
@@ -730,23 +744,23 @@ M0.
     walk real edge connectivity instead of sorting vertices by angle, so cuts
     through models with holes produce correct multi-loop caps with proper
     per-loop winding and parity nesting.
-13. **Run long operations off the UI thread** — every operation is
-    synchronous, so Auto Repair or decimation on a six-figure-triangle mesh
-    freezes the window for tens of seconds with no progress indication. A
-    large part of why the app felt like it "wasn't doing anything" even
-    where it worked. Relates to §6.4's performance targets, which are about
-    throughput and say nothing about responsiveness.
+13. ~~**Run long operations off the UI thread**~~ — done. Every `IMeshOperation`
+    now runs through `MeshDocument.ApplyAsync` on a background thread; the UI
+    shows real step-based progress for `AutoRepairPipeline` and an honest
+    indeterminate spinner (Cancel disabled) for everything else, disables the
+    rest of the Edit UI while an operation is in flight, and stays responsive
+    — verified live by orbiting the viewport mid-drag during a 25 s Hollow.
+    §6.4 gained a responsiveness target and §11 records the reasoning.
 14. ~~**Boolean needs a second loaded mesh**~~ — done, M4-9. Multi-mesh
     loading now works through the `BooleanPanel`'s own "Load Secondary
     Mesh…" button, and the operation buttons stay disabled with a
     status line explaining why until a secondary mesh is loaded.
-15. **`HoleFillMode.Smooth` is not smooth** — the plane-cut rewrite routes
-    capping through `CutCrossSection`, where `Smooth` and `Planar` are the
-    same path and `Flat` is the only distinct one. This is defensible for a
-    *cut* — a cut cross-section is planar by definition — so the remaining
-    gap is in `HoleFillRepair.FillSmooth`, which adds a single centroid vertex
-    relaxed onto the average of three fixed boundary corners and is barely
-    distinguishable from a planar fill.
+15. ~~**`HoleFillMode.Smooth` is not smooth**~~ — done. `HoleFillRepair.FillSmooth`
+    now refines the patch until it has interior degrees of freedom, relaxes it,
+    and displaces it by a curvature-derived spherical-cap sagitta, so a hole in
+    a curved wall gets a curved cap. The cut path was deliberately left planar:
+    a cut cross-section is planar by definition, and a bulging cap would be
+    wrong for cutting a model into printable parts.
 16. ~~**Gizmo coverage against the gizmo-first decision**~~ — done, M4-9.
     Plane Cut, Transform, Drain Hole and Hollow all have gizmos. Hollow
     shows wall thickness by dragging a handle in the viewport.

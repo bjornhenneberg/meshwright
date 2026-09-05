@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using g3;
@@ -59,6 +60,10 @@ public partial class HollowPanel : UserControl
 
     /// <summary>Current operation result message text, exposed for testing.</summary>
     public string? OperationResultMessage => ResultMessageText?.Text;
+
+    /// <summary>The in-flight Apply from the most recent click, exposed so tests can await real
+    /// completion of an operation that now runs off the UI thread.</summary>
+    public Task? PendingOperationForTesting { get; private set; }
 
     /// <summary>Whether the gizmo has been dragged and its wall thickness will win over the
     /// textbox on Apply, exposed for testing.</summary>
@@ -141,7 +146,14 @@ public partial class HollowPanel : UserControl
         UpdateGizmoStatusDisplay();
     }
 
-    private void OnApplyClick(object? sender, RoutedEventArgs e)
+    private async void OnApplyClick(object? sender, RoutedEventArgs e)
+    {
+        Task task = OnApplyClickCore();
+        PendingOperationForTesting = task;
+        await task;
+    }
+
+    private async Task OnApplyClickCore()
     {
         if (_document is null)
         {
@@ -181,13 +193,13 @@ public partial class HollowPanel : UserControl
         {
             var operation = new HollowOperation(wallThickness);
 
-            // Captured before Apply: Apply raises MeshDocument.Changed synchronously, which
-            // MainWindow uses to refresh every panel's stats display from the (now mutated)
-            // document, clobbering BeforeStats with post-operation figures. Restoring the
-            // pre-operation snapshot below undoes that clobber.
+            // Captured before Apply: Apply raises MeshDocument.Changed once the operation
+            // finishes, which MainWindow uses to refresh every panel's stats display from the
+            // (now mutated) document, clobbering BeforeStats with post-operation figures.
+            // Restoring the pre-operation snapshot below undoes that clobber.
             var statsBefore = MeshStatistics.Compute(_document.Mesh);
 
-            OperationResult result = _document.Apply(operation);
+            OperationResult result = await _document.ApplyAsync(operation);
 
             var statsAfter = MeshStatistics.Compute(_document.Mesh);
             BeforeStats.Text = string.Format(

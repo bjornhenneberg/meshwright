@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using g3;
@@ -66,6 +67,10 @@ public partial class TransformPanel : UserControl
 
     /// <summary>Current operation result message text, exposed for testing.</summary>
     public string? OperationResultMessage => ResultText?.Text;
+
+    /// <summary>The in-flight Apply from the most recent click, exposed so tests can await real
+    /// completion of an operation that now runs off the UI thread.</summary>
+    public Task? PendingOperationForTesting { get; private set; }
 
     private void OnModeChanged()
     {
@@ -249,7 +254,14 @@ public partial class TransformPanel : UserControl
         AfterStatsText.Text = "(not applied yet)";
     }
 
-    private void OnApplyClick(object? sender, RoutedEventArgs e)
+    private async void OnApplyClick(object? sender, RoutedEventArgs e)
+    {
+        Task task = OnApplyClickCore();
+        PendingOperationForTesting = task;
+        await task;
+    }
+
+    private async Task OnApplyClickCore()
     {
         if (_document?.Mesh is null)
         {
@@ -284,14 +296,14 @@ public partial class TransformPanel : UserControl
                 return;
             }
 
-            // Captured before Apply: Apply raises MeshDocument.Changed synchronously, which
-            // MainWindow uses to refresh every panel's stats display from the (now mutated)
-            // document, clobbering BeforeStatsText with post-operation figures. Restoring the
-            // pre-operation snapshot below undoes that clobber.
+            // Captured before Apply: Apply raises MeshDocument.Changed once the operation
+            // finishes, which MainWindow uses to refresh every panel's stats display from the
+            // (now mutated) document, clobbering BeforeStatsText with post-operation figures.
+            // Restoring the pre-operation snapshot below undoes that clobber.
             var statsBefore = MeshStatistics.Compute(_document.Mesh);
             var boundsBefore = _document.Mesh.CachedBounds;
 
-            OperationResult result = _document.Apply(operation);
+            OperationResult result = await _document.ApplyAsync(operation);
 
             var statsAfter = MeshStatistics.Compute(_document.Mesh);
             var boundsAfter = _document.Mesh.CachedBounds;
@@ -427,7 +439,14 @@ public partial class TransformPanel : UserControl
         return new MirrorOperation(new Vector3d(px, py, pz), normal);
     }
 
-    private void OnAlignToBedClick(object? sender, RoutedEventArgs e)
+    private async void OnAlignToBedClick(object? sender, RoutedEventArgs e)
+    {
+        Task task = OnAlignToBedClickCore();
+        PendingOperationForTesting = task;
+        await task;
+    }
+
+    private async Task OnAlignToBedClickCore()
     {
         if (_document?.Mesh is null)
         {
@@ -439,14 +458,14 @@ public partial class TransformPanel : UserControl
         {
             var operation = new AlignToBedOperation();
 
-            // Captured before Apply: Apply raises MeshDocument.Changed synchronously, which
-            // MainWindow uses to refresh every panel's stats display from the (now mutated)
-            // document, clobbering BeforeStatsText with post-operation figures. Restoring the
-            // pre-operation snapshot below undoes that clobber.
+            // Captured before Apply: Apply raises MeshDocument.Changed once the operation
+            // finishes, which MainWindow uses to refresh every panel's stats display from the
+            // (now mutated) document, clobbering BeforeStatsText with post-operation figures.
+            // Restoring the pre-operation snapshot below undoes that clobber.
             var statsBefore = MeshStatistics.Compute(_document.Mesh);
             var boundsBefore = _document.Mesh.CachedBounds;
 
-            OperationResult result = _document.Apply(operation);
+            OperationResult result = await _document.ApplyAsync(operation);
 
             var statsAfter = MeshStatistics.Compute(_document.Mesh);
             var boundsAfter = _document.Mesh.CachedBounds;
@@ -475,10 +494,12 @@ public partial class TransformPanel : UserControl
         }
     }
 
-    private void OnDropToZ0Click(object? sender, RoutedEventArgs e)
+    private async void OnDropToZ0Click(object? sender, RoutedEventArgs e)
     {
         // DropToZ0 is an alias for AlignToBed
-        OnAlignToBedClick(sender, e);
+        Task task = OnAlignToBedClickCore();
+        PendingOperationForTesting = task;
+        await task;
     }
 
     private void ShowResult(string message)
