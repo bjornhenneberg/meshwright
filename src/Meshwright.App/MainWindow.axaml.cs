@@ -39,6 +39,17 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         InitializeEditPanels();
+
+        // Every mesh change refreshes the UI from one place. The Edit panels apply their
+        // operations straight to the document, so without this they'd change the mesh with
+        // nothing on screen moving — the viewport and diagnostics would sit on pre-operation
+        // state until an unrelated load/undo/redo happened to refresh them.
+        _document.Changed += (_, _) =>
+        {
+            RefreshFromDocument();
+            SetStatus(_document.LastChangeDescription ?? "Updated");
+        };
+
         LoadSampleMesh();
     }
 
@@ -147,12 +158,24 @@ public partial class MainWindow : Window
     public string? SummaryMessage => SummaryText.Text;
 
     /// <summary>Loads a mesh file by path through the real load pipeline, bypassing the file
-    /// picker dialog; used by integration tests that can't drive an OS file picker headlessly.</summary>
-    public void LoadFileForTesting(string path)
+    /// picker dialog. Used for the command-line file argument and by integration tests that
+    /// can't drive an OS file picker headlessly. Reports failure on the status line rather
+    /// than throwing, since both callers are outside any user-visible error context.</summary>
+    public void OpenFileFromPath(string path)
     {
-        MeshImportResult import = MeshImporter.ImportFileWithDiagnostics(path);
-        ApplyLoadedMesh(import.Mesh, StatusFor($"Loaded {Path.GetFileName(path)}", import));
+        try
+        {
+            MeshImportResult import = MeshImporter.ImportFileWithDiagnostics(path);
+            ApplyLoadedMesh(import.Mesh, StatusFor($"Loaded {Path.GetFileName(path)}", import));
+        }
+        catch (Exception ex)
+        {
+            StatusText.Text = $"Failed to load {Path.GetFileName(path)}: {ex.Message}";
+        }
     }
+
+    /// <inheritdoc cref="OpenFileFromPath"/>
+    public void LoadFileForTesting(string path) => OpenFileFromPath(path);
 
     /// <summary>Most recent import's warning about triangles the mesh could not hold, or null.</summary>
     public string? ImportWarning { get; private set; }
@@ -222,7 +245,7 @@ public partial class MainWindow : Window
     private void ApplyLoadedMesh(DMesh3 mesh, string statusPrefix)
     {
         _document.Load(mesh);
-        RefreshFromDocument(statusPrefix);
+        SetStatus(statusPrefix);
     }
 
     private async void OnExportFileClick(object? sender, RoutedEventArgs e)
@@ -310,7 +333,7 @@ public partial class MainWindow : Window
     {
         if (_document.Undo())
         {
-            RefreshFromDocument("Undo");
+            SetStatus("Undo");
         }
         else
         {
@@ -323,7 +346,7 @@ public partial class MainWindow : Window
     {
         if (_document.Redo())
         {
-            RefreshFromDocument("Redo");
+            SetStatus("Redo");
         }
         else
         {
@@ -332,13 +355,16 @@ public partial class MainWindow : Window
         }
     }
 
-    /// <summary>Refreshes the viewport, gizmos, Edit panels, status bar, and diagnostics panel
-    /// from the document's current mesh/report. Shared by the initial load path and by
-    /// undo/redo, both of which change <see cref="_document"/>'s mesh out from under the UI.</summary>
-    private void RefreshFromDocument(string statusPrefix)
+    /// <summary>Refreshes the viewport, gizmos, Edit panels, and diagnostics panel from the
+    /// document's current mesh/report. Runs on every <see cref="MeshDocument.Changed"/>, so it
+    /// covers loads, undo/redo, and operations applied by the Edit panels alike. The status line
+    /// is left to the caller that knows what just happened.</summary>
+    private void RefreshFromDocument()
     {
-        DMesh3 mesh = _document.Mesh!;
-        MeshDiagnosticsReport report = _document.Report!;
+        if (_document.Mesh is not { } mesh || _document.Report is not { } report)
+        {
+            return;
+        }
 
         Viewport.Mesh = mesh;
         Viewport.Report = report;
@@ -365,7 +391,10 @@ public partial class MainWindow : Window
         _transformGizmo = new TransformGizmo(ComputeMeshCenter(mesh));
         TransformPanel.SetGizmo(_transformGizmo);
 
-        // Clear any active gizmo from the viewport
+        // Clear any active gizmo from the viewport. The owning panel has to be told as well,
+        // or its button and status text go on claiming a gizmo that is no longer on screen.
+        _deactivateCurrentGizmoOwner?.Invoke();
+        _deactivateCurrentGizmoOwner = null;
         Viewport.Gizmo = null;
 
         // Update all panels with statistics from the new mesh
@@ -376,9 +405,20 @@ public partial class MainWindow : Window
         DecimatePanel.SetDocument(_document);
         BooleanPanel.SetDocument(_document);
 
-        StatusText.Text = $"{statusPrefix} ({mesh.TriangleCount} triangles) — {report.Issues.Count} issues found";
         UpdateDiagnosticsPanel(report);
         RefreshUndoRedoState();
+    }
+
+    /// <summary>Sets the status line to "&lt;what just happened&gt; (N triangles) — N issues found".</summary>
+    private void SetStatus(string prefix)
+    {
+        if (_document.Mesh is not { } mesh || _document.Report is not { } report)
+        {
+            StatusText.Text = prefix;
+            return;
+        }
+
+        StatusText.Text = $"{prefix} ({mesh.TriangleCount} triangles) — {report.Issues.Count} issues found";
     }
 
     private void RefreshUndoRedoState()

@@ -26,6 +26,18 @@ public sealed class MeshDocument
 
     private readonly UndoStack _undoStack = new();
 
+    /// <summary>
+    /// Raised after any change to <see cref="Mesh"/> or <see cref="Report"/> — load, apply, undo,
+    /// or redo. The UI can't observe an <see cref="Apply"/> otherwise: operations mutate the mesh
+    /// in place, so the viewport keeps rendering its already-uploaded copy and the diagnostics
+    /// panel keeps showing the pre-operation report unless something tells them to re-read.
+    /// </summary>
+    public event EventHandler? Changed;
+
+    /// <summary>What caused the most recent <see cref="Changed"/> — an operation name, "Loaded",
+    /// "Undo", or "Redo" — so the UI can say what just happened without tracking it separately.</summary>
+    public string? LastChangeDescription { get; private set; }
+
     public DMesh3? Mesh { get; private set; }
 
     public MeshDiagnosticsReport? Report { get; private set; }
@@ -39,7 +51,7 @@ public sealed class MeshDocument
     {
         Mesh = mesh;
         _undoStack.Clear();
-        RefreshReport();
+        RefreshReport("Loaded");
     }
 
     /// <summary>
@@ -55,7 +67,7 @@ public sealed class MeshDocument
 
         _undoStack.RecordBeforeApply(Mesh);
         OperationResult result = operation.Apply(Mesh);
-        RefreshReport();
+        RefreshReport(operation.Name);
         return result;
     }
 
@@ -74,7 +86,7 @@ public sealed class MeshDocument
         }
 
         Mesh = restored;
-        RefreshReport();
+        RefreshReport("Undo");
         return true;
     }
 
@@ -93,12 +105,14 @@ public sealed class MeshDocument
         }
 
         Mesh = restored;
-        RefreshReport();
+        RefreshReport("Redo");
         return true;
     }
 
-    private void RefreshReport()
+    private void RefreshReport(string reason)
     {
         Report = Mesh is null ? null : MeshDiagnosticsRunner.Run(Mesh, Detectors);
+        LastChangeDescription = reason;
+        Changed?.Invoke(this, EventArgs.Empty);
     }
 }

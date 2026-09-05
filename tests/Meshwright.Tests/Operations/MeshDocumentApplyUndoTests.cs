@@ -68,6 +68,56 @@ public class MeshDocumentApplyUndoTests
         Assert.Equal(triangleCountBefore, document.Report!.Statistics.TriangleCount);
     }
 
+    /// <summary>
+    /// Every mesh change has to announce itself. The Edit panels apply operations straight to the
+    /// document, so if <see cref="MeshDocument.Changed"/> stops firing they mutate the mesh with
+    /// nothing on screen moving — the viewport keeps rendering its uploaded copy and the
+    /// diagnostics panel keeps showing the pre-operation report, which reads to a user as the
+    /// button doing nothing at all.
+    /// </summary>
+    [Fact]
+    public void Apply_RaisesChangedNamingTheOperation()
+    {
+        MeshDocument document = NewDocumentWithTetrahedron();
+        var reasons = new List<string?>();
+        document.Changed += (_, _) => reasons.Add(document.LastChangeDescription);
+
+        document.Apply(new RemoveOneTriangleOperation());
+
+        Assert.Equal(new[] { "Remove one triangle (test double)" }, reasons);
+    }
+
+    [Fact]
+    public void LoadUndoAndRedo_EachRaiseChangedWithTheirOwnReason()
+    {
+        MeshDocument document = NewDocumentWithTetrahedron();
+        document.Apply(new RemoveOneTriangleOperation());
+
+        var reasons = new List<string?>();
+        document.Changed += (_, _) => reasons.Add(document.LastChangeDescription);
+
+        document.Undo();
+        document.Redo();
+        document.Load(new DMesh3(document.Mesh!));
+
+        Assert.Equal(new[] { "Undo", "Redo", "Loaded" }, reasons);
+    }
+
+    [Fact]
+    public void Changed_ReportsTheAlreadyRecomputedReport_NotTheStaleOne()
+    {
+        // The handler runs the UI refresh, so the report must already reflect the operation by
+        // the time it fires — otherwise the panel repaints with pre-operation numbers.
+        MeshDocument document = NewDocumentWithTetrahedron();
+        int triangleCountBefore = document.Report!.Statistics.TriangleCount;
+        int? triangleCountSeenByHandler = null;
+        document.Changed += (_, _) => triangleCountSeenByHandler = document.Report!.Statistics.TriangleCount;
+
+        document.Apply(new RemoveOneTriangleOperation());
+
+        Assert.Equal(triangleCountBefore - 1, triangleCountSeenByHandler);
+    }
+
     private static MeshDocument NewDocumentWithTetrahedron()
     {
         var mesh = new DMesh3();
