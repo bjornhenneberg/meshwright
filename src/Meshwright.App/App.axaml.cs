@@ -15,14 +15,7 @@ public partial class App : Application
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
-            var window = new MainWindow();
-            // TEMPORARY (screenshot capture): load a mesh from argv, revert after.
-            if (desktop.Args is { Length: > 0 } args && System.IO.File.Exists(args[0]))
-            {
-                window.Opened += (_, _) => window.LoadFileForTesting(args[0]);
-            }
-
-            desktop.MainWindow = window;
+            desktop.MainWindow = new MainWindow();
         }
 
         base.OnFrameworkInitializationCompleted();

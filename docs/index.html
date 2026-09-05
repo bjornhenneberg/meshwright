@@ -134,6 +134,27 @@
     background: var(--bg-raised);
   }
 
+  figure.shot {
+    margin: 32px 0 0;
+  }
+  figure.shot img {
+    display: block;
+    width: 100%;
+    height: auto;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 2px 14px rgba(28, 26, 23, 0.13);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) figure.shot img { box-shadow: none; }
+  }
+  :root[data-theme="dark"] figure.shot img { box-shadow: none; }
+  figure.shot figcaption {
+    margin-top: 10px;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+  }
+
   section {
     padding: 40px 0;
     border-top: 1px solid var(--border);
@@ -290,6 +311,16 @@
       <a class="btn btn-primary" href="#get-started">Build from source</a>
       <a class="btn btn-secondary" href="https://github.com/bjornhenneberg/meshwright">View on GitHub</a>
     </div>
+    <figure class="shot">
+      <img src="images/meshwright-window.png" width="1740" height="1032"
+           alt="The Meshwright window: a 139,989-triangle Eiffel Tower model in the 3D viewport with
+                non-manifold edges highlighted in red, editing tools on the left, and a diagnostics
+                panel on the right listing the defects found.">
+      <figcaption>
+        A 139,989-triangle scan with 36,708 defects — non-manifold edges
+        highlighted in red directly on the model, itemised on the right.
+      </figcaption>
+    </figure>
   </section>
 
   <section>
