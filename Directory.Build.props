@@ -76,5 +76,30 @@
       <Link>runtimes/$(_MeshwrightNativeRid)/native/%(Filename)%(Extension)</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+
+    <!--
+      And again, flat, next to the managed assemblies.
+
+      runtimes/<rid>/native/ alone is not enough. It happens to work on Linux
+      - verified by hiding that directory in the test output, which makes the
+      Manifold interop tests fail - but it does NOT work on macOS: with the
+      dylib present at runtimes/osx-arm64/native/ and loadable (a plain
+      ctypes.CDLL of that exact path in CI printed "dlopen OK", arm64 and
+      ad-hoc signed, with @loader_path on its LC_RPATH), every Manifold test
+      still failed with DllNotFoundException. These loose files are not
+      declared in deps.json, so the runtimes/ layout is not a contract we can
+      lean on; the probing that finds it on Linux is incidental.
+
+      The application base directory is the one location DllImport probing
+      always searches, on every platform. libmanifoldc's dependency on
+      libmanifold is recorded as @rpath/@loader_path-relative, so both must
+      land in the same directory - which is why this copies the whole set
+      rather than just the entry-point library.
+    -->
+    <None Include="$(MSBuildThisFileDirectory)runtimes/$(_MeshwrightNativeRid)/native/*.so;$(MSBuildThisFileDirectory)runtimes/$(_MeshwrightNativeRid)/native/*.so.*;$(MSBuildThisFileDirectory)runtimes/$(_MeshwrightNativeRid)/native/*.dll;$(MSBuildThisFileDirectory)runtimes/$(_MeshwrightNativeRid)/native/*.dylib"
+           Condition="'$(_MeshwrightNativeRid)' != '' And Exists('$(MSBuildThisFileDirectory)runtimes/$(_MeshwrightNativeRid)/native')">
+      <Link>%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 </Project>
