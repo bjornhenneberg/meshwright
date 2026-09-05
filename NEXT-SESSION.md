@@ -6,86 +6,10 @@ meshes for 3D printing (C# / .NET 10 / Avalonia / Silk.NET, geometry on a
 vendored g3Sharp).
 
 **Read `SPECIFICATION.md` first.** §5.1 is v1.0 scope, §7 narrates each
-milestone batch, §11 is a dated decision log, and "Immediate next steps" at
-the end is the backlog. Items 1–18 are done and struck through.
-
-## THIS SESSION ENDED EARLY (session limit). Read this before anything else.
-
-The previous session was cut short mid-flight. **Two dispatched agents were
-still running when it ended** and their work was never verified or merged.
-Establish what survived before starting anything new:
-
-```bash
-git log --oneline -3            # main was at 6621d88 when the session ended
-git status --porcelain          # agent work-in-progress may sit here untracked
-git branch -a --sort=-committerdate
-```
-
-**Both remaining agents were working directly in the main checkout, not in
-worktrees** (confirmed — no new agent worktree or branch appeared for them).
-So their output is loose in the working tree rather than isolated on a branch.
-Expect uncommitted files. Nothing of theirs was committed by the dispatcher.
-
-### Agent A — GPU suite hang: DIAGNOSED, FIXED AND VERIFIED. Nothing left.
-
-Closed out. `tests/Meshwright.Tests.Gpu/AssemblyInfo.cs` adds
-`[assembly: CollectionBehavior(DisableTestParallelization = true)]`, and the
-suite now runs **8 passing, 0 skipped in 483 ms** instead of hanging past ten
-minutes. Cause: three test classes each took their own
-`IClassFixture<GpuTestFixture>`, xunit ran the collections in parallel, and
-concurrent `Glfw.CreateWindow` calls race because GLFW/GLX window creation on
-Linux is not thread-safe. Managed stacks are kept in `reports/M4/gpu-hang/`.
-§11 has the row; the §7 header claim about GPU tests being unre-run is fixed.
-
-**Standing lesson: always run the GPU suite under `timeout`.** A hang orphans
-a test host that survives the session — five had piled up on this machine, one
-for 22 hours. All five are now killed.
-
-### Windows/macOS CI: GREEN ON ALL THREE PLATFORMS. Closed.
-
-`.github/workflows/ci.yml` builds and tests on Linux, Windows and macOS; the
-two new jobs build Manifold from source in-job, and all 520 tests pass on
-each. Packaging exists for all three. Took four CI rounds, each failing one
-step later than the last:
-
-1. Windows hardcoded the `Visual Studio 17 2022` generator; `windows-latest`
-   is now `windows-2025-vs2026` (VS 2026, CMake 4.4.2, Ninja 1.13.2).
-2. macOS has no `sha256sum`; `fetch-corpus.sh` treated the missing tool as a
-   checksum mismatch and blamed the corpus for 53 bogus failures.
-3. Switching to Ninja changed the output naming — Ninja keeps CMake's `lib`
-   prefix, so the post-build search for `manifoldc.dll` missed the
-   `libmanifoldc.dll` that had just been built. Fixing one failure caused
-   the next.
-4. macOS normalised libmanifold's *versioned* install name
-   (`@rpath/libmanifold.3.dylib`) to a flat `libmanifold.dylib`, so the exact
-   filename the loader wanted was never shipped.
-
-Then the real one: **all 22 Manifold tests still failed on macOS with the
-dylib sitting correctly in `runtimes/osx-arm64/native/`.** CI diagnostics
-eliminated every explanation — arm64, ad-hoc signed, `@loader_path` on its
-`LC_RPATH`, dependency resolving, and `ctypes.CDLL` of that exact path
-printing `dlopen OK`. The library was always loadable; **.NET never looked
-there.** `runtimes/<rid>/native/` is a deps.json contract and these loose
-files are not in deps.json, so the Linux behaviour was incidental, not
-guaranteed. Fixed by also copying the natives flat into the application base
-directory, which `DllImport` always searches.
-
-**Method worth reusing:** that fix was verified without a Mac. Hiding
-`runtimes/` in the Linux test output reproduces the macOS condition exactly —
-the interop tests failed that way before the change and passed on the flat
-copy after. When a platform is unavailable, look for the local configuration
-that reproduces its constraint.
-
-**Also worth reusing:** rounds 2-4 were each diagnosed by making the failing
-thing *report* rather than guessing at it — a self-diagnosing checksum, then
-a CI step that printed the native layout and asked dyld directly. Two guesses
-had already been wrong by then.
-
-### Agent C — docs "Known rough edges" pass: DONE (after a false start)
-
-Its first return was a placeholder with no work behind it; re-driven, it
-produced a fully cited per-entry audit. The stale entries it found are already
-fixed and committed (`74edf10`). See the backlog entry below for what is left.
+milestone batch, §11 is a dated decision log (read the last few rows — they
+are the most useful pages in the repo), and "Immediate next steps" at the end
+is the backlog. Items 1–18 are done and struck through, and M4-3 closed last
+session.
 
 ## How to work
 
@@ -98,74 +22,99 @@ then personally verify the result.**
 - **Opus** — algorithmic/topological reasoning where being subtly wrong looks
   like success. Nothing currently open needs this tier.
 
-**Two hazards, both hit this session:**
-- Agents may branch from the session's *starting* commit rather than live
-  `main`. Tell each agent the exact commit `main` is at and have it confirm
-  its worktree matches before starting.
-- **Agents may not use a worktree at all** and will edit the main checkout
-  directly. Both surviving agents did. If you dispatch several at once, expect
-  their edits to land in the same tree, and keep their file scopes disjoint.
-  Telling every agent "do not edit SPECIFICATION.md, propose §11 wording in
-  your report instead" worked well and is worth repeating — the dispatcher
-  lands spec changes centrally.
+Practical notes from last session, all of which cost time:
+
+- Tell every agent the exact commit `main` is at and have it confirm before
+  starting. Agents have branched from a stale commit before, and some **work
+  directly in the main checkout rather than a worktree** — if you dispatch
+  several at once, keep their file scopes disjoint and say so explicitly.
+- Tell every agent **not** to edit `SPECIFICATION.md` or `NEXT-SESSION.md`,
+  and to put proposed §11 wording in its report instead. You land those
+  centrally. This worked well and avoided every conflict.
+- An agent may return a placeholder ("I'll wait for the background run")
+  without having done the work. Check for actual edits before believing a
+  report.
 
 ## How to verify
 
 The recurring failure mode here is **work that reports success while being
-wrong** — §11 has a long list. For each returned task:
+wrong**. §11 is largely a catalogue of it, and last session added four more:
+a docs page advertising two defects that had been fixed, a screenshot caption
+telling readers to repair a mesh that loads clean, a build script printing
+"==> Verified ..." while shipping an unloadable library, and a GPU suite that
+had been "green at M4-8" while actually hanging.
 
 1. Build, run `dotnet test tests/Meshwright.Tests -c Release`. Baseline is
-   **520 passing, 0 skipped** — re-confirmed this session. Never accept a
-   newly skipped test without an explicit reason.
+   **520 passing, 0 skipped**. Never accept a newly skipped test without a
+   stated reason.
 2. Ask what invariant would catch this being wrong, and check the test asserts
-   that, not merely that the operation ran. Bounding box, volume, shell count
-   and issue count, before vs. after, are what work for geometry.
-3. **Run the actual app and look at it** unless told not to. Launch guidance is
-   in memory under `reference-running-meshwright-gui` (`DISPLAY=:0`, app takes
-   a file path argument). `samples/broken-cube.stl` has one of every defect,
-   `~/Downloads/Menger_sponge_sample.stl` is a clean 2112-triangle mesh with
-   holes through it, `~/Downloads/Eiffel_tower_sample.STL` is 139,989
-   triangles for the responsiveness invariant.
-4. Treat a success message as a claim to check, not a result. Grepping the
-   agent's own evidence files took under a minute this session and turned an
-   assertion into a fact.
+   *that*, not merely that the operation ran. For geometry: bounding box,
+   volume, shell count and issue count, compared before and after.
+3. **Run the actual app and look at it** unless told not to. A passing suite
+   is not evidence a feature works, and neither is a screenshot — read the
+   words next to it too.
+4. Treat a success message as a claim to check. Grepping an agent's own
+   evidence files takes a minute and repeatedly turned assertions into facts.
+
+Two techniques that worked when guessing did not, both worth reusing:
+
+- **Reproduce an unavailable platform's constraint locally.** The macOS
+  native-loading bug was fixed and verified with no Mac, because hiding
+  `runtimes/` in the Linux test output recreates the exact condition.
+- **Make the failing thing report instead of theorising about it.** Two
+  hypotheses were already wrong before a self-diagnosing checksum and a CI
+  step that asked dyld directly settled the cause.
 
 ## State
 
-`main` at `6621d88`, clean and level with `origin/main` — last session's twelve
-commits are pushed. 520 tests pass, 0 skipped.
+`main` is clean and pushed. **CI is green on Linux, Windows and macOS** — all
+520 tests on each, with Manifold built from source in-job on Windows/macOS.
 
-**Stale worktrees**: `.claude/worktrees/agent-*` has six directories from an
-earlier session, all merged into `main` — safe to `git worktree remove`. Two
-older unrelated ones (`agent-a0ef1435...`, `agent-a15af9a8...`) and
-`meshwright.worktrees/progress-check-inquiry` predate that; leave them alone.
+- **GPU suite: 8 passing, ~0.5 s.** It used to hang past ten minutes; the
+  cause was xunit running three `IClassFixture<GpuTestFixture>` classes in
+  parallel against a `Glfw.CreateWindow` path that is not thread-safe on
+  Linux. **Always run it under `timeout`** — a hang orphans a test host that
+  outlives the session, and five had accumulated on this machine, one for 22
+  hours.
+- `gh` is authenticated and git has a credential helper, so you can push. The
+  token needed `workflow` scope added to push `.github/workflows/` changes;
+  it has it now.
+- **Stale worktrees**: two old unrelated ones (`agent-a0ef1435...`,
+  `agent-a15af9a8...`) and `meshwright.worktrees/progress-check-inquiry`
+  predate all recent work — leave them alone unless you know what they are.
 
 ## Backlog
 
-**Finish Agent A and Agent B above** — that is the top of the list.
+Nothing is blocked or half-finished. Pick from these.
 
-**Retake `docs/images/decimate.png`. (Sonnet — needs the GUI.)**
-Deliberately held all of this session so it would not fight the GPU work for
-`DISPLAY=:0`; dispatch it when nothing else is using the display. It was
-captured from a mesh produced by the *old, broken* plane cut (fixed as item
-12), so it shows a model that had already lost geometry before the decimation
-screenshot was taken. The message it illustrates is still correct; the mesh is
-not. Retake against current `main`.
+**1. A broader UX pass. (Opus or Sonnet, needs the real GUI.)**
+The most valuable thing left. With items 12–18 and M4-3 all landed, sit down
+with the app for a while — real GUI, no synthetic scripting — and hunt the
+next tier of "reports success while being wrong". That instinct found items
+17 and 18, and last session it caught a docs page describing two fixed bugs
+as current. Launch guidance is in memory under
+`reference-running-meshwright-gui` (`DISPLAY=:0`, the app takes a file path
+argument). `samples/broken-cube.stl` has one of every defect,
+`~/Downloads/Menger_sponge_sample.stl` is clean with holes right through it,
+`~/Downloads/Eiffel_tower_sample.STL` is 139,989 triangles for the
+responsiveness target in §6.4.
 
-**`docs/usage.html` "Known rough edges" — AUDITED AND PARTLY LANDED.**
-All 15 entries were re-verified against source with file:line citations. The
-two stale ones ("Reset View does nothing" and "Before/After figures are always
-identical", both fixed by items 17 and 18) were removed in `74edf10`. The
-other 13 were each confirmed still accurate and were left alone — including
-Boolean having no way to reposition the secondary mesh, only Auto Repair
-having real progress/cancel, OBJ import not welding, import splitting
-non-manifold geometry, voxel remesh excluded from Auto Repair, and no
-Windows/macOS packaging. What remains is the *additive* half: look for real
-current limitations that are missing from the list entirely. Do not re-audit
-the 13; they are settled.
+**2. Finish the `docs/usage.html` rough-edges pass. (Sonnet.)**
+All 15 entries were verified against source and the two stale ones removed,
+so the *subtractive* half is done — do not re-audit those 13. What remains is
+additive: find real current limitations missing from the list entirely.
+Ground every claim in code actually read.
 
-**A broader UX pass.** With 12–18 landed, sit down with the real app for a
-while (no synthetic scripting) and look for the next tier of "reports success
-while being wrong" — the instinct that found items 17 and 18.
+**3. Item 5, still open since the beginning. (Sonnet.)**
+"Read a week of *Meshmixer alternative* threads and turn them into a
+prioritised feature list to check against §5.1." The only original backlog
+item never started, and the one most likely to change what v1.0 should
+contain. Worth doing before more features get built on assumption.
 
-Ask before pushing, and before starting anything not on this list.
+**4. Packaging follow-ups, deliberately deferred.**
+An MSI for Windows (currently a zip) and macOS signing/notarisation. §9 defers
+notarisation until there is revenue, so confirm that still holds before
+starting — this may stay deferred.
+
+Push freely; the user has given standing authorisation. Ask before starting
+anything not on this list.
