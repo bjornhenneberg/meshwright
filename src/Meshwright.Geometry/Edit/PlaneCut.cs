@@ -145,6 +145,12 @@ public sealed class PlaneCut
                     vid => negVertexMap.TryGetValue(vid, out int id) ? id : null,
                     (vid, mappedId) => negVertexMap[vid] = mappedId);
 
+                // The cap routines take their winding from the order of the loop, not from the
+                // normal they are handed, so this half's cap has to be walked the other way round.
+                // Capping both sides from the same loop leaves the negative half inside out — its
+                // faces point into the solid, and its volume comes back wrong.
+                negativeCapLoop.Reverse();
+
                 capTrianglesAdded += AddCapToMesh(negativeSide, negativeCapLoop, -planeNormal, capMode);
             }
         }
@@ -303,13 +309,20 @@ public sealed class PlaneCut
         foreach (var edge in cutEdges)
         {
             var key = (Math.Min(edge.VertexAId, edge.VertexBId), Math.Max(edge.VertexAId, edge.VertexBId));
-            intersectionVertices[key] = splitMesh.AppendVertex(edge.IntersectionPoint);
+
+            // An edge shared by two cut triangles can be listed once per triangle; appending
+            // unconditionally would leave an orphan vertex behind each time the key is overwritten.
+            if (!intersectionVertices.TryGetValue(key, out int intersectionVertexId))
+            {
+                intersectionVertexId = splitMesh.AppendVertex(edge.IntersectionPoint);
+                intersectionVertices[key] = intersectionVertexId;
+            }
 
             // Record edge for cap loop
             cutMeshEdges.Add(new CutEdge
             {
-                VertexAId = intersectionVertices[key],
-                VertexBId = intersectionVertices[key],
+                VertexAId = intersectionVertexId,
+                VertexBId = intersectionVertexId,
                 IntersectionPoint = edge.IntersectionPoint
             });
         }
@@ -391,38 +404,98 @@ public sealed class PlaneCut
             int j = (i + 1) % 3;
             if (signs[i] * signs[j] < 0) // Different sides
             {
-                double t = distances[i] / (distances[i] - distances[j]);
-                Vector3d p0 = originalMesh.GetVertex(vertices[i]);
-                Vector3d p1 = originalMesh.GetVertex(vertices[j]);
-                Vector3d intersection = p0 + t * (p1 - p0);
-                intersectionPoints[i] = splitMesh.AppendVertex(intersection);
+                // One vertex per cut *edge*, shared by both triangles either side of it. Appending
+                // a fresh vertex per triangle instead splits the surface along the whole cut: the
+                // halves come back as a shell per face, and a later "remove small shells" pass
+                // reads those fragments as debris and deletes real geometry.
+                (int, int) edgeKey = (Math.Min(vertices[i], vertices[j]), Math.Max(vertices[i], vertices[j]));
+                if (!intersectionVertices.TryGetValue(edgeKey, out int intersectionVertexId))
+                {
+                    double t = distances[i] / (distances[i] - distances[j]);
+                    Vector3d p0 = originalMesh.GetVertex(vertices[i]);
+                    Vector3d p1 = originalMesh.GetVertex(vertices[j]);
+                    intersectionVertexId = splitMesh.AppendVertex(p0 + t * (p1 - p0));
+                    intersectionVertices[edgeKey] = intersectionVertexId;
+                }
+
+                intersectionPoints[i] = intersectionVertexId;
             }
         }
 
-        // Emit sub-triangles
-        for (int i = 0; i < 3; i++)
+        // Emit sub-triangles.
+        //
+        // A triangle straddling the plane leaves one vertex alone on its side and the opposite
+        // edge's worth of quad on the other, so it re-triangulates into one corner triangle plus
+        // two for the quad. Emitting only where both of a vertex's edges are cut fires solely for
+        // that lone corner, which dropped the quad half of every straddling triangle: a strip of
+        // surface went missing along the entire cut, leaving each half in fragments that a later
+        // "remove small shells" pass then deleted as if it were debris.
+        void Emit(HashSet<int> side, int v0, int v1, int v2)
         {
-            if (signs[i] >= 0 || intersectionPoints[(i + 2) % 3] != null || intersectionPoints[i] != null)
+            int tid = splitMesh.AppendTriangle(v0, v1, v2);
+            if (tid >= 0)
             {
-                // Positive side triangle
-                if (signs[i] >= 0 && intersectionPoints[(i + 2) % 3] != null && intersectionPoints[i] != null)
-                {
-                    int tid = splitMesh.AppendTriangle(vertexMap[vertices[i]], intersectionPoints[i]!.Value, intersectionPoints[(i + 2) % 3]!.Value);
-                    if (tid >= 0)
-                        positiveSide.Add(tid);
-                }
-            }
-            if (signs[i] <= 0 || intersectionPoints[(i + 2) % 3] != null || intersectionPoints[i] != null)
-            {
-                // Negative side triangle
-                if (signs[i] <= 0 && intersectionPoints[(i + 2) % 3] != null && intersectionPoints[i] != null)
-                {
-                    int tid = splitMesh.AppendTriangle(vertexMap[vertices[i]], intersectionPoints[(i + 2) % 3]!.Value, intersectionPoints[i]!.Value);
-                    if (tid >= 0)
-                        negativeSide.Add(tid);
-                }
+                side.Add(tid);
             }
         }
+
+        int onPlane = Array.IndexOf(signs, 0);
+        if (onPlane >= 0)
+        {
+            // One vertex sits on the plane, so only the opposite edge crosses and the triangle
+            // splits in two through that vertex.
+            int after = (onPlane + 1) % 3;
+            int before = (onPlane + 2) % 3;
+            if (intersectionPoints[after] is not int crossing)
+            {
+                return;
+            }
+
+            int pivot = vertexMap[vertices[onPlane]];
+            int afterId = vertexMap[vertices[after]];
+            int beforeId = vertexMap[vertices[before]];
+
+            Emit(signs[after] > 0 ? positiveSide : negativeSide, pivot, afterId, crossing);
+            Emit(signs[after] > 0 ? negativeSide : positiveSide, pivot, crossing, beforeId);
+            return;
+        }
+
+        // No vertex on the plane: exactly one is alone on its side of it.
+        int lone = -1;
+        for (int i = 0; i < 3; i++)
+        {
+            if (signs[i] != signs[(i + 1) % 3] && signs[i] != signs[(i + 2) % 3])
+            {
+                lone = i;
+                break;
+            }
+        }
+
+        if (lone < 0)
+        {
+            return;
+        }
+
+        int nextIndex = (lone + 1) % 3;
+        int prevIndex = (lone + 2) % 3;
+
+        // The crossings bracketing the lone vertex: on the edge leaving it, and the one entering.
+        if (intersectionPoints[lone] is not int leaving || intersectionPoints[prevIndex] is not int entering)
+        {
+            return;
+        }
+
+        int loneId = vertexMap[vertices[lone]];
+        int nextId = vertexMap[vertices[nextIndex]];
+        int prevId = vertexMap[vertices[prevIndex]];
+
+        HashSet<int> loneSide = signs[lone] > 0 ? positiveSide : negativeSide;
+        HashSet<int> farSide = signs[lone] > 0 ? negativeSide : positiveSide;
+
+        // Winding follows the original triangle in both halves.
+        Emit(loneSide, loneId, leaving, entering);
+        Emit(farSide, leaving, nextId, prevId);
+        Emit(farSide, leaving, prevId, entering);
     }
 
     private List<int> ExtractCapLoop(List<CutEdge> cutEdges, Vector3d planePoint, Vector3d planeNormal)

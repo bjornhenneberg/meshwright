@@ -196,17 +196,34 @@ public class PlaneCutTests
 
         Assert.True(above > 0, "split should keep geometry on the positive side");
         Assert.True(below > 0, "split should keep geometry on the negative side");
+        Assert.Equal(2, document.Report!.Statistics.ShellCount);
     }
 
     /// <summary>
-    /// Known defect, not yet fixed: a plane cut should leave closed shells — one for Keep/Discard,
-    /// two for Split — but the cut result comes back as one disconnected shell per face.
-    /// SplitCutTriangles welds correctly; the fault is upstream of the cap, in the cut-edge
-    /// records feeding ExtractCapLoop, which are built with VertexAId and VertexBId set to the
-    /// same vertex and so describe no connectivity for the loop to follow. Until that is fixed a
-    /// cut result is not watertight and needs a repair pass before it will print.
+    /// Cutting must not quietly cost volume. Re-triangulating only the lone-corner side of every
+    /// straddling triangle took a strip of surface out along the cut, which is invisible in a
+    /// triangle count but shows up as the two halves failing to add back up to the original.
     /// </summary>
-    [Fact(Skip = "Known defect: cut-edge records are degenerate, so cap loops don't close the shell.")]
+    [Fact]
+    public void PlaneCutSplitOperation_PreservesTheModelsVolume()
+    {
+        var document = new MeshDocument();
+        document.Load(BuildCube(10.0));
+        double volumeBefore = document.Report!.Statistics.Volume;
+
+        document.Apply(new PlaneCutSplitOperation(new Vector3d(5.0, 5.0, 5.0), Vector3d.AxisZ.Normalized));
+
+        Assert.Equal(volumeBefore, document.Report!.Statistics.Volume, 3);
+    }
+
+    /// <summary>
+    /// A cut has to leave a closed solid, not a pile of loose faces. This failed while straddling
+    /// triangles were re-triangulated on one side only and cut vertices were duplicated per
+    /// triangle: the result arrived as a shell per face, which then made repair destructive —
+    /// "remove small shells" could not tell those fragments from debris and deleted the model's
+    /// cut end.
+    /// </summary>
+    [Fact]
     public void PlaneCutKeepSideOperation_ProducesASingleClosedShell()
     {
         var document = new MeshDocument();
