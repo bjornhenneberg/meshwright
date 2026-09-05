@@ -29,6 +29,7 @@ public partial class MainWindow : Window
     private DrainHoleGizmo? _drainHoleGizmo;
     private PlaneCutGizmo? _planeCutGizmo;
     private TransformGizmo? _transformGizmo;
+    private HollowGizmo? _hollowGizmo;
 
     /// <summary>The currently active panel's "reset your own gizmo-active UI state" method, so
     /// it can be told to stand down when a different panel takes the single viewport gizmo
@@ -104,6 +105,14 @@ public partial class MainWindow : Window
         TransformPanel.SetGizmoActivationCallback(
             onActivate: () => ActivateGizmoOwner(_transformGizmo, TransformPanel.ForceDeactivateGizmo),
             onDeactivate: () => DeactivateGizmoOwner(TransformPanel.ForceDeactivateGizmo));
+
+        // Create and wire up the hollow shell-preview gizmo
+        (Vector3 hollowAnchor, Vector3 hollowNormal) = HollowGizmo.ComputeSurfaceAnchor(_document.Mesh);
+        _hollowGizmo = new HollowGizmo(hollowAnchor, hollowNormal, HollowGizmo.ComputeDefaultWallThickness(_document.Mesh));
+        HollowPanel.SetGizmo(_hollowGizmo);
+        HollowPanel.SetGizmoActivationCallback(
+            onActivate: () => ActivateGizmoOwner(_hollowGizmo, HollowPanel.ForceDeactivateGizmo),
+            onDeactivate: () => DeactivateGizmoOwner(HollowPanel.ForceDeactivateGizmo));
     }
 
     /// <summary>
@@ -401,6 +410,14 @@ public partial class MainWindow : Window
         }
         _transformGizmo = new TransformGizmo(ComputeMeshCenter(mesh));
         TransformPanel.SetGizmo(_transformGizmo);
+
+        if (_hollowGizmo is not null)
+        {
+            _hollowGizmo.Dispose();
+        }
+        (Vector3 hollowAnchor, Vector3 hollowNormal) = HollowGizmo.ComputeSurfaceAnchor(mesh);
+        _hollowGizmo = new HollowGizmo(hollowAnchor, hollowNormal, HollowGizmo.ComputeDefaultWallThickness(mesh));
+        HollowPanel.SetGizmo(_hollowGizmo);
 
         // Clear any active gizmo from the viewport. The owning panel has to be told as well,
         // or its button and status text go on claiming a gizmo that is no longer on screen.

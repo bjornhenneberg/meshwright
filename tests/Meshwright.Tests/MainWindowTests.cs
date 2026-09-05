@@ -106,6 +106,33 @@ public class MainWindowTests
         Assert.True((bool)GetField(transformPanel, "_gizmoActive")!);
     }
 
+    /// <summary>
+    /// Same single-slot invariant as <see cref="ActivatingSecondPanelsGizmo_ForceDeactivatesTheFirst"/>,
+    /// exercised for the Hollow panel added in M4-8: activating Hollow's gizmo while another
+    /// panel's gizmo is live must leave exactly one gizmo in the viewport, and it must be
+    /// Hollow's — never both, and never the displaced panel's.
+    /// </summary>
+    [AvaloniaFact]
+    public void ActivatingHollowGizmo_WhileAnotherPanelsGizmoIsActive_LeavesOnlyHollowsGizmoInTheViewport()
+    {
+        var window = new MainWindow();
+        object transformPanel = GetField(window, "TransformPanel")!;
+        object hollowPanel = GetField(window, "HollowPanel")!;
+        object viewport = GetField(window, "Viewport")!;
+
+        InvokePrivate(transformPanel, "OnActivateGizmoClick", null, null);
+        Assert.True((bool)GetField(transformPanel, "_gizmoActive")!);
+
+        InvokePrivate(hollowPanel, "OnActivateGizmoClick", null, null);
+
+        Assert.False((bool)GetField(transformPanel, "_gizmoActive")!, "TransformPanel should have been force-deactivated once HollowPanel took the viewport gizmo slot.");
+        Assert.True((bool)GetField(hollowPanel, "_gizmoActive")!);
+
+        object? activeGizmo = GetField(viewport, "_gizmo");
+        object hollowGizmo = GetField(window, "_hollowGizmo")!;
+        Assert.Same(hollowGizmo, activeGizmo);
+    }
+
     [AvaloniaFact]
     public void ExportFileForTesting_WritesTheLoadedMeshToDisk()
     {
