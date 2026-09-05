@@ -355,7 +355,7 @@
     </p>
     <ul>
       <li><strong>Remove Small Shells</strong> — the smallest shell to keep, as a fraction of total mesh volume (default <code>0.01</code>, so anything under 1% goes). Raise it to be more aggressive about stray fragments; lower it if the model legitimately has small separate parts.</li>
-      <li><strong>Fill Holes</strong> — the triangulation style. <em>Planar</em> (the default) fits a best-fit plane and is correct for non-convex holes. <em>Flat</em> fans from the hole's centre, which is cheaper but can overlap on large holes. <em>Smooth</em> adds one interior vertex relaxed onto the average of three boundary corners and is only marginally different from planar.</li>
+      <li><strong>Fill Holes</strong> — the triangulation style. <em>Planar</em> (the default) fits a best-fit plane and is correct for non-convex holes. <em>Flat</em> fans from the hole's centre, which is cheaper but can overlap on large holes. <em>Smooth</em> refines the patch with extra interior vertices and bulges them to continue the surrounding surface's curvature — a hole in a curved wall gets a curved cap instead of a flat disc, while a hole in a flat face stays flat.</li>
     </ul>
 
     <h3>Voxel remesh</h3>
@@ -475,10 +475,6 @@
         empty result. There is no gizmo or numeric offset for the secondary
         mesh yet; if a boolean looks wrong, check both models' bounds in a
         third-party tool first.
-      </li>
-      <li>
-        <strong>Hole fill "Smooth" is planar.</strong> It produces a correct cap,
-        just not a smoothed one.
       </li>
       <li>
         <strong>Operations are synchronous.</strong> On a six-figure-triangle mesh,

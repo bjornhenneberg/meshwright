@@ -11,7 +11,10 @@ public enum HoleFillMode
     /// <summary>Fit a best-fit plane and ear-clip triangulate in it. Correct for non-convex holes; adds no new vertices.</summary>
     Planar,
 
-    /// <summary>Planar fill, plus one smoothed interior vertex for a less faceted cap.</summary>
+    /// <summary>
+    /// Planar fill, refined with extra interior vertices and relaxed so the patch continues the
+    /// mean curvature of the surrounding surface across the hole, instead of sheeting it flat.
+    /// </summary>
     Smooth,
 }
 
@@ -102,15 +105,35 @@ public static class HoleFillRepair
     }
 
     /// <summary>
-    /// Planar fill, plus one genuinely new interior vertex: the loop centroid, grafted into
-    /// whichever ear-clip triangle contains it (splitting that one triangle into three) and then
-    /// relaxed onto the average of its neighbours via <see cref="DMesh3.VtxOneRingCentroid"/>.
-    /// Grafting into an existing ear-clip triangle (rather than fanning from the centroid
-    /// directly, as <see cref="FillFlat"/> does) keeps this correct on non-convex loops, since
-    /// ear-clipping has already proven that triangle lies inside the polygon. Because the new
-    /// vertex's only neighbours are that triangle's three (fixed) boundary corners, Laplacian
-    /// relaxation converges after one iteration; further iterations are no-ops here, but the same
-    /// loop would keep doing real work if this ever grew more than one interior vertex.
+    /// Planar fill, refined with genuinely new interior vertices, then bulged with an analytic
+    /// spherical-cap correction so the patch continues the surrounding surface's curvature instead
+    /// of sheeting the hole flat.
+    ///
+    /// The key input is the discrete mean-curvature normal at every boundary loop vertex — how far
+    /// it sits from the average of its <em>real, pre-fill</em> one-ring neighbours, normalized by
+    /// the local edge-length squared so it stays meaningful once the interior is refined to a finer
+    /// edge length (<see cref="ComputeBoundaryCurvature"/>). Averaging that over the whole loop
+    /// gives a single effective curvature for the patch, hence an effective radius
+    /// <c>R = 1 / (2 * |averageCurvature|)</c> (the discrete-Laplacian-to-mean-curvature relation
+    /// for a uniformly sampled sphere), and a bulge direction. From there the fill is exact
+    /// spherical-cap geometry, not an iterative approximation: every interior vertex is displaced,
+    /// along that direction, by the sagitta difference between its own and the loop's own distance
+    /// from the patch's center axis — <c>sqrt(R^2 - rho^2) - sqrt(R^2 - r1^2)</c>, the same formula
+    /// that gives a spherical cap's height above the disk spanning its rim. That is zero at the rim
+    /// (matching the boundary that's already fixed) and largest at the patch's center, tapering
+    /// smoothly regardless of how unevenly <see cref="RefinePatch"/> happened to refine the
+    /// triangulation — unlike an iterative per-vertex relaxation, which was tried first and had two
+    /// failure modes: folding the curvature correction into the same fixed-point loop as Laplacian
+    /// averaging creates positive feedback (each ring's bulge stretches its neighbours' edge
+    /// length, which enlarges the next ring's correction in turn, overshooting the sphere by 10%+
+    /// in testing), and tapering by mesh-graph hop count from the boundary instead of Euclidean
+    /// distance produced a visibly lumpy patch, since ear-clipping plus longest-edge refinement
+    /// gives very uneven graph connectivity even where the geometry is smooth.
+    ///
+    /// Flat, planar boundary loops (curvature ~0, as after <see cref="Meshwright.Geometry.Edit.PlaneCut"/>
+    /// or a hole in a flat face) skip the bulge entirely rather than divide by a near-zero
+    /// curvature, leaving the pure Laplacian membrane below — which for a loop already lying in a
+    /// plane settles to that same plane, exactly matching what <see cref="FillPlanar"/> gives.
     /// </summary>
     private static int FillSmooth(DMesh3 mesh, EdgeLoop loop)
     {
@@ -120,40 +143,250 @@ public static class HoleFillRepair
             return 0;
         }
 
-        Vector2d[] points2d = ProjectLoop(mesh, loop.Vertices, out Vector3d origin, out Vector3d right, out Vector3d up);
+        // Capture curvature from the *real* mesh before any fill triangle changes vertices'
+        // one-rings.
+        Dictionary<int, Vector3d> boundaryCurvature = ComputeBoundaryCurvature(mesh, loop.Vertices);
+        Vector3d loopCentroid = LoopCentroid(mesh, loop.Vertices);
+        double capRadius = AverageDistanceToCentroid(mesh, loop.Vertices, loopCentroid);
+
+        Vector3d averageCurvature = Vector3d.Zero;
+        foreach (Vector3d c in boundaryCurvature.Values)
+        {
+            averageCurvature += c;
+        }
+        averageCurvature /= Math.Max(1, boundaryCurvature.Count);
+
+        double curvatureMagnitude = averageCurvature.Length;
+        bool hasCurvature = curvatureMagnitude > 1e-9 && capRadius > 1e-9;
+        double effectiveRadius = hasCurvature ? 1.0 / (2.0 * curvatureMagnitude) : 0.0;
+        Vector3d bulgeDirection = hasCurvature ? averageCurvature / curvatureMagnitude : Vector3d.Zero;
+        // A cap wider than its own effective radius (a very shallow curvature estimate against a
+        // large hole) would make the sagitta formula's sqrt argument go negative; treat that the
+        // same as "no reliable curvature estimate" rather than reconstructing spurious geometry.
+        if (hasCurvature && effectiveRadius <= capRadius)
+        {
+            hasCurvature = false;
+        }
+
+        Vector2d[] points2d = ProjectLoop(mesh, loop.Vertices, out _, out _, out _);
         List<(int A, int B, int C)> ears = EarClipTriangulate(points2d);
 
-        Vector3d centroid3d = LoopCentroid(mesh, loop.Vertices);
-        Vector3d centroidLocal = centroid3d - origin;
-        var centroid2d = new Vector2d(centroidLocal.Dot(right), centroidLocal.Dot(up));
-        int splitIndex = FindContainingTriangle(points2d, ears, centroid2d);
-
-        int centroidId = mesh.AppendVertex(centroid3d);
-
-        int added = 0;
-        for (int i = 0; i < ears.Count; i++)
+        var patchTriangles = new HashSet<int>();
+        foreach ((int a, int b, int c) in ears)
         {
-            (int a, int b, int c) = ears[i];
-            if (i == splitIndex)
+            int tid = mesh.AppendTriangle(loop.Vertices[a], loop.Vertices[c], loop.Vertices[b]);
+            if (tid >= 0)
             {
-                added += AppendFillTriangle(mesh, loop.Vertices[a], loop.Vertices[b], centroidId);
-                added += AppendFillTriangle(mesh, loop.Vertices[b], loop.Vertices[c], centroidId);
-                added += AppendFillTriangle(mesh, loop.Vertices[c], loop.Vertices[a], centroidId);
-            }
-            else
-            {
-                added += AppendFillTriangle(mesh, loop.Vertices[a], loop.Vertices[b], loop.Vertices[c]);
+                patchTriangles.Add(tid);
             }
         }
 
-        for (int iter = 0; iter < 3; iter++)
+        double targetEdgeLength = AverageLoopEdgeLength(mesh, loop.Vertices);
+        List<int> interiorVertices = RefinePatch(mesh, patchTriangles, targetEdgeLength);
+
+        const int membraneIterations = 60;
+        for (int iter = 0; iter < membraneIterations; iter++)
         {
-            Vector3d ring = Vector3d.Zero;
-            mesh.VtxOneRingCentroid(centroidId, ref ring);
-            mesh.SetVertex(centroidId, ring);
+            foreach (int v in interiorVertices)
+            {
+                Vector3d sum = Vector3d.Zero;
+                int count = 0;
+                foreach (int nbr in mesh.VtxVerticesItr(v))
+                {
+                    sum += mesh.GetVertex(nbr);
+                    count++;
+                }
+                if (count > 0)
+                {
+                    mesh.SetVertex(v, sum / count);
+                }
+            }
         }
 
-        return added;
+        if (hasCurvature)
+        {
+            double rimSag = Math.Sqrt(Math.Max(0.0, (effectiveRadius * effectiveRadius) - (capRadius * capRadius)));
+            foreach (int v in interiorVertices)
+            {
+                double rho = mesh.GetVertex(v).Distance(loopCentroid);
+                rho = Math.Min(rho, capRadius); // interior vertices can stray slightly past capRadius after relaxation
+                double sag = Math.Sqrt(Math.Max(0.0, (effectiveRadius * effectiveRadius) - (rho * rho))) - rimSag;
+                mesh.SetVertex(v, mesh.GetVertex(v) + (bulgeDirection * sag));
+            }
+        }
+
+        return patchTriangles.Count;
+    }
+
+    private static double AverageDistanceToCentroid(DMesh3 mesh, int[] loopVertices, Vector3d centroid)
+    {
+        double sum = 0;
+        foreach (int vid in loopVertices)
+        {
+            sum += mesh.GetVertex(vid).Distance(centroid);
+        }
+        return loopVertices.Length > 0 ? sum / loopVertices.Length : 0;
+    }
+
+    /// <summary>
+    /// A scale-free estimate of the surrounding surface's mean-curvature normal near each boundary
+    /// loop vertex, divided by the local edge-length squared (a discrete Laplacian's magnitude
+    /// scales with h^2 for a fixed curvature, so dividing it out gives a quantity that stays
+    /// meaningful at any mesh density — see <see cref="FillSmooth"/>). Must run before any fill
+    /// triangle is added, since afterward a boundary vertex's one-ring would also include patch
+    /// neighbours and this would stop measuring the real surface.
+    ///
+    /// Deliberately measured one ring <em>in</em> from the loop, not at the loop vertices
+    /// themselves: a boundary vertex's one-ring is missing every neighbour on the hole side by
+    /// definition, so "how far it sits from the average of its neighbours" is systematically
+    /// inflated by that missing half — measured directly, it estimated a sphere test case's radius
+    /// at roughly a fifth of its true value. A real interior neighbour just inside the loop still
+    /// has a complete, unbiased one-ring.
+    /// </summary>
+    private static Dictionary<int, Vector3d> ComputeBoundaryCurvature(DMesh3 mesh, int[] loopVertices)
+    {
+        var loopSet = new HashSet<int>(loopVertices);
+        var curvature = new Dictionary<int, Vector3d>(loopVertices.Length);
+        foreach (int vid in loopVertices)
+        {
+            int? collarVid = null;
+            foreach (int nbr in mesh.VtxVerticesItr(vid))
+            {
+                if (!loopSet.Contains(nbr))
+                {
+                    collarVid = nbr;
+                    break;
+                }
+            }
+
+            curvature[vid] = collarVid.HasValue ? VertexCurvature(mesh, collarVid.Value) : Vector3d.Zero;
+        }
+        return curvature;
+    }
+
+    /// <summary>Discrete mean-curvature normal at <paramref name="vid"/>, normalized by local edge-length squared (see <see cref="ComputeBoundaryCurvature"/>).</summary>
+    private static Vector3d VertexCurvature(DMesh3 mesh, int vid)
+    {
+        Vector3d vPos = mesh.GetVertex(vid);
+        Vector3d sum = Vector3d.Zero;
+        double edgeLenSum = 0;
+        int count = 0;
+        foreach (int nbr in mesh.VtxVerticesItr(vid))
+        {
+            Vector3d nbrPos = mesh.GetVertex(nbr);
+            sum += nbrPos;
+            edgeLenSum += vPos.Distance(nbrPos);
+            count++;
+        }
+
+        if (count == 0)
+        {
+            return Vector3d.Zero;
+        }
+
+        Vector3d average = sum / count;
+        double localEdgeLength = edgeLenSum / count;
+        Vector3d delta = vPos - average;
+        return localEdgeLength > 1e-12 ? delta / (localEdgeLength * localEdgeLength) : Vector3d.Zero;
+    }
+
+    private static double AverageLoopEdgeLength(DMesh3 mesh, int[] loopVertices)
+    {
+        int n = loopVertices.Length;
+        double sum = 0;
+        for (int i = 0; i < n; i++)
+        {
+            sum += mesh.GetVertex(loopVertices[i]).Distance(mesh.GetVertex(loopVertices[(i + 1) % n]));
+        }
+        return n > 0 ? sum / n : 0;
+    }
+
+    /// <summary>
+    /// Adds interior degrees of freedom to an ear-clipped patch by repeatedly splitting its
+    /// longest strictly-interior edge (both adjacent triangles in <paramref name="patchTriangles"/>)
+    /// until edges are close to <paramref name="targetEdgeLength"/>. Never touches an edge along
+    /// the original hole boundary — those already have one adjacent triangle outside the patch,
+    /// and must stay exactly as <see cref="MeshBoundaryLoops"/> found them.
+    /// </summary>
+    private static List<int> RefinePatch(DMesh3 mesh, HashSet<int> patchTriangles, double targetEdgeLength)
+    {
+        var interiorVertices = new List<int>();
+        if (targetEdgeLength <= 0)
+        {
+            return interiorVertices;
+        }
+
+        double splitThreshold = targetEdgeLength * 1.5;
+        int maxNewVertices = Math.Max(8, patchTriangles.Count * 4);
+        int guard = 0;
+        int maxGuard = maxNewVertices * 4 + 16;
+
+        while (interiorVertices.Count < maxNewVertices && guard++ < maxGuard)
+        {
+            int bestEdge = FindLongestInteriorEdge(mesh, patchTriangles, out double bestLength);
+            if (bestEdge < 0 || bestLength <= splitThreshold)
+            {
+                break;
+            }
+
+            if (mesh.SplitEdge(bestEdge, out DMesh3.EdgeSplitInfo split) != MeshResult.Ok)
+            {
+                break;
+            }
+
+            interiorVertices.Add(split.vNew);
+            patchTriangles.Add(split.eNewT2);
+            if (split.eNewT3 != DMesh3.InvalidID)
+            {
+                patchTriangles.Add(split.eNewT3);
+            }
+        }
+
+        return interiorVertices;
+    }
+
+    private static int FindLongestInteriorEdge(DMesh3 mesh, HashSet<int> patchTriangles, out double bestLength)
+    {
+        int bestEdge = -1;
+        bestLength = 0;
+        var seen = new HashSet<int>();
+
+        foreach (int tid in patchTriangles)
+        {
+            Index3i triEdges = mesh.GetTriEdges(tid);
+            for (int k = 0; k < 3; k++)
+            {
+                int eid = triEdges[k];
+                if (!seen.Add(eid))
+                {
+                    continue;
+                }
+
+                Index2i edgeTris = mesh.GetEdgeT(eid);
+                bool bothInPatch = edgeTris.a != DMesh3.InvalidID && edgeTris.b != DMesh3.InvalidID
+                    && patchTriangles.Contains(edgeTris.a) && patchTriangles.Contains(edgeTris.b);
+                if (!bothInPatch)
+                {
+                    // Either a genuine mesh boundary edge, or an edge shared with a triangle
+                    // outside the patch (i.e. the hole's own outline) — never split it.
+                    continue;
+                }
+
+                // A diagonal directly between two boundary loop vertices is still safe to split —
+                // the bothInPatch check above already guarantees it only touches patch triangles,
+                // so it cannot be the hole's own outline (each outline edge has exactly one
+                // adjacent triangle outside the patch by construction).
+                Index2i ev = mesh.GetEdgeV(eid);
+                double length = mesh.GetVertex(ev.a).Distance(mesh.GetVertex(ev.b));
+                if (length > bestLength)
+                {
+                    bestLength = length;
+                    bestEdge = eid;
+                }
+            }
+        }
+
+        return bestEdge;
     }
 
     private static Vector3d LoopCentroid(DMesh3 mesh, int[] loopVertices)
