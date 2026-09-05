@@ -99,9 +99,41 @@ Two failures, fixed in `30ffbcc` (unpushed as of writing — check
   locally. If macOS still fails, the log will name the cause instead of
   repeating one opaque message.
 
-Still unverifiable here: whether CMake+Ninja auto-detects the MSVC toolchain
-from plain Git Bash with no vcvars, and whether the macOS checksum change
-fixes it or merely diagnoses it. Both are settled only by the next CI run.
+**CI round 2 (run `33992998123`) got further, then round 3 fixed what it
+exposed.** Both of round 2's unverifiable assumptions turned out fine:
+CMake+Ninja *did* auto-detect MSVC with no vcvars (all 31 objects compiled,
+both DLLs linked), and the macOS checksum rewrite *did* fix the corpus step.
+Each round then failed one step later:
+
+- **Windows: Ninja keeps the `lib` prefix.** The build succeeded but the
+  post-build search looked for `manifoldc.dll`, the Visual Studio generator's
+  spelling, while Ninja produced `libmanifoldc.dll`. Fixing the generator had
+  changed the output naming — the script's own comment asserting "no `lib`
+  prefix on Windows" was true only of the generator it no longer uses. Search
+  now accepts either spelling, and the dependency is installed under whatever
+  name it was actually built with.
+- **macOS: 498/520 passed, 22 failed**, all Manifold boolean tests, with
+  `DllNotFoundException: Unable to load shared library 'libmanifoldc' or one
+  of its dependencies`. Cause confirmed from the link line
+  (`-install_name @rpath/libmanifold.3.dylib`): CMake gives libmanifold a
+  *versioned* install name, but the script copied whatever it found to a
+  normalised `libmanifold.dylib`, so the exact filename libmanifoldc.dylib
+  needs was never shipped. The Linux script had it right all along by
+  preserving `libmanifold.so.3`; only macOS normalised. It now reads the
+  required name straight off `otool -L` and installs under that name.
+
+**The lesson worth keeping:** that macOS script printed
+`==> Verified libmanifoldc.dylib has no absolute build-tree dependency path`
+while shipping a library that could not load. It checked dependencies for
+absolute paths but never checked they *existed*. It now asserts every
+`@rpath`/`@loader_path` dependency resolves in the output directory — the
+check was simulated both ways and does reject the exact case that shipped.
+A "verified" message that cannot fail the way the bug actually occurs is
+worth less than no message at all.
+
+Round 3 (`abbde66`) is unverified for the same structural reason as every
+round: no Windows or Mac host here. What it settles is only known after the
+next run.
 
 ### Agent C — docs "Known rough edges" pass: DONE (after a false start)
 
