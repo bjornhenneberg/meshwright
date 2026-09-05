@@ -72,12 +72,13 @@ jobs:
         with:
           dotnet-version: "10.0.x"
 
-      # windows-latest ships CMake and a Visual Studio 2022 toolchain
-      # already; this script uses the "Visual Studio 17 2022" CMake
-      # generator specifically so it doesn't need a Developer Command
-      # Prompt / vcvars environment to find cl.exe. Run under bash (Git
-      # Bash, present on windows-latest) so the script itself can stay
-      # portable shell rather than PowerShell.
+      # windows-latest ships CMake, Ninja and some Visual Studio toolchain,
+      # but which VS version varies as the image is updated over time (it
+      # moved from VS 2022 to VS 2026 between this job's first two runs,
+      # which is what the script's generator selection now guards against -
+      # see its own comments for the detail). Run under bash (Git Bash,
+      # present on windows-latest) so the script itself can stay portable
+      # shell rather than PowerShell.
       - name: Build Manifold native library
         shell: bash
         run: scripts/build-manifold-native-windows.sh

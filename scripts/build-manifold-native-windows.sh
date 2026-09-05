@@ -2,19 +2,26 @@
 # Builds Manifold's C API (manifoldc) from source on Windows and installs
 # the resulting DLLs into runtimes/win-x64/native/, mirroring
 # scripts/build-manifold-native.sh (Linux). Intended to run under Git Bash
-# on a GitHub Actions windows-latest runner (which ships CMake, Ninja/MSBuild
-# and a Visual Studio 2022 toolchain already), invoked as a CI build step
-# with `shell: bash`.
+# on a GitHub Actions windows-latest runner (which ships CMake, Ninja and
+# some Visual Studio toolchain already), invoked as a CI build step with
+# `shell: bash`.
 #
-# STATUS: UNVERIFIED. Written and reviewed on a Linux dev host that cannot
-# run this script - there is no Windows machine or CI runner available here
-# to execute it against. `bash -n` syntax-checks clean; nothing more. See
-# reports/M4 for what has and hasn't been exercised. Its first real run will
-# be the first CI job that invokes it.
+# STATUS: this script's first real CI run (windows-latest, image
+# "windows-2025-vs2026") failed at the configure step: it hardcoded the
+# CMake generator as "Visual Studio 17 2022", and that image ships Visual
+# Studio 2026 instead - "could not find any instance of Visual Studio"
+# because there was no VS 2022 to find. windows-latest's toolchain moves
+# out from under this script on GitHub's own schedule, so naming a specific
+# VS version here is a bug by construction, not a one-off: it works until
+# the next image update silently breaks it again. The fix (below) is to not
+# hardcode a generator at all: prefer Ninja when it's on PATH, and otherwise
+# let CMake pick its own default (newest-installed) Visual Studio generator
+# rather than asserting a version. Still otherwise unverified beyond that
+# one real run - there is no Windows machine here to test further against.
 #
 # Requires (present on GitHub's windows-latest image, not otherwise checked
-# for here): cmake, a Visual Studio 2022 installation (for the
-# "Visual Studio 17 2022" generator), and network access to github.com.
+# for here): cmake, some Visual Studio installation, and network access to
+# github.com.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -44,13 +51,32 @@ fi
 # --- 2. Configure + build the C API only ------------------------------------
 # Same flag set as the Linux build (see build-manifold-native.sh for the
 # rationale behind each one) - MANIFOLD_PAR=OFF, MANIFOLD_TEST=OFF, C API
-# + cross-section only. The "Visual Studio 17 2022" generator picks up the
-# MSVC toolchain from the runner image directly; unlike Ninja/Makefiles it
-# doesn't need a Developer Command Prompt / vcvars environment to find
-# cl.exe, which matters here since this runs from plain Git Bash.
+# + cross-section only.
+#
+# Generator selection is deliberately not a hardcoded version, since that's
+# exactly what broke on this script's first CI run (see the header comment):
+# windows-latest's Visual Studio version changes on GitHub's own schedule,
+# out from under this script. So: prefer Ninja when it's on PATH (recent
+# CMake locates the MSVC toolchain itself even outside a Developer Command
+# Prompt / vcvars environment, whether the generator is Ninja or Visual
+# Studio - both should work unattended from plain Git Bash on a modern CMake).
+# Otherwise, pass no -G at all and let CMake choose its own default
+# (newest-installed) Visual Studio generator rather than asserting one by
+# name. -A x64 is meaningful only for a Visual Studio generator - Ninja
+# infers its architecture from the toolchain it finds and rejects -A
+# outright - so only add it in the non-Ninja branch.
+GENERATOR_ARGS=()
+if command -v ninja >/dev/null 2>&1; then
+  echo "==> Ninja found on PATH; using the Ninja generator"
+  GENERATOR_ARGS=(-G Ninja)
+else
+  echo "==> Ninja not found; letting CMake pick its own default Visual Studio generator (targeting x64)"
+  GENERATOR_ARGS=(-A x64)
+fi
+
 echo "==> Configuring (Release, C API only, MSVC x64)"
 cmake -S "$MANIFOLD_SRC_DIR" -B "$BUILD_DIR" \
-  -G "Visual Studio 17 2022" -A x64 \
+  "${GENERATOR_ARGS[@]}" \
   -DCMAKE_BUILD_TYPE=Release \
   -DBUILD_SHARED_LIBS=ON \
   -DMANIFOLD_CBIND=ON \
