@@ -423,7 +423,7 @@
 
     <figure>
       <img src="images/decimate.png" width="1740" height="1032"
-           alt="Meshwright after decimation, reporting a reduction from 1024 to 322 triangles and a
+           alt="Meshwright after decimation, reporting a reduction from 2112 to 736 triangles and a
                 message that it stopped short of the 100-triangle target.">
       <figcaption>
         Decimation reports when it cannot reach the target rather than presenting
@@ -433,10 +433,11 @@
 
     <div class="note">
       <strong>Repair before you simplify.</strong> Edge collapses that would create
-      non-manifold geometry are refused, so on a broken mesh the reducer stalls
-      early — above, a request for 100 triangles stopped at 322. Running Auto
-      Repair first usually allows a far deeper reduction, and decimating a
-      defective mesh tends to add self-intersections, as it did here.
+      non-manifold geometry are refused, so a mesh riddled with holes stalls well
+      short of an aggressive target — above, a request for 100 triangles on a
+      Menger-sponge mesh stopped at 736. Decimating that close to so many holes
+      also tends to add self-intersections, as it did here; running Auto Repair
+      first (to fill the holes) usually allows a far deeper reduction.
     </div>
   </section>
 
