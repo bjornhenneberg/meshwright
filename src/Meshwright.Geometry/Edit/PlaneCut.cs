@@ -61,8 +61,14 @@ public sealed class PlaneCut
         // Split triangles that cross the plane
         var splitMesh = SplitCutTriangles(mesh, planePoint, planeNormal, triangleClassification, cutEdges);
 
-        // Collect loop from cut edges and generate cap
-        var capLoop = ExtractCapLoop(splitMesh.CutMeshEdges, planePoint, planeNormal);
+        // Recover the cut cross-section from the segments the split triangles left behind. A cut
+        // through anything with a hole in it crosses several separate boundary loops at once, so
+        // this is a set of loops, some of them holes inside others, not one loop.
+        var basis = PlaneBasis.Create(planePoint, planeNormal);
+        List<List<int>> capLoops = CutCrossSection.ExtractLoops(splitMesh.CutSegments);
+        List<Index3i> capTriangles = capLoops.Count == 0
+            ? []
+            : CutCrossSection.Triangulate(capLoops, splitMesh.SplitMesh, basis, flatFan: capMode == HoleFillMode.Flat);
         int capTrianglesAdded = 0;
 
         // Build the result mesh(es)
@@ -73,7 +79,6 @@ public sealed class PlaneCut
         DMesh3? negativeSide = mode is CutMode.Split or CutMode.Discard ? new DMesh3() : null;
 
         var vertexMap = new Dictionary<int, (int posMeshId, int? negMeshId)>();
-        List<int> capVertexIndices = [];
 
         // Copy positive-side geometry and build vertex map
         foreach (int tid in splitMesh.PositiveSideTriangles)
@@ -95,22 +100,22 @@ public sealed class PlaneCut
             positiveSide.AppendTriangle(pv0, pv1, pv2);
         }
 
-        // Add cap to positive side (and negative side if in Split mode).
-        // The loop comes from splitMesh, but every cap routine indexes the mesh it is filling, so
-        // the loop has to be translated into that mesh's own vertex ids first. Passing splitMesh
-        // ids straight through had the cap stitching together whichever unrelated vertices
-        // happened to hold those indices, which is what left cut results in disconnected pieces
-        // instead of one closed shell.
-        if (capLoop.Count >= 3)
+        // Add the cap to the positive side. The cap triangles come back wound counter-clockwise
+        // in the plane basis, i.e. facing along the plane normal; the positive side's solid sits
+        // on that same side, so its cap has to face the other way to point out of the solid.
+        // The loops are expressed in the split mesh's vertex ids, so each cap vertex has to be
+        // translated into the mesh being filled first — passing split-mesh ids straight through
+        // had the cap stitching together whichever unrelated vertices happened to hold those
+        // indices, which is what left cut results in disconnected pieces instead of one shell.
+        if (capTriangles.Count > 0)
         {
-            List<int> positiveCapLoop = TranslateLoop(
-                capLoop,
-                splitMesh.SplitMesh,
+            capTrianglesAdded = AppendCap(
                 positiveSide,
+                capTriangles,
+                splitMesh.SplitMesh,
                 vid => vertexMap.TryGetValue(vid, out (int posMeshId, int? negMeshId) ids) ? ids.posMeshId : null,
-                (vid, mappedId) => vertexMap[vid] = (mappedId, vertexMap.TryGetValue(vid, out (int posMeshId, int? negMeshId) e) ? e.negMeshId : null));
-
-            capTrianglesAdded = AddCapToMesh(positiveSide, positiveCapLoop, planeNormal, capMode);
+                (vid, mappedId) => vertexMap[vid] = (mappedId, vertexMap.TryGetValue(vid, out (int posMeshId, int? negMeshId) e) ? e.negMeshId : null),
+                reverseWinding: true);
         }
 
         // Copy negative-side geometry whenever it is going to be returned (Split or Discard)
@@ -135,23 +140,19 @@ public sealed class PlaneCut
                 negativeSide.AppendTriangle(nv0, nv1, nv2);
             }
 
-            // Add cap to negative side with reversed normal
-            if (capLoop.Count >= 3)
+            // The negative half's solid sits below the plane, so its cap faces along the plane
+            // normal and keeps the triangulation's own winding. Capping both halves the same way
+            // round leaves one of them inside out — its faces point into the solid and its volume
+            // comes back with the wrong sign.
+            if (capTriangles.Count > 0)
             {
-                List<int> negativeCapLoop = TranslateLoop(
-                    capLoop,
-                    splitMesh.SplitMesh,
+                capTrianglesAdded += AppendCap(
                     negativeSide,
+                    capTriangles,
+                    splitMesh.SplitMesh,
                     vid => negVertexMap.TryGetValue(vid, out int id) ? id : null,
-                    (vid, mappedId) => negVertexMap[vid] = mappedId);
-
-                // The cap routines take their winding from the order of the loop, not from the
-                // normal they are handed, so this half's cap has to be walked the other way round.
-                // Capping both sides from the same loop leaves the negative half inside out — its
-                // faces point into the solid, and its volume comes back wrong.
-                negativeCapLoop.Reverse();
-
-                capTrianglesAdded += AddCapToMesh(negativeSide, negativeCapLoop, -planeNormal, capMode);
+                    (vid, mappedId) => negVertexMap[vid] = mappedId,
+                    reverseWinding: false);
             }
         }
 
@@ -293,7 +294,15 @@ public sealed class PlaneCut
         public DMesh3 SplitMesh;
         public HashSet<int> PositiveSideTriangles;
         public HashSet<int> NegativeSideTriangles;
-        public List<CutEdge> CutMeshEdges;
+
+        /// <summary>
+        /// The cut cross-section's edges, as pairs of split-mesh vertex ids: one segment per
+        /// triangle that straddles the plane, joining the two points where that triangle meets it.
+        /// This is the connectivity a loop walk needs. The cut vertices alone carry none — every
+        /// intersection point on its own is just a point in a plane, and ordering points by angle
+        /// can only ever describe one loop.
+        /// </summary>
+        public List<(int A, int B)> CutSegments;
     }
 
     private SplitMeshResult SplitCutTriangles(DMesh3 mesh, Vector3d planePoint, Vector3d planeNormal, Dictionary<int, TriangleClassification> classification, List<CutEdge> cutEdges)
@@ -302,7 +311,7 @@ public sealed class PlaneCut
         var vertexMap = new Dictionary<int, int>();
         var positiveSideTriangles = new HashSet<int>();
         var negativeSideTriangles = new HashSet<int>();
-        var cutMeshEdges = new List<CutEdge>();
+        var cutSegments = new List<(int A, int B)>();
 
         // Create intersection vertices in split mesh
         var intersectionVertices = new Dictionary<(int, int), int>();
@@ -317,14 +326,6 @@ public sealed class PlaneCut
                 intersectionVertexId = splitMesh.AppendVertex(edge.IntersectionPoint);
                 intersectionVertices[key] = intersectionVertexId;
             }
-
-            // Record edge for cap loop
-            cutMeshEdges.Add(new CutEdge
-            {
-                VertexAId = intersectionVertexId,
-                VertexBId = intersectionVertexId,
-                IntersectionPoint = edge.IntersectionPoint
-            });
         }
 
         // Copy vertices and triangles, splitting mixed triangles
@@ -360,7 +361,7 @@ public sealed class PlaneCut
             }
             else // Mixed
             {
-                SplitMixedTriangle(splitMesh, mesh, tri, planePoint, planeNormal, vertexMap, intersectionVertices, positiveSideTriangles, negativeSideTriangles);
+                SplitMixedTriangle(splitMesh, mesh, tri, planePoint, planeNormal, vertexMap, intersectionVertices, positiveSideTriangles, negativeSideTriangles, cutSegments);
             }
         }
 
@@ -369,12 +370,13 @@ public sealed class PlaneCut
             SplitMesh = splitMesh,
             PositiveSideTriangles = positiveSideTriangles,
             NegativeSideTriangles = negativeSideTriangles,
-            CutMeshEdges = cutMeshEdges
+            CutSegments = cutSegments
         };
     }
 
     private void SplitMixedTriangle(DMesh3 splitMesh, DMesh3 originalMesh, Index3i originalTri, Vector3d planePoint, Vector3d planeNormal,
-        Dictionary<int, int> vertexMap, Dictionary<(int, int), int> intersectionVertices, HashSet<int> positiveSide, HashSet<int> negativeSide)
+        Dictionary<int, int> vertexMap, Dictionary<(int, int), int> intersectionVertices, HashSet<int> positiveSide, HashSet<int> negativeSide,
+        List<(int A, int B)> cutSegments)
     {
         var vertices = new[] { originalTri.a, originalTri.b, originalTri.c };
         var distances = new double[3];
@@ -457,6 +459,10 @@ public sealed class PlaneCut
 
             Emit(signs[after] > 0 ? positiveSide : negativeSide, pivot, afterId, crossing);
             Emit(signs[after] > 0 ? negativeSide : positiveSide, pivot, crossing, beforeId);
+
+            // This triangle meets the plane along the segment from the on-plane vertex to the
+            // crossing on the opposite edge.
+            cutSegments.Add((pivot, crossing));
             return;
         }
 
@@ -496,189 +502,61 @@ public sealed class PlaneCut
         Emit(loneSide, loneId, leaving, entering);
         Emit(farSide, leaving, nextId, prevId);
         Emit(farSide, leaving, prevId, entering);
-    }
 
-    private List<int> ExtractCapLoop(List<CutEdge> cutEdges, Vector3d planePoint, Vector3d planeNormal)
-    {
-        // Simple approach: collect all intersection vertices and order them around the plane
-        var vertexSet = new HashSet<int>();
-        var vertexPositions = new Dictionary<int, Vector3d>();
-
-        foreach (var edge in cutEdges)
-        {
-            vertexSet.Add(edge.VertexAId);
-            vertexPositions[edge.VertexAId] = edge.IntersectionPoint;
-        }
-
-        if (vertexSet.Count < 3)
-        {
-            return new List<int>();
-        }
-
-        // Project vertices onto plane and sort them radially
-        var projectedVertices = new List<(int vid, Vector2d pos)>();
-        Vector3d right = Math.Abs(planeNormal.x) < 0.9 ? Vector3d.Cross(Vector3d.AxisX, planeNormal).Normalized : Vector3d.Cross(Vector3d.AxisY, planeNormal).Normalized;
-        Vector3d up = Vector3d.Cross(planeNormal, right);
-
-        foreach (int vid in vertexSet)
-        {
-            Vector3d local = vertexPositions[vid] - planePoint;
-            double x = local.Dot(right);
-            double y = local.Dot(up);
-            projectedVertices.Add((vid, new Vector2d(x, y)));
-        }
-
-        // Sort by angle around origin
-        projectedVertices.Sort((a, b) =>
-        {
-            double angleA = Math.Atan2(a.pos.y, a.pos.x);
-            double angleB = Math.Atan2(b.pos.y, b.pos.x);
-            return angleA.CompareTo(angleB);
-        });
-
-        return projectedVertices.Select(p => p.vid).ToList();
+        // This triangle meets the plane along the segment between its two crossings — the edge of
+        // the cut cross-section that this triangle contributes.
+        cutSegments.Add((leaving, entering));
     }
 
     /// <summary>
-    /// Re-expresses a cut loop taken from the split mesh in <paramref name="targetMesh"/>'s own
-    /// vertex ids, appending any loop vertex that side didn't already own so the cap closes
-    /// against the real boundary rather than an arbitrary index.
+    /// Appends <paramref name="capTriangles"/> — expressed in the split mesh's vertex ids — to
+    /// <paramref name="targetMesh"/>, translating each vertex into that mesh's own ids and
+    /// appending any the side did not already own, so the cap closes against the real boundary
+    /// rather than an arbitrary index.
     /// </summary>
-    private static List<int> TranslateLoop(
-        List<int> loop,
-        DMesh3 splitMesh,
+    /// <param name="reverseWinding">
+    /// True for the half whose solid sits on the positive side of the plane: the triangulation is
+    /// wound to face along the plane normal, which points into that half rather than out of it.
+    /// </param>
+    private static int AppendCap(
         DMesh3 targetMesh,
+        List<Index3i> capTriangles,
+        DMesh3 splitMesh,
         Func<int, int?> lookup,
-        Action<int, int> remember)
+        Action<int, int> remember,
+        bool reverseWinding)
     {
-        var translated = new List<int>(loop.Count);
-        foreach (int vid in loop)
+        int added = 0;
+        foreach (Index3i tri in capTriangles)
+        {
+            int a = Translate(tri.a);
+            int b = Translate(tri.b);
+            int c = Translate(tri.c);
+
+            int tid = reverseWinding
+                ? targetMesh.AppendTriangle(a, c, b)
+                : targetMesh.AppendTriangle(a, b, c);
+
+            if (tid >= 0)
+            {
+                added++;
+            }
+        }
+
+        return added;
+
+        int Translate(int vid)
         {
             int? mapped = lookup(vid);
-            if (mapped is null)
+            if (mapped is not null)
             {
-                int appended = targetMesh.AppendVertex(splitMesh.GetVertex(vid));
-                remember(vid, appended);
-                mapped = appended;
+                return mapped.Value;
             }
 
-            translated.Add(mapped.Value);
+            int appended = targetMesh.AppendVertex(splitMesh.GetVertex(vid));
+            remember(vid, appended);
+            return appended;
         }
-
-        return translated;
-    }
-
-    private int AddCapToMesh(DMesh3 targetMesh, List<int> capLoopVertices, Vector3d capNormal, HoleFillMode capMode)
-    {
-        if (capLoopVertices.Count < 3)
-        {
-            return 0;
-        }
-
-        return capMode switch
-        {
-            HoleFillMode.Flat => CapFlat(targetMesh, capLoopVertices),
-            HoleFillMode.Smooth => CapSmooth(targetMesh, capLoopVertices),
-            _ => CapPlanar(targetMesh, capLoopVertices),
-        };
-    }
-
-    private int CapFlat(DMesh3 mesh, List<int> loopVertices)
-    {
-        if (loopVertices.Count < 3)
-            return 0;
-
-        Vector3d centroid = Vector3d.Zero;
-        foreach (int vid in loopVertices)
-        {
-            centroid += mesh.GetVertex(vid);
-        }
-        centroid /= loopVertices.Count;
-
-        int centroidId = mesh.AppendVertex(centroid);
-        int added = 0;
-
-        for (int i = 0; i < loopVertices.Count; i++)
-        {
-            int a = loopVertices[i];
-            int b = loopVertices[(i + 1) % loopVertices.Count];
-            int tid = mesh.AppendTriangle(a, b, centroidId);
-            if (tid >= 0)
-                added++;
-        }
-
-        return added;
-    }
-
-    private int CapPlanar(DMesh3 mesh, List<int> loopVertices)
-    {
-        if (loopVertices.Count < 3)
-            return 0;
-
-        // Simple ear-clipping triangulation (reusing the logic from HoleFillRepair)
-        var indices = new List<int>(loopVertices);
-        var triangles = new List<(int a, int b, int c)>();
-
-        int guard = 0;
-        int maxGuard = (indices.Count * indices.Count) + 8;
-        while (indices.Count > 3 && guard++ < maxGuard)
-        {
-            bool clipped = false;
-            for (int k = 0; k < indices.Count; k++)
-            {
-                int prev = indices[(k - 1 + indices.Count) % indices.Count];
-                int cur = indices[k];
-                int next = indices[(k + 1) % indices.Count];
-
-                if (IsEarSimple(mesh, indices, prev, cur, next))
-                {
-                    triangles.Add((prev, cur, next));
-                    indices.RemoveAt(k);
-                    clipped = true;
-                    break;
-                }
-            }
-
-            if (!clipped)
-                break;
-        }
-
-        for (int k = 1; k + 1 < indices.Count; k++)
-        {
-            triangles.Add((indices[0], indices[k], indices[k + 1]));
-        }
-
-        int added = 0;
-        foreach ((int a, int b, int c) in triangles)
-        {
-            int tid = mesh.AppendTriangle(a, c, b); // Reverse for correct normal
-            if (tid >= 0)
-                added++;
-        }
-
-        return added;
-    }
-
-    private int CapSmooth(DMesh3 mesh, List<int> loopVertices)
-    {
-        // Falls back to the planar cap: a genuinely smoothed cap needs an interior vertex and a
-        // relaxation pass, which isn't implemented. Callers get a correct cap, just a flat one.
-        return CapPlanar(mesh, loopVertices);
-    }
-
-    private bool IsEarSimple(DMesh3 mesh, List<int> indices, int prev, int cur, int next)
-    {
-        Vector3d a = mesh.GetVertex(indices[indices.IndexOf(prev)]);
-        Vector3d b = mesh.GetVertex(indices[indices.IndexOf(cur)]);
-        Vector3d c = mesh.GetVertex(indices[indices.IndexOf(next)]);
-
-        // Simple convexity test using cross product
-        Vector3d ab = b - a;
-        Vector3d bc = c - b;
-        Vector3d cross = Vector3d.Cross(ab, bc);
-
-        // If cross product points in positive normal direction, it's convex
-        return cross.LengthSquared > 1e-10;
     }
 }
 

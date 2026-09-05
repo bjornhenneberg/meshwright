@@ -4,4 +4,14 @@
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 	</PropertyGroup>
 
+	<!--
+		CutCrossSection is an implementation detail of PlaneCut, but its polygon
+		triangulation is the part most likely to be wrong on a hard cross-section, and
+		testing it only through a whole plane cut makes a failure hard to localise.
+		Exposed to the test project rather than made public.
+	-->
+	<ItemGroup>
+		<InternalsVisibleTo Include="Meshwright.Tests" />
+	</ItemGroup>
+
 </Project>
