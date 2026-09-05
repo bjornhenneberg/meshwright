@@ -291,6 +291,7 @@
     <a class="brand" href="#">Meshwright</a>
     <nav class="top-links">
       <a href="https://github.com/bjornhenneberg/meshwright">GitHub</a>
+      <a href="usage.html">Usage</a>
       <a href="#get-started">Build</a>
       <a href="#status">Status</a>
     </nav>
@@ -312,13 +313,14 @@
       <a class="btn btn-secondary" href="https://github.com/bjornhenneberg/meshwright">View on GitHub</a>
     </div>
     <figure class="shot">
-      <img src="images/meshwright-window.png" width="1740" height="1032"
+      <img src="images/overview.png" width="1740" height="1032"
            alt="The Meshwright window: a 139,989-triangle Eiffel Tower model in the 3D viewport with
-                non-manifold edges highlighted in red, editing tools on the left, and a diagnostics
-                panel on the right listing the defects found.">
+                non-manifold edges highlighted in red, the Repair panel on the left, and a
+                diagnostics panel on the right listing the defects found.">
       <figcaption>
         A 139,989-triangle scan with 36,708 defects — non-manifold edges
         highlighted in red directly on the model, itemised on the right.
+        <a href="usage.html">See the usage guide</a> for the full workflow.
       </figcaption>
     </figure>
   </section>
@@ -359,7 +361,7 @@
       </div>
       <div class="feature">
         <h3>Edit</h3>
-        <p>Plane cut, boolean union/difference/intersection, transforms, hollowing to a wall thickness, and drain-hole placement — every spatial parameter set with a 3D gizmo, not a textbox.</p>
+        <p>Plane cut, boolean union/difference/intersection, transforms, hollowing to a wall thickness, and drain-hole placement — spatial parameters set with a 3D gizmo in the viewport rather than typed as coordinates.</p>
       </div>
       <div class="feature">
         <h3>Simplify</h3>
@@ -380,7 +382,7 @@
       <li><span class="dot dot-done"></span><div><span class="status-label">M1 — Inspect.</span> <span class="status-desc">All v1.0 defect detectors, diagnostics UI, GPU-verified error highlighting.</span></div></li>
       <li><span class="dot dot-done"></span><div><span class="status-label">M2 — Repair.</span> <span class="status-desc">Undo stack, all repair operations, Auto Repair pipeline, STL/OBJ export.</span></div></li>
       <li><span class="dot dot-done"></span><div><span class="status-label">M3 — Edit.</span> <span class="status-desc">Plane cut, booleans (via Manifold), transforms, hollow, drain holes, decimation.</span></div></li>
-      <li><span class="dot dot-progress"></span><div><span class="status-label">M4 — Polish and release.</span> <span class="status-desc">Gizmo-first UI wiring, a real-world test corpus, Linux CI + packaging done; Windows/macOS packaging and a public 1.0 release are still ahead.</span></div></li>
+      <li><span class="dot dot-progress"></span><div><span class="status-label">M4 — Polish and release.</span> <span class="status-desc">Gizmo-first UI wiring, a real-world test corpus, Linux CI + packaging done; Windows/macOS packaging and a public 1.0 release are still ahead. The <a href="usage.html#known">usage guide</a> lists what is still rough.</span></div></li>
     </ul>
   </section>
 

@@ -1,0 +1,489 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Meshwright — usage guide</title>
+<meta name="description" content="How to inspect, repair, edit and export a mesh in Meshwright, with screenshots of each step.">
+<style>
+  :root {
+    --bg: #faf9f7;
+    --bg-raised: #ffffff;
+    --text: #1c1a17;
+    --text-muted: #5c574f;
+    --border: #e4e0d8;
+    --accent: #b5502e;
+    --accent-text: #ffffff;
+    --code-bg: #f1ede4;
+    --shadow: 0 1px 2px rgba(28, 26, 23, 0.06);
+    --note-bg: #fdf6ef;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #16140f;
+      --bg-raised: #1f1c16;
+      --text: #f1ede2;
+      --text-muted: #b3ab9c;
+      --border: #353026;
+      --accent: #e18456;
+      --accent-text: #1c1a17;
+      --code-bg: #262119;
+      --shadow: none;
+      --note-bg: #221c14;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #16140f;
+    --bg-raised: #1f1c16;
+    --text: #f1ede2;
+    --text-muted: #b3ab9c;
+    --border: #353026;
+    --accent: #e18456;
+    --accent-text: #1c1a17;
+    --code-bg: #262119;
+    --shadow: none;
+    --note-bg: #221c14;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.6;
+  }
+  a { color: var(--accent); }
+  .wrap {
+    max-width: 820px;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+
+  header.top { border-bottom: 1px solid var(--border); }
+  header.top .wrap {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-top: 18px;
+    padding-bottom: 18px;
+  }
+  .brand {
+    font-weight: 700;
+    font-size: 1.05rem;
+    letter-spacing: -0.01em;
+    color: var(--text);
+    text-decoration: none;
+  }
+  .top-links a {
+    margin-left: 20px;
+    font-size: 0.9rem;
+    text-decoration: none;
+    color: var(--text-muted);
+  }
+  .top-links a:hover { color: var(--accent); }
+
+  h1 {
+    font-size: 2.1rem;
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+    margin: 48px 0 12px;
+  }
+  .lede {
+    font-size: 1.1rem;
+    color: var(--text-muted);
+    margin: 0 0 8px;
+  }
+
+  nav.toc {
+    background: var(--bg-raised);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin: 32px 0 8px;
+  }
+  nav.toc ol { margin: 0; padding-left: 20px; }
+  nav.toc li { margin: 3px 0; }
+
+  section { padding: 36px 0 8px; border-top: 1px solid var(--border); margin-top: 32px; }
+  section:first-of-type { border-top: none; }
+  h2 {
+    font-size: 1.4rem;
+    letter-spacing: -0.01em;
+    margin: 0 0 12px;
+  }
+  h3 { font-size: 1.05rem; margin: 28px 0 8px; }
+  p { margin: 0 0 14px; max-width: 68ch; }
+  ul, ol { max-width: 68ch; }
+  li { margin: 5px 0; }
+
+  figure {
+    margin: 24px 0;
+  }
+  figure img {
+    display: block;
+    width: 100%;
+    height: auto;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 2px 14px rgba(28, 26, 23, 0.13);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) figure img { box-shadow: none; }
+  }
+  :root[data-theme="dark"] figure img { box-shadow: none; }
+  figcaption {
+    margin-top: 10px;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+  }
+
+  code, pre {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.85em;
+  }
+  pre {
+    background: var(--code-bg);
+    border-radius: 8px;
+    padding: 14px 16px;
+    overflow-x: auto;
+  }
+  code {
+    background: var(--code-bg);
+    border-radius: 4px;
+    padding: 1px 5px;
+  }
+  pre code { background: none; padding: 0; }
+
+  .note {
+    background: var(--note-bg);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 12px 16px;
+    margin: 20px 0;
+    font-size: 0.92rem;
+  }
+  .note strong { color: var(--text); }
+
+  table.keys {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+    margin: 8px 0 20px;
+  }
+  table.keys th, table.keys td {
+    text-align: left;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  table.keys th {
+    color: var(--text-muted);
+    font-weight: 600;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+  table.keys td:first-child { white-space: nowrap; width: 34%; }
+
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 28px 0 48px;
+    margin-top: 48px;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+  }
+  footer a { color: var(--text-muted); }
+  footer a:hover { color: var(--accent); }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="index.html">Meshwright</a>
+    <nav class="top-links">
+      <a href="https://github.com/bjornhenneberg/meshwright">GitHub</a>
+      <a href="index.html">Overview</a>
+    </nav>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <h1>Usage guide</h1>
+  <p class="lede">
+    Taking a mesh from "downloaded or scanned" to "ready to slice": what each
+    panel does, in the order you would normally use them.
+  </p>
+
+  <nav class="toc">
+    <ol>
+      <li><a href="#open">Opening a mesh</a></li>
+      <li><a href="#inspect">Inspecting</a></li>
+      <li><a href="#repair">Repairing</a></li>
+      <li><a href="#edit">Editing</a></li>
+      <li><a href="#simplify">Simplifying</a></li>
+      <li><a href="#export">Exporting</a></li>
+      <li><a href="#known">Known rough edges</a></li>
+    </ol>
+  </nav>
+
+  <section id="open">
+    <h2>1. Opening a mesh</h2>
+    <p>
+      Use <strong>Open STL…</strong> in the toolbar, <strong>File → Open</strong>,
+      or pass a path on the command line:
+    </p>
+    <pre><code>meshwright model.stl</code></pre>
+    <p>
+      STL and OBJ are supported. Meshwright treats <strong>Z as up</strong>, the
+      STL and print-bed convention, so a model authored for printing arrives
+      standing the right way up.
+    </p>
+    <p>
+      If part of a file cannot be loaded, the status line says so rather than
+      quietly dropping geometry — a mesh a quarter of which never made it in
+      would otherwise be reported as having no problems.
+    </p>
+
+    <h3>Moving around the viewport</h3>
+    <table class="keys">
+      <tr><th>Input</th><th>Does</th></tr>
+      <tr><td>Left-drag</td><td>Orbit around the model</td></tr>
+      <tr><td>Middle- or right-drag</td><td>Pan</td></tr>
+      <tr><td>Scroll wheel</td><td>Zoom</td></tr>
+      <tr><td><code>Ctrl+0</code>, or <strong>Reset View</strong></td><td>Refit the camera on the mesh</td></tr>
+      <tr><td><code>Ctrl+Z</code> / <code>Ctrl+Y</code></td><td>Undo / redo the last operation</td></tr>
+    </table>
+    <p>
+      Reset View is the way back if an orbit or zoom loses the model off screen.
+    </p>
+  </section>
+
+  <section id="inspect">
+    <h2>2. Inspecting</h2>
+    <p>
+      Diagnostics run automatically on load and again after every operation — you
+      never press an "inspect" button. The panel on the right reports mesh
+      statistics, a plain-language summary, and an itemised list of defects.
+      Anything it can locate in space is highlighted <strong>in red directly on
+      the model</strong>, so a defect list entry has somewhere to look.
+    </p>
+
+    <figure>
+      <img src="images/overview.png" width="1740" height="1032"
+           alt="Meshwright showing a 139,989-triangle Eiffel Tower with red highlights over damaged
+                areas, the Repair panel on the left and a diagnostics list on the right.">
+      <figcaption>
+        A 139,989-triangle scan: 2,857 non-manifold edges, 126 holes, 31,780
+        self-intersections, 46 flipped faces and 679 separate shells, summarised
+        at the top right and highlighted on the model.
+      </figcaption>
+    </figure>
+
+    <p>Seven detectors run on every mesh:</p>
+    <ul>
+      <li><strong>Non-manifold edges</strong> — edges shared by more than two triangles. Slicers cannot decide what is inside.</li>
+      <li><strong>Boundary holes</strong> — open loops, so the model is not a solid.</li>
+      <li><strong>Self-intersections</strong> — the surface passing through itself.</li>
+      <li><strong>Flipped normals</strong> — faces pointing inward.</li>
+      <li><strong>Degenerate triangles</strong> — zero-area slivers.</li>
+      <li><strong>Duplicate vertices</strong> — coincident points that leave the surface unwelded.</li>
+      <li><strong>Disconnected shells</strong> — stray fragments floating alongside the real model.</li>
+    </ul>
+
+    <figure>
+      <img src="images/inspect-clean.png" width="1740" height="1032"
+           alt="Meshwright showing a Menger sponge model with the diagnostics panel reporting one
+                shell and no issues found.">
+      <figcaption>
+        A healthy mesh for comparison: one shell, <em>No issues found</em>, and
+        nothing highlighted. This is what you want before slicing.
+      </figcaption>
+    </figure>
+  </section>
+
+  <section id="repair">
+    <h2>3. Repairing</h2>
+    <p>
+      The <strong>Repair</strong> tab is the first panel, because inspect-then-repair
+      is the common path.
+    </p>
+
+    <h3>Auto Repair</h3>
+    <p>
+      <strong>Auto Repair</strong> runs five steps in the order that works on most
+      meshes: degenerate and duplicate cleanup, small-shell removal, self-intersection
+      resolution, hole filling, then normal unification. Cleanup runs first so later
+      steps see a tidier mesh; self-intersection resolution runs before hole filling
+      because it can leave holes behind for that step to close; normals are unified
+      last because earlier steps change which edges and shells exist.
+    </p>
+    <p>
+      The whole run undoes as a <strong>single step</strong>, not five.
+    </p>
+
+    <figure>
+      <img src="images/auto-repair.png" width="1740" height="1032"
+           alt="Meshwright after running Auto Repair: the status line reads 1024 triangles with 0
+                issues found, and the diagnostics panel reports one shell and no issues.">
+      <figcaption>
+        The same mesh after Auto Repair: 856 issues and 66 shells reduced to
+        <em>No issues found</em> and a single closed shell.
+      </figcaption>
+    </figure>
+
+    <h3>Running steps individually</h3>
+    <p>
+      Below Auto Repair, each step can be run on its own for meshes where the
+      default sequence does the wrong thing. Two take parameters:
+    </p>
+    <ul>
+      <li><strong>Remove Small Shells</strong> — the smallest shell to keep, as a fraction of total mesh volume (default <code>0.01</code>, so anything under 1% goes). Raise it to be more aggressive about stray fragments; lower it if the model legitimately has small separate parts.</li>
+      <li><strong>Fill Holes</strong> — the triangulation style. <em>Planar</em> (the default) fits a best-fit plane and is correct for non-convex holes. <em>Flat</em> fans from the hole's centre, which is cheaper but can overlap on large holes. <em>Smooth</em> currently falls back to planar.</li>
+    </ul>
+
+    <h3>Voxel remesh</h3>
+    <p>
+      Kept below a separator and deliberately excluded from Auto Repair.
+      It rebuilds the model from a voxel grid, which makes almost anything
+      printable at the cost of discarding fine detail — a last resort for meshes
+      the other steps cannot fix, not a step every repair should pay for. The
+      resolution setting is the sample count along the model's longest axis.
+    </p>
+  </section>
+
+  <section id="edit">
+    <h2>4. Editing</h2>
+
+    <h3>Plane Cut</h3>
+    <p>
+      Cuts the model along a plane. Three modes:
+    </p>
+    <ul>
+      <li><strong>Keep Positive Side</strong> — keeps the half the plane normal points toward.</li>
+      <li><strong>Discard Positive Side</strong> — keeps the other half.</li>
+      <li><strong>Split</strong> — keeps <em>both</em> halves, each capped, as separate shells. This is the mode for cutting a model too tall for the printer into parts.</li>
+    </ul>
+    <p>
+      Set the plane numerically, or press <strong>Set Plane Via Gizmo</strong> and
+      drag it in the viewport. Once the gizmo has been dragged its values win over
+      the text boxes, so you cannot half-edit a stale number and get a surprise.
+      <strong>Add Cap</strong> seals the opening the cut leaves.
+    </p>
+
+    <figure>
+      <img src="images/plane-cut.png" width="1740" height="1032"
+           alt="Meshwright after a plane cut: the Menger sponge is halved, bounds now read 2 x 2 x 1,
+                and the diagnostics panel lists non-manifold edges introduced along the cut.">
+      <figcaption>
+        A cut through the middle: 2,112 triangles down to 1,182, bounds from
+        2 × 2 × 2 to 2 × 2 × 1. Note the defects introduced along the cut —
+        see <a href="#known">known rough edges</a>.
+      </figcaption>
+    </figure>
+
+    <h3>Transform, Hollow, Drain Holes, Boolean</h3>
+    <ul>
+      <li><strong>Transform</strong> — move, rotate, scale and mirror, with a viewport gizmo, plus an <strong>Align to Bed</strong> button that drops the model onto Z=0.</li>
+      <li><strong>Hollow</strong> — shells the model out to a given wall thickness in millimetres, to save material.</li>
+      <li><strong>Drain Holes</strong> — places holes so resin or powder can escape from a hollowed model. Click the model in the viewport to position one.</li>
+      <li><strong>Boolean</strong> — union, difference and intersection. <strong>Not usable on your own geometry yet:</strong> the second operand is a fixed cube built into the app, because loading a second mesh is a post-1.0 feature. The buttons work, but only against that cube.</li>
+    </ul>
+    <p>
+      Every operation reports what it did, updates the viewport and diagnostics
+      immediately, and is undoable.
+    </p>
+  </section>
+
+  <section id="simplify">
+    <h2>5. Simplifying</h2>
+    <p>
+      <strong>Decimate</strong> reduces the triangle count by quadric edge collapse,
+      targeting either an absolute <em>Triangle Count</em> or a <em>Percentage</em>
+      of the current count. The readout resolves your target live as you type,
+      without running the reduction.
+    </p>
+
+    <figure>
+      <img src="images/decimate.png" width="1740" height="1032"
+           alt="Meshwright after decimation, reporting a reduction from 1024 to 322 triangles and a
+                message that it stopped short of the 100-triangle target.">
+      <figcaption>
+        Decimation reports when it cannot reach the target rather than presenting
+        a shortfall as success.
+      </figcaption>
+    </figure>
+
+    <div class="note">
+      <strong>Repair before you simplify.</strong> Edge collapses that would create
+      non-manifold geometry are refused, so on a broken mesh the reducer stalls
+      early — above, a request for 100 triangles stopped at 322. Running Auto
+      Repair first usually allows a far deeper reduction, and decimating a
+      defective mesh tends to add self-intersections, as it did here.
+    </div>
+  </section>
+
+  <section id="export">
+    <h2>6. Exporting</h2>
+    <p>
+      <strong>Export…</strong> writes the current mesh to STL or OBJ, chosen by the
+      extension you give it. Check the diagnostics panel first: <em>No issues
+      found</em> and a single shell is what you want before handing the file to a
+      slicer.
+    </p>
+  </section>
+
+  <section id="known">
+    <h2>Known rough edges</h2>
+    <p>
+      Meshwright is pre-1.0 and built in the open. The things most likely to
+      surprise you:
+    </p>
+    <ul>
+      <li>
+        <strong>Plane cut results are not watertight yet.</strong> The cap does not
+        close the shell properly, so a cut leaves non-manifold edges and stray
+        shells behind — visible in the plane-cut screenshot above. Run
+        <strong>Auto Repair</strong> after a cut and it cleans up to a single
+        closed shell.
+      </li>
+      <li>
+        <strong>Boolean cannot use your own second mesh.</strong> It always
+        operates against a cube built into the app, so the panel is really a
+        demonstration until multi-mesh loading lands.
+      </li>
+      <li>
+        <strong>Hole fill "Smooth" is planar.</strong> It produces a correct cap,
+        just not a smoothed one.
+      </li>
+      <li>
+        <strong>Operations are synchronous.</strong> On a six-figure-triangle mesh,
+        Auto Repair and decimation can take tens of seconds with no progress bar
+        and an unresponsive window.
+      </li>
+      <li>
+        <strong>Not every spatial parameter has a gizmo yet.</strong> Plane cut,
+        transform and drain-hole placement do; the rest are still numeric fields.
+      </li>
+      <li>
+        <strong>No packaged release.</strong> Linux <code>.deb</code> packaging
+        exists; Windows and macOS packaging do not.
+      </li>
+    </ul>
+  </section>
+
+</div>
+
+<footer>
+  <div class="wrap">
+    <a href="index.html">Overview</a> ·
+    <a href="https://github.com/bjornhenneberg/meshwright">Source on GitHub</a> ·
+    <a href="https://github.com/bjornhenneberg/meshwright/blob/main/SPECIFICATION.md">Full specification</a>
+  </div>
+</footer>
+
+</body>
+</html>
