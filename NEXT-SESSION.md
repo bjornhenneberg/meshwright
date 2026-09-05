@@ -71,6 +71,38 @@ Two real bugs were caught by verifying rather than assuming:
   corpus. Now falls back to `shasum -a 256`; both branches were exercised
   and the script re-run against the real corpus (53 present, 0 failed).
 
+**First real CI run happened, and both new jobs failed — informatively.**
+Run `33992294020`. Linux passed. macOS **built Manifold from source
+successfully** and got as far as the corpus step, which settles the batch's
+biggest unknown: CI really can build the native library per-platform.
+
+Two failures, fixed in `30ffbcc` (unpushed as of writing — check
+`git log --oneline origin/main..main`):
+
+- **Windows: hardcoded CMake generator.** `windows-latest` is now the
+  `windows-2025-vs2026` image, shipping **Visual Studio 2026 (18.9.x)**,
+  CMake 4.4.2 and Ninja 1.13.2 — no VS 2022 at all, so
+  `-G "Visual Studio 17 2022"` found nothing. Fixed by preferring Ninja and
+  otherwise letting CMake choose its own newest-installed VS generator
+  (`-A x64` only in the non-Ninja branch; Ninja rejects it). Deliberately
+  *not* bumped to another hardcoded version — that only moves the breakage
+  to the next image refresh.
+- **macOS: all 53 corpus files reported "checksum mismatch". Root cause
+  still not established.** Ruled out: the downloads are fine (a manifest URL
+  was fetched here and its digest matched), upstream has not drifted, the
+  manifest is clean LF with valid hashes, and the "no checksum tool" branch
+  never fired. Rather than guess a third time, `fetch-corpus.sh` now computes
+  the digest explicitly (`sha256sum` / `shasum -a 256` / `openssl`) and
+  compares strings, dropping the `--check`/`--status` flag-compatibility
+  surface, and reports **"could not compute digest"** separately from
+  **"digest differs, expected X got Y"**. All four paths were exercised
+  locally. If macOS still fails, the log will name the cause instead of
+  repeating one opaque message.
+
+Still unverifiable here: whether CMake+Ninja auto-detects the MSVC toolchain
+from plain Git Bash with no vcvars, and whether the macOS checksum change
+fixes it or merely diagnoses it. Both are settled only by the next CI run.
+
 ### Agent C — docs "Known rough edges" pass: DONE (after a false start)
 
 Its first return was a placeholder with no work behind it; re-driven, it
