@@ -17,6 +17,20 @@ fi
 
 mkdir -p "$dest"
 
+# Checksum verification, portably. GNU coreutils gives us sha256sum; stock macOS
+# ships shasum instead and has no sha256sum at all, which matters now that CI runs
+# this on macos-latest. Without this the macOS job does not merely skip the cache
+# check - the post-download verification below fails too, so every single file is
+# reported as a checksum mismatch and the whole fetch fails for a missing tool.
+if command -v sha256sum >/dev/null 2>&1; then
+    verify_sha256() { echo "$1  $2" | sha256sum --check --status 2>/dev/null; }
+elif command -v shasum >/dev/null 2>&1; then
+    verify_sha256() { echo "$1  $2" | shasum -a 256 --check --status 2>/dev/null; }
+else
+    echo "error: neither sha256sum nor shasum found; cannot verify corpus checksums" >&2
+    exit 1
+fi
+
 fetched=0 cached=0 failed=0
 
 while IFS=$'\t' read -r name sha256 url _rest; do
@@ -25,7 +39,7 @@ while IFS=$'\t' read -r name sha256 url _rest; do
 
     target="$dest/$name"
 
-    if [[ -f "$target" ]] && echo "$sha256  $target" | sha256sum --check --status 2>/dev/null; then
+    if [[ -f "$target" ]] && verify_sha256 "$sha256" "$target"; then
         cached=$((cached + 1))
         continue
     fi
@@ -38,7 +52,7 @@ while IFS=$'\t' read -r name sha256 url _rest; do
         continue
     fi
 
-    if ! echo "$sha256  $target.part" | sha256sum --check --status 2>/dev/null; then
+    if ! verify_sha256 "$sha256" "$target.part"; then
         echo "FAILED (checksum mismatch - upstream changed, or a truncated download)"
         rm -f "$target.part"
         failed=$((failed + 1))
