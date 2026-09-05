@@ -7,8 +7,16 @@ and verified; see `reports/M0/SUMMARY.md`, `reports/M1/SUMMARY.md`,
 `reports/M2/SUMMARY.md`, and `reports/M3/`. M4 (Polish and release) is
 underway — batches M4-0 (Manifold RPATH/interop fix), M4-1 (real-world test
 corpus), M4-2 (gizmo wiring + menu/undo-redo UI), M4-6 (corpus ground
-truth), M4-7 (non-manifold import fix), and M4-3 (Linux CI + packaging) are
-complete, 432/432 tests + 8/8 GPU passing; see the M4 entry in §11 and §7.
+truth), M4-7 (non-manifold import fix), M4-3 (Linux CI + packaging), M4-4
+(docs/release) and M4-8 (make the app do what it says) are complete,
+453/453 tests + 8/8 GPU passing; see the M4 entry in §11 and §7.
+
+**Caveat on "complete":** M4-8 found that M2's repair operations and M3's
+edit operations had been called complete while being unreachable or invisible
+in the running app — no Repair UI existed at all, and no edit operation ever
+refreshed the viewport. Both are now fixed, but treat a ✅ below as "the code
+exists and its tests pass", and check §7's M4-8 entry and the outstanding
+items under "Immediate next steps" for what a user can actually do.
 
 ---
 
@@ -465,12 +473,61 @@ GitHub Pages itself was not exercised since no remote is pushed yet from
 this session. See the name-search finding below and
 `reports/M4/20260904T230000Z-batch-docs-release/report.md`.
 
+Batch M4-8 (make the app do what it says) complete, largely unplanned —
+prompted by the user reporting that "a lot of stuff I try doesn't really do
+anything". It didn't: **no edit operation had ever been visible**. All six
+Edit panels applied their operations straight to `MeshDocument`, but the
+viewport and diagnostics panel were only refreshed by load, undo and redo —
+the three call sites of `RefreshFromDocument`. Operations mutate the mesh in
+place, so the viewport kept rendering its already-uploaded copy and the
+diagnostics panel kept showing the pre-operation report. All eight `Apply`
+call sites across all six panels changed the mesh with nothing on screen
+moving; only an unrelated undo/redo revealed it afterwards. `MeshDocument`
+now raises `Changed` after load/apply/undo/redo, naming what caused it, and
+`MainWindow` refreshes from that one event, so a panel cannot forget to ask.
+
+Closed M2's deferred UI gap: **the entire Repair feature set had no UI**.
+`AutoRepairPipeline` and all six individually-runnable operations from §5.1
+were implemented and tested but referenced from nothing outside the test
+project, while §7's M2 entry and the project site both described Repair as
+delivered. Added a Repair tab — first in the sidebar, since inspect-then-repair
+is the primary workflow — with one-click Auto Repair plus each step
+individually, voxel remesh kept below a separator and labelled a last resort
+per the §11 decision excluding it from the default sequence.
+
+Plane cut was rebuilt after five separate defects, any one of which made it
+look inert or destructive: Keep and Discard appended their result instead of
+replacing it, so the half being cut away stayed; Discard never built the
+negative side, leaving its result selection as dead code that fell through to
+the positive side, so Discard did exactly what Keep did; `Split` was a stub
+falling through to the Keep operation behind a "for now" comment, silently
+discarding the half the mode exists to keep; cap loops were extracted from the
+split mesh but handed to cap routines that index the mesh being filled;
+and — the root cause of the rest — `SplitMixedTriangle` re-triangulated only
+the lone-corner side of each straddling triangle and appended cut vertices per
+triangle rather than per edge, dropping a strip of surface along the entire cut
+and tearing the surface apart along it. A cut cube came back as six loose faces
+rather than one solid.
+
+That last one made repair *actively destructive*, which is the finding worth
+carrying: on a halved Menger sponge, Auto Repair's small-shell step could not
+distinguish the cut's fragments from debris, deleted the model's cut end, and
+hole filling then sealed the stump — reporting **"0 issues found"** while
+taking 11% off the model's height. The only visible tell was the bounding box
+shrinking, which nothing asserted.
+
+Also in this batch: `OrbitCamera` now treats Z as up, so print files stop
+loading on their side; Reset View (`Ctrl+0`) and explicit `FrameMesh()`
+framing; decimation reports when it cannot reach its target instead of
+presenting a 558× shortfall as success; a command-line file argument; and
+`docs/usage.html`, a usage guide screenshotted from real sessions with a
+"known rough edges" section listing what is still wrong.
+453 unit tests + 8 GPU tests passing.
+
 Remaining M4 work: Windows/macOS CI + packaging (still under M4-3, not
-started), and further M4-4 polish once the project is actually pushed to
-GitHub (verify Pages renders live, add real in-app screenshots once there's
-a way to capture them, revisit "Meshwright" as a name before any paid
-release per the finding below).
-432 unit tests + 8 GPU tests passing.
+started); the outstanding correctness and UX gaps listed under "Immediate
+next steps" below; and revisiting "Meshwright" as a name before any paid
+release per the finding below.
 
 **M5+**
 v1.x features, then the resin module.
@@ -553,6 +610,13 @@ source, and matches how this audience already buys tools.
 | 2026-09-04 | Import keeps non-manifold geometry by splitting the mesh at the offending vertices rather than dropping triangles. `DMesh3` cannot represent a non-manifold junction, so the only faithful options were losing geometry or cutting connectivity; cutting is strictly better, since the surface stays complete and correctly positioned and the junction genuinely has no single consistent surface to connect to |
 | 2026-09-04 | Topology-derived detectors reason about vertex *positions*, not vertex ids (`PositionTopology`). The mesh structure under-represents the true topology, so a seam left by splitting is indistinguishable from a hole by id alone. `NonManifoldDetector` established this pattern; `BoundaryHoleDetector` and `DisconnectedShellDetector` now follow it. A consequence, accepted deliberately: a crack from near-coincident vertices is reported as duplicate vertices rather than as a hole, because that names the cause and points at the repair that fixes it |
 | 2026-09-04 | M4-3 (packaging & CI) scoped to Linux only for its first batch, by explicit decision — Windows and macOS can't be built or verified on this dev host, so doing all three at once would mean shipping unverified config. `.deb` chosen over AppImage for the first Linux package format: covers this project's own dev platform (Debian/Ubuntu/Mint) and `appimagetool` isn't available on this host or via apt |
+| 2026-09-05 | Every mesh change announces itself through one event (`MeshDocument.Changed`) and the UI refreshes from that single subscription, rather than each caller remembering to refresh. Operations mutate the mesh in place, so a panel that applies one and doesn't refresh leaves the viewport rendering its uploaded copy and the diagnostics panel showing the pre-operation report — which is exactly what had happened to all eight `Apply` call sites across all six Edit panels, making every edit in the app invisible while the suite stayed green |
+| 2026-09-05 | Camera framing is explicit (`FrameMesh()`), never a side effect of assigning `MeshViewportControl.Mesh`. Once every operation refreshes the viewport, framing on assignment would snap the camera back on each Apply; opening a file and Reset View are the only two things that should move the user's view |
+| 2026-09-05 | Z is up. STL, 3MF and the print bed all put the build direction along +Z, so the Y-up convention inherited from realtime graphics showed practically every real print file lying on its side. Also added Reset View (`Ctrl+0`) — orbiting or zooming could put the mesh off screen with no way back short of reopening the file |
+| 2026-09-05 | M2's deferred Repair UI shipped as M4-8, closing a gap that had been open since 2026-09-02. Deferring UI wiring because a milestone's task scope didn't name it left the app's headline feature — and every operation behind it — unreachable for three days while the spec and the public site both described Repair as delivered. Milestones that deliver a user-facing capability should not be called complete while nothing in the UI reaches it |
+| 2026-09-05 | Geometry tests assert invariants, not existence. `PlaneCutTests` asserted `TriangleCount > 0` after a cut, which passes just as happily when the operation appends its result on top of the half it was asked to discard. The invariants that actually catch these are bounding box, volume, shell count and issue count compared before and after — a cut must leave nothing on the discarded side, a split must preserve total volume, and a cut must produce a closed shell |
+| 2026-09-05 | A repair that cannot fix something must say so rather than delete it. Auto Repair's small-shell step removed a cut model's fragmented end as if it were debris, hole filling sealed the stump, and the pipeline reported "0 issues found" while the model had silently lost 11% of its height — a worse outcome than the damage it was asked to repair, and invisible except in the bounding box. Decimation had the same shape of bug, reporting a 558× shortfall as plain success; it now names the target it missed and why |
+| 2026-09-05 | Documentation records what is wrong as well as what works. `docs/usage.html` carries a "known rough edges" section and its screenshots are real sessions including unflattering ones, because the first version of that page used a screenshot of a mesh Auto Repair had quietly mutilated as its success story |
 
 ## 12. Development environment
 
@@ -626,7 +690,37 @@ M0.
     `reports/M4/20260904T213615Z-batch2-mesh-export/report.md`.
 11. ~~Docs/release, first pass (M4-4)~~ — done: `docs/index.html` (GitHub
     Pages site), `samples/` (two small original meshes to try immediately),
-    an expanded `README.md`. Not yet done: pushing the repo to GitHub itself
-    (no remote configured this session) and confirming Pages actually
-    serves the site live. Windows/macOS packaging (M4-3) is the largest
-    remaining M4 gap.
+    an expanded `README.md`. ~~Not yet done: pushing the repo to GitHub~~ —
+    pushed to `github.com/bjornhenneberg/meshwright`; Pages deploys via
+    `.github/workflows/static.yml`, which was uploading the repo root and so
+    served a 404 until it was pointed at `docs/`. `docs/usage.html` (M4-8)
+    now documents the actual workflow with screenshots from real sessions.
+12. **Cap multi-loop cut cross-sections** — `ExtractCapLoop`
+    (`src/Meshwright.Geometry/Edit/PlaneCut.cs`) builds a single loop by
+    sorting intersection vertices angularly around the plane, so a cut
+    crossing several separate boundary loops at once — anything with holes
+    through it — caps across all of them and self-intersects. The `CutEdge`
+    records it consumes are built with `VertexAId == VertexBId`, carrying no
+    connectivity for a loop walk to follow. Needs real edge connectivity,
+    extraction into multiple closed loops, and capping each with correct
+    per-side winding. §5.1 promises "cut with optional cap"; single-loop
+    cross-sections now close correctly, multi-loop ones do not.
+13. **Run long operations off the UI thread** — every operation is
+    synchronous, so Auto Repair or decimation on a six-figure-triangle mesh
+    freezes the window for tens of seconds with no progress indication. A
+    large part of why the app felt like it "wasn't doing anything" even
+    where it worked. Relates to §6.4's performance targets, which are about
+    throughput and say nothing about responsiveness.
+14. **Boolean needs a second loaded mesh** — §5.1 specifies booleans
+    "between loaded meshes", but `BooleanPanel` calls
+    `CreateTestFixtureCube()`: the second operand is a cube hardcoded in the
+    panel, so the whole panel is a demo. Needs multi-mesh loading through
+    the same storage-provider flow as `OnOpenFileClick`. The last v1.0
+    feature the site advertises that a user cannot actually use.
+15. **`HoleFillMode.Smooth` is not smooth** — `CapSmooth` delegates
+    straight to `CapPlanar`. It produces a correct cap, just not the
+    smoothed one §5.1 lists under hole filling.
+16. **Gizmo coverage against the gizmo-first decision** — Plane Cut,
+    Transform and Drain Hole are wired (§11, 2026-09-04). Hollow still has
+    no visual preview of the resulting shell. `MainWindow` holds exactly one
+    gizmo slot, so anything new must go through `ActivateGizmoOwner`.
