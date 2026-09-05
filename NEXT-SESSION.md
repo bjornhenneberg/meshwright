@@ -41,17 +41,35 @@ Linux is not thread-safe. Managed stacks are kept in `reports/M4/gpu-hang/`.
 a test host that survives the session — five had piled up on this machine, one
 for 22 hours. All five are now killed.
 
-### Agent B — Windows/macOS CI + packaging: STATUS UNKNOWN
+### Agent B — Windows/macOS CI + packaging: LANDED, UNVERIFIED BY DESIGN
 
-Never reported. Check the working tree for changes to `.github/workflows/`
-and `scripts/`. It was told to check the premise first (neither platform is
-verifiable on this Linux Mint host) and to scope the work as "write the config,
-flag it explicitly as unverified" if the constraint still holds — that framing
-is pre-approved. The crux it was asked to settle: the native Manifold
-dependency. `manifoldc.dll`/`libmanifoldc.dylib` cannot be built here, so
-either CI builds them per-platform or Boolean cannot ship on those platforms —
-and the packaging must say so rather than shipping a package that crashes when
-the user clicks Boolean. Treat anything it left behind as unreviewed.
+Done and verified as far as this host allows. Two new CI jobs
+(`build-and-test-windows`, `build-and-test-macos`) build Manifold from source
+per-platform and run `Meshwright.Tests` only (GPU suite excluded — no runner
+GPU). `scripts/package-windows.sh` (zip) and `scripts/package-macos.sh`
+(unsigned `.app` zip) added; no MSI, no notarisation.
+
+**Nothing in the Windows/macOS path has ever executed.** That is the honest
+state and §11 records it. **The next step for this item is to push and read
+the first real CI run.** If the native-build scripts fail, suspect the CMake
+generator/target-name assumptions; if Manifold builds but the boolean tests
+fail, suspect the DllImport naming convention
+(`libmanifoldc.dll`/`libmanifoldc.dylib`, assumed to match .NET's default
+probing so that no `SetDllImportResolver` is needed — untested).
+
+Two real bugs were caught by verifying rather than assuming:
+- `Directory.Build.props` bundled the Linux `.so` into Windows/macOS
+  publishes. Now RID-gated, and checked **in both directions**: a `win-x64`
+  publish now carries zero natives, and a `linux-x64` publish and a plain
+  build both still carry `libmanifoldc.so` + `libmanifold.so.3`. The
+  reverse check is the one that matters — RID gating could easily have
+  broken Boolean on Linux, and the tests would still have passed if the
+  loose copy in `bin/` had been stale.
+- `fetch-corpus.sh` verified checksums with `sha256sum`, absent on stock
+  macOS. Both call sites treated a missing tool as a mismatch, so the macOS
+  job would have failed with 53 bogus "checksum mismatch" lines blaming the
+  corpus. Now falls back to `shasum -a 256`; both branches were exercised
+  and the script re-run against the real corpus (53 present, 0 failed).
 
 ### Agent C — docs "Known rough edges" pass: DONE (after a false start)
 
