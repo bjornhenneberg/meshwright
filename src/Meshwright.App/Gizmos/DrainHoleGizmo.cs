@@ -43,6 +43,8 @@ public sealed class DrainHoleGizmo : IViewportGizmo, IDisposable
     private int _nextHoleId = 1;
     private int? _selectedHoleId;
     private bool _isDragging;
+    private double _diameter = DefaultDiameter;
+    private double _countersinkDepth;
 
     private uint _sphereVao;
     private uint _sphereVbo;
@@ -50,6 +52,35 @@ public sealed class DrainHoleGizmo : IViewportGizmo, IDisposable
     private int _sphereVertexCount;
 
     private bool _disposed;
+
+    /// <summary>Diameter used when nothing has set one, in mm.</summary>
+    public const double DefaultDiameter = 2.0;
+
+    /// <summary>
+    /// Diameter, in mm, that the next placed hole is given. The panel pushes its Diameter field in
+    /// here, so a hole is placed at the size the user asked for. This used to be hard-coded to 2mm at
+    /// the placement site, so the Placed Holes list and the viewport marker both described a hole
+    /// nobody had requested (SPECIFICATION.md §11, 2026-09-06).
+    /// </summary>
+    public double Diameter
+    {
+        get => _diameter;
+        set => _diameter = value > 0.0 ? value : _diameter;
+    }
+
+    /// <summary>Countersink depth, in mm, that the next placed hole is given.</summary>
+    public double CountersinkDepth
+    {
+        get => _countersinkDepth;
+        set => _countersinkDepth = value >= 0.0 ? value : _countersinkDepth;
+    }
+
+    /// <summary>
+    /// Radius the viewport marker is drawn at, in world units: the hole's actual radius, so what the
+    /// user sees is the hole they are about to cut. It carried an extra 0.3 fudge factor before, which
+    /// made every marker describe a hole 70% smaller than the one that would be drilled.
+    /// </summary>
+    public static float MarkerRadius(PlacedDrainHole hole) => (float)(hole.Diameter / 2.0);
 
     /// <summary>Raised when a new hole is placed, providing its location and normal.</summary>
     public event EventHandler<(Vector3d Point, Vector3d Normal)>? HolePlaced;
@@ -122,7 +153,7 @@ public sealed class DrainHoleGizmo : IViewportGizmo, IDisposable
         {
             // Render hole marker as a sphere
             var worldPos = new Vector3((float)hole.SurfacePoint.x, (float)hole.SurfacePoint.y, (float)hole.SurfacePoint.z);
-            float markerRadius = (float)(hole.Diameter / 2.0 * 0.3f); // Slightly smaller than actual diameter for clarity
+            float markerRadius = MarkerRadius(hole);
 
             // Scale then translate: System.Numerics composes left-to-right for row vectors, so
             // the reverse order would scale the translation itself and pull the marker toward the
@@ -167,8 +198,8 @@ public sealed class DrainHoleGizmo : IViewportGizmo, IDisposable
                 _nextHoleId++,
                 hit.Value.Point,
                 hit.Value.Normal,
-                diameter: 2.0, // Default 2mm
-                countersinkDepth: 0.0);
+                diameter: _diameter,
+                countersinkDepth: _countersinkDepth);
 
             _holes.Add(newHole);
             _selectedHoleId = newHole.Id;
