@@ -195,7 +195,6 @@
     .feature-grid { grid-template-columns: 1fr; }
     h1 { font-size: 2rem; }
   }
-  .feature.wide { grid-column: 1 / -1; }
   .feature {
     background: var(--bg-raised);
     border: 1px solid var(--border);
@@ -362,24 +361,35 @@
       </div>
       <div class="feature">
         <h3>Edit</h3>
-        <p>Plane cut with generated registration pins so a split model reassembles aligned, boolean union/difference/intersection, transforms, hollowing to a wall thickness, and drain-hole placement — spatial parameters set with a 3D gizmo in the viewport rather than typed as coordinates.</p>
+        <p>Plane cut, boolean union/difference/intersection, transforms, hollowing to a wall thickness, and drain-hole placement. A cut can add registration pins, so a model split to fit the bed goes back together aligned. Spatial parameters are set with a 3D gizmo in the viewport rather than typed as coordinates.</p>
       </div>
       <div class="feature">
         <h3>Simplify</h3>
         <p>Quadric edge-collapse decimation targeting a triangle count or percentage, with a live before/after count.</p>
       </div>
-      <div class="feature wide">
-        <h3>See it the way you print it</h3>
-        <p>A build plate sized to your printer, with the status bar naming any side the model overhangs and by how much. Orthographic or perspective projection, seven view presets on <code>Ctrl+1</code>–<code>Ctrl+7</code>, and wireframe and x-ray display modes for looking at tessellation and at what is inside the model.</p>
-      </div>
     </div>
-    <figure class="shot">
+  </section>
+
+  <section>
+    <h2>See it on the bed</h2>
+    <p class="section-lede">
+      Whether a model fits is a question about your printer, so the viewport
+      answers it directly: it stands on a build plate sized to a real bed, and
+      the status bar names any side the model hangs over and by how much.
+    </p>
+    <p style="color:var(--text-muted); font-size:0.9rem; margin:-12px 0 24px;">
+      Orthographic or perspective projection, seven view presets on
+      <code>Ctrl+1</code>–<code>Ctrl+7</code>, and wireframe and x-ray for
+      reading tessellation and for seeing what is inside the model.
+    </p>
+    <figure class="shot" style="margin-top:0;">
       <img src="images/build-plate.png" width="1740" height="1032"
            alt="An Eiffel Tower model standing on a 220 x 220 mm build plate grid in the Meshwright
                 viewport, seen from an isometric angle.">
       <figcaption>
-        The same model on a 220 mm Ender 3 bed. The grid is drawn at the printer's
-        true size and never scales to the model, so it stays a measuring stick.
+        A 121 mm-tall model on a 220 mm Ender 3 bed. The grid is drawn at the
+        printer's true size and never scales to the model, so it stays a
+        measuring stick.
       </figcaption>
     </figure>
   </section>
@@ -396,7 +406,7 @@
       <li><span class="dot dot-done"></span><div><span class="status-label">M1 — Inspect.</span> <span class="status-desc">All v1.0 defect detectors, diagnostics UI, GPU-verified error highlighting.</span></div></li>
       <li><span class="dot dot-done"></span><div><span class="status-label">M2 — Repair.</span> <span class="status-desc">Undo stack, all repair operations, Auto Repair pipeline, STL/OBJ export.</span></div></li>
       <li><span class="dot dot-done"></span><div><span class="status-label">M3 — Edit.</span> <span class="status-desc">Plane cut, booleans (via Manifold), transforms, hollow, drain holes, decimation.</span></div></li>
-      <li><span class="dot dot-progress"></span><div><span class="status-label">M4 — Polish and release.</span> <span class="status-desc">Gizmo-first UI wiring, registration pins, a real-world test corpus, and CI on all three platforms are done; the viewport work is most of the way through (camera and display modes, build plate — the cross-section slider is left), and a public 1.0 release is still ahead. The <a href="usage.html#known">usage guide</a> lists what is still rough.</span></div></li>
+      <li><span class="dot dot-progress"></span><div><span class="status-label">M4 — Polish and release.</span> <span class="status-desc">Gizmo-first UI, registration pins, a real-world test corpus, CI on Linux, Windows and macOS. Viewport work is nearly through — camera, display modes and build plate in, cross-section slider left. No 1.0 release yet; the <a href="usage.html#known">usage guide</a> lists what is still rough.</span></div></li>
     </ul>
   </section>
 
