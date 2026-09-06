@@ -156,10 +156,16 @@ public sealed class MeshViewportControl : OpenGlControlBase
         var projection = _camera.GetProjectionMatrix(aspect);
         _renderer.Render(view, projection, System.Numerics.Matrix4x4.Identity);
 
-        // Render active gizmo (if any) on top of the mesh.
+        // Render active gizmo (if any) on top of the mesh — literally on top, with the depth test
+        // off. It was enabled here, so a gizmo inside the solid was hidden by it: the plane cut
+        // gizmo starts at the mesh centre and is sized to a tenth of the viewport, so on any closed
+        // model it was drawn entirely inside the surface and nothing appeared at all. The comment
+        // above has always said "on top of the mesh"; this is what makes that true.
         if (_gizmo is not null)
         {
+            _gl.Disable(EnableCap.DepthTest);
             _gizmo.Render(_gl, view, projection);
+            _gl.Enable(EnableCap.DepthTest);
         }
     }
 

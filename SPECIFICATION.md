@@ -688,6 +688,11 @@ source, and matches how this audience already buys tools.
 | 2026-09-06 | §9's macOS deferral holds, but with a trigger instead of a vague "later": signing and notarisation are decided **at the first tagged release**, not whenever revenue appears. The Reddit research argued the other way — macOS is where demand is most concentrated and least served — so this is a deliberate "not yet", not an oversight. Unsigned `.app` zips keep shipping with the Gatekeeper workaround documented in `docs/usage.html` until then |
 | 2026-09-06 | Settings persist as JSON in the platform config directory (`~/.config/meshwright/settings.json` on Linux and its Windows/macOS equivalents) via `System.Text.Json`, no dependency and no database. Recent files was skipped on 2026-09-04 because no persistence existed; it is now a v1.0 item, so the subsystem has to exist, and printer bed size, unit preference and window state will land in the same file. Plain and inspectable is the point — a tool whose pitch includes "no account, no cloud, no telemetry" should keep its settings somewhere the user can read and delete |
 | 2026-09-06 | Registration pins (item 25) are built **before** the Viewport/UX block, jumping the queue on the strength of the evidence: they are the only feature in the whole research pass backed by a user describing the exact workflow unprompted, and they are self-contained geometry work on a plane cut that already exists. The viewport block then starts with the camera and display modes — orthographic, view presets, wireframe, x-ray — as one coherent subsystem, and the build plate, out-of-bounds warning, cross-section slider and import conveniences follow it |
+| 2026-09-06 | Registration pins are **generated, never booleaned**, and the mechanism is one line long: the pin circle joins the cut cross-section as one more loop, so `CutCrossSection`'s parity nesting punches it out of the cap exactly the way it punches out a tunnel through a Menger sponge, and a cylinder wall plus an end disc is stitched onto the boundary that leaves. Nothing is intersected against anything, so the cost is proportional to the cross-section rather than to the model: on the 139,989-triangle Eiffel tower sample a pinned split measures 318 ms against 290 ms unpinned, the ~28 ms difference being almost entirely the AABB tree built for the break-out check. That is the whole point of the feature — the Reddit complaint behind its promotion was *"clicking boolean union is painfully slow, its been twenty minutes"*, a complaint about speed rather than capability, which a boolean-based implementation would reproduce verbatim. The peg and socket each get their **own** cap triangulation (the peg half's punched at the peg diameter, the socket half's at the socket diameter); before pins the two halves shared one triangulation wound opposite ways, and the unpinned path still does |
+| 2026-09-06 | Automatic pin placement is the cross-section's **pole of inaccessibility** — the point furthest from any of its edges — found by subdividing whichever cell could still beat the best answer so far. Not the centroid: a cut through a level-2 Menger sponge is sixteen disjoint squares at the centre plane, and their collective centroid is in fresh air. The largest inscribed circle is defined for a cross-section of any shape and is the placement that leaves the most wall around the bore, which is the thing that matters. Inside-ness uses the same even-odd parity rule as the cap, so a pin can never be placed in a region the cap left open |
+| 2026-09-06 | **Clearance is applied to the socket alone**, radially and axially: the peg comes out at exactly the requested diameter so the printed part measures what was asked for, and the hole it drops into is the one that grows. The socket is also cut one clearance *deeper* than the peg is long, so the two mating faces meet flush instead of the peg's end bottoming out first — a pin that only works in one direction is half a feature, and the workflow is a round trip (split, print, reassemble). Both figures on `RegistrationPinResult` are read back off the finished meshes rather than restated from the request, per the `DrainHoleResult.DiameterAchieved` rule above |
+| 2026-09-06 | A pin that does not fit **refuses the whole cut**, not just the pin. Three ways it can fail, each with the mesh returned untouched: the cross-section cannot host the bore with a wall left around it (the message names the largest diameter that can, and a test retries that diameter and requires it to succeed); the socket would bore out through the model's own wall below the cut, which the cross-section cannot see because a part can neck in below the plane; and Keep/Discard mode or an uncapped cut, which have no mating face at all. Refusing only the pin and splitting anyway would hand back two halves that silently do not align — the §4 failure that §11's drain-hole and decimation rows exist to record |
+| 2026-09-06 | Gizmos were being **depth-tested against the mesh**, so a gizmo inside the solid drew nothing. `MeshViewportControl` said "render active gizmo on top of the mesh" while leaving `DepthTest` enabled; the plane cut gizmo is anchored at the mesh centre and sized to a tenth of the viewport, so on any closed model it was drawn entirely inside the surface and no plane square, normal arrow or pin circle appeared at all. Found the only way it could be — by placing a pin in the running app and seeing nothing happen while the panel correctly reported "Pin placed at (0.03, 0.24, 0), Ø0.4 mm". The depth test is now disabled around the gizmo render and restored after, which is what the comment always claimed |
 
 ## 12. Development environment
 
@@ -848,12 +853,37 @@ M0.
     decision. Recent files needs settings persistence, which nothing in the
     codebase provides yet — decided 2026-09-06 as JSON in the platform config
     directory.
-25. **Registration pins on cut faces**, promoted into §5.1 on 2026-09-06: a
-    peg-and-socket pair on a plane cut's mating faces, one shape, diameter and
-    clearance. Generate the geometry directly rather than via a boolean — the
-    user complaint that motivated this was a 20-minute boolean union on a hollow
-    cube, so a slow implementation misses the point of the feature. **Next up:
-    this is scheduled ahead of item 23.**
+25. ~~**Registration pins on cut faces**~~ — done. A peg-and-socket pair on a
+    plane cut's mating faces, generated directly: the pin circle joins the cut
+    cross-section as one more loop, so the existing parity-nested capping code
+    punches it out of the cap, and a cylinder wall plus an end disc is stitched
+    onto the boundary that leaves. No boolean anywhere — on the 139,989-triangle
+    Eiffel tower sample a pinned split costs 318 ms against 290 ms unpinned.
+    Placement is automatic at the cross-section's pole of inaccessibility, or
+    wherever the user clicks on the plane gizmo; clearance goes on the socket
+    alone, radially and axially. A pin that does not fit refuses the whole cut
+    with the mesh untouched. See §11.
 24. **Hole filling and hole detection disagree about import seams** — see §11,
     2026-09-06. `BoundaryHoleDetector` excludes seams by position;
     `HoleFillRepair` finds loops by vertex index and does not.
+
+26. **A split leaves both halves in one mesh with coincident cut faces.**
+    `PlaneCutSplitOperation` appends the negative half into the same `DMesh3` as
+    the positive one, and the two caps occupy exactly the same plane and area, so
+    every cap triangle overlaps its opposite number. Splitting the clean Menger
+    sponge sample in the running app reports **1,808 issues** where the two halves
+    measured separately have none at all — each is closed, single-shell and
+    issue-free (verified 2026-09-06 while building item 25; pins add geometry to
+    both caps and take it to 2,072, but they are not the cause and the pinned
+    halves are individually just as clean). Either the halves should be separated
+    before being merged, or a split should produce two documents rather than one
+    mesh. Found while verifying pins, not caused by them.
+
+27. **A refused operation still counts as a change.** `MeshDocument.ApplyAsync`
+    calls `RefreshReport` unconditionally, so an operation that returns
+    `Changed: false` — every refusal path: a pin that will not fit, a drain hole
+    too big for the surface, a plane through no geometry — still raises `Changed`,
+    still pushes an undo entry, and still makes `MainWindow.RefreshFromDocument`
+    rebuild every gizmo and clear the viewport slot. In practice a user who asks
+    for a pin that does not fit loses the pin they had positioned and has to place
+    it again to try a smaller one. Small and sharp.
