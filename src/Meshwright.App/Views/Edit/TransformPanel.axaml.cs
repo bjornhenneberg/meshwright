@@ -230,8 +230,41 @@ public partial class TransformPanel : UserControl
     private static string Format(double value) =>
         value.ToString("0.###", CultureInfo.InvariantCulture);
 
+    /// <summary>
+    /// Formats the stats line shared by BeforeStatsText/AfterStatsText: triangle count, volume,
+    /// full bounding-box size (g3's <c>Extents</c> is half that size — using it here is exactly
+    /// the "2 x 2 x 2 mesh reports 1 x 1 x 1" defect this panel used to have), and the box's
+    /// min/max corners so the user can see where the model sits relative to Z=0 without switching
+    /// to the Diagnostics panel.
+    /// </summary>
+    private static string FormatStats(MeshStatistics stats, AxisAlignedBox3d bounds) =>
+        string.Format(
+            CultureInfo.InvariantCulture,
+            "{0} tris, {1:0.##} mm³, bounds: {2:0.#} × {3:0.#} × {4:0.#}, min ({5:0.#}, {6:0.#}, {7:0.#}), max ({8:0.#}, {9:0.#}, {10:0.#})",
+            stats.TriangleCount,
+            stats.Volume,
+            bounds.Width,
+            bounds.Height,
+            bounds.Depth,
+            bounds.Min.x,
+            bounds.Min.y,
+            bounds.Min.z,
+            bounds.Max.x,
+            bounds.Max.y,
+            bounds.Max.z);
+
     private void UpdateStatsDisplay()
     {
+        // Runs on every MeshDocument.Changed (load, apply, undo, redo), not only this panel's own
+        // Apply — clears a stale result line left from a previous mesh (backlog item 21);
+        // OnApplyClickCore/OnAlignToBedClickCore/OnDropToZ0ClickCore set a fresh message right
+        // after this when the change came from here.
+        if (ResultText is not null)
+        {
+            ResultText.Text = string.Empty;
+            ResultText.IsVisible = false;
+        }
+
         if (_document?.Mesh is null)
         {
             BeforeStatsText.Text = "No mesh loaded";
@@ -242,14 +275,7 @@ public partial class TransformPanel : UserControl
         var stats = MeshStatistics.Compute(_document.Mesh);
         var bounds = _document.Mesh.CachedBounds;
 
-        BeforeStatsText.Text = string.Format(
-            CultureInfo.InvariantCulture,
-            "{0} tris, {1:0.##} mm³, bounds: {2:0.#} × {3:0.#} × {4:0.#}",
-            stats.TriangleCount,
-            stats.Volume,
-            bounds.Extents.x,
-            bounds.Extents.y,
-            bounds.Extents.z);
+        BeforeStatsText.Text = FormatStats(stats, bounds);
 
         AfterStatsText.Text = "(not applied yet)";
     }
@@ -307,22 +333,8 @@ public partial class TransformPanel : UserControl
 
             var statsAfter = MeshStatistics.Compute(_document.Mesh);
             var boundsAfter = _document.Mesh.CachedBounds;
-            BeforeStatsText.Text = string.Format(
-                CultureInfo.InvariantCulture,
-                "{0} tris, {1:0.##} mm³, bounds: {2:0.#} × {3:0.#} × {4:0.#}",
-                statsBefore.TriangleCount,
-                statsBefore.Volume,
-                boundsBefore.Extents.x,
-                boundsBefore.Extents.y,
-                boundsBefore.Extents.z);
-            AfterStatsText.Text = string.Format(
-                CultureInfo.InvariantCulture,
-                "{0} tris, {1:0.##} mm³, bounds: {2:0.#} × {3:0.#} × {4:0.#}",
-                statsAfter.TriangleCount,
-                statsAfter.Volume,
-                boundsAfter.Extents.x,
-                boundsAfter.Extents.y,
-                boundsAfter.Extents.z);
+            BeforeStatsText.Text = FormatStats(statsBefore, boundsBefore);
+            AfterStatsText.Text = FormatStats(statsAfter, boundsAfter);
 
             // The drag has been consumed; start the next one from a clean slate so the same
             // offset/angle/factor is not applied twice.
@@ -469,22 +481,8 @@ public partial class TransformPanel : UserControl
 
             var statsAfter = MeshStatistics.Compute(_document.Mesh);
             var boundsAfter = _document.Mesh.CachedBounds;
-            BeforeStatsText.Text = string.Format(
-                CultureInfo.InvariantCulture,
-                "{0} tris, {1:0.##} mm³, bounds: {2:0.#} × {3:0.#} × {4:0.#}",
-                statsBefore.TriangleCount,
-                statsBefore.Volume,
-                boundsBefore.Extents.x,
-                boundsBefore.Extents.y,
-                boundsBefore.Extents.z);
-            AfterStatsText.Text = string.Format(
-                CultureInfo.InvariantCulture,
-                "{0} tris, {1:0.##} mm³, bounds: {2:0.#} × {3:0.#} × {4:0.#}",
-                statsAfter.TriangleCount,
-                statsAfter.Volume,
-                boundsAfter.Extents.x,
-                boundsAfter.Extents.y,
-                boundsAfter.Extents.z);
+            BeforeStatsText.Text = FormatStats(statsBefore, boundsBefore);
+            AfterStatsText.Text = FormatStats(statsAfter, boundsAfter);
 
             ShowResult(result.Summary);
         }
@@ -496,10 +494,43 @@ public partial class TransformPanel : UserControl
 
     private async void OnDropToZ0Click(object? sender, RoutedEventArgs e)
     {
-        // DropToZ0 is an alias for AlignToBed
-        Task task = OnAlignToBedClickCore();
+        Task task = OnDropToZ0ClickCore();
         PendingOperationForTesting = task;
         await task;
+    }
+
+    private async Task OnDropToZ0ClickCore()
+    {
+        if (_document?.Mesh is null)
+        {
+            ShowResult("No mesh loaded.");
+            return;
+        }
+
+        try
+        {
+            var operation = new DropToZ0Operation();
+
+            // Captured before Apply: Apply raises MeshDocument.Changed once the operation
+            // finishes, which MainWindow uses to refresh every panel's stats display from the
+            // (now mutated) document, clobbering BeforeStatsText with post-operation figures.
+            // Restoring the pre-operation snapshot below undoes that clobber.
+            var statsBefore = MeshStatistics.Compute(_document.Mesh);
+            var boundsBefore = _document.Mesh.CachedBounds;
+
+            OperationResult result = await _document.ApplyAsync(operation);
+
+            var statsAfter = MeshStatistics.Compute(_document.Mesh);
+            var boundsAfter = _document.Mesh.CachedBounds;
+            BeforeStatsText.Text = FormatStats(statsBefore, boundsBefore);
+            AfterStatsText.Text = FormatStats(statsAfter, boundsAfter);
+
+            ShowResult(result.Summary);
+        }
+        catch (Exception ex)
+        {
+            ShowResult($"Error: {ex.Message}");
+        }
     }
 
     private void ShowResult(string message)

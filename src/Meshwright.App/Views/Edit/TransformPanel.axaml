@@ -125,11 +125,11 @@
       <TextBlock Text="Mesh Statistics" FontWeight="SemiBold" />
       <Border Padding="6" Background="{DynamicResource SystemAltLowColor}" CornerRadius="4">
         <StackPanel Spacing="4">
-          <TextBlock FontSize="11">
+          <TextBlock FontSize="11" TextWrapping="Wrap">
             <Run Text="Before: " FontWeight="SemiBold" />
             <Run Name="BeforeStatsText" Text="No mesh loaded" />
           </TextBlock>
-          <TextBlock FontSize="11">
+          <TextBlock FontSize="11" TextWrapping="Wrap">
             <Run Text="After: " FontWeight="SemiBold" />
             <Run Name="AfterStatsText" Text="(not applied yet)" />
           </TextBlock>

@@ -236,6 +236,71 @@ public class TransformOperationTests
         Assert.False(result.Changed);
     }
 
+    // --- Backlog item 21: AlignToBedOperation formatted "moved down by {minZ}" unconditionally,
+    // which renders a move *up* (mesh starting below the bed, minZ negative) as "moved down by
+    // -1 mm". Direction must read correctly for both cases.
+
+    [Fact]
+    public void AlignToBedOperation_MeshBelowBed_ReportsMovedUp()
+    {
+        DMesh3 mesh = BuildUnitCube(); // centered at origin: min Z = -0.5
+        new TranslateOperation(new Vector3d(0, 0, -0.6)).Apply(mesh); // min Z now -1.1
+
+        var alignOp = new AlignToBedOperation();
+        OperationResult result = alignOp.Apply(mesh);
+
+        Assert.Contains("moved up by 1.1", result.Summary);
+        Assert.DoesNotContain("moved down", result.Summary);
+        Assert.InRange(mesh.CachedBounds.Min.z, -0.01, 0.01);
+    }
+
+    [Fact]
+    public void AlignToBedOperation_MeshAboveBed_ReportsMovedDown()
+    {
+        DMesh3 mesh = BuildUnitCube(); // centered at origin: min Z = -0.5
+        new TranslateOperation(new Vector3d(0, 0, 10)).Apply(mesh); // min Z now 9.5
+
+        var alignOp = new AlignToBedOperation();
+        OperationResult result = alignOp.Apply(mesh);
+
+        Assert.Contains("moved down by 9.5", result.Summary);
+        Assert.DoesNotContain("moved up", result.Summary);
+        Assert.InRange(mesh.CachedBounds.Min.z, -0.01, 0.01);
+    }
+
+    // --- Backlog item 21: "Drop to Z=0" was implemented as a literal alias for "Align to Bed"
+    // (TransformPanel.OnDropToZ0Click called OnAlignToBedClickCore), so clicking it reported
+    // "Aligned to bed: ..." — the other button's name. DropToZ0Operation exists so the button
+    // names itself; SPECIFICATION.md §5.1 lists them as two distinct operations.
+
+    [Fact]
+    public void DropToZ0Operation_ReportsItsOwnName_NotAlignToBed()
+    {
+        DMesh3 mesh = BuildUnitCube();
+        new TranslateOperation(new Vector3d(0, 0, 10)).Apply(mesh);
+
+        var dropOp = new DropToZ0Operation();
+        OperationResult result = dropOp.Apply(mesh);
+
+        Assert.Equal("Drop to Z=0", dropOp.Name);
+        Assert.Contains("Dropped to Z=0", result.Summary);
+        Assert.DoesNotContain("Aligned to bed", result.Summary);
+        Assert.InRange(mesh.CachedBounds.Min.z, -0.01, 0.01);
+    }
+
+    [Fact]
+    public void DropToZ0Operation_MeshBelowBed_ReportsMovedUp()
+    {
+        DMesh3 mesh = BuildUnitCube();
+        new TranslateOperation(new Vector3d(0, 0, -0.6)).Apply(mesh);
+
+        var dropOp = new DropToZ0Operation();
+        OperationResult result = dropOp.Apply(mesh);
+
+        Assert.Contains("moved up by 1.1", result.Summary);
+        Assert.DoesNotContain("moved down", result.Summary);
+    }
+
     [Fact]
     public void Preview_DoesNotMutateOriginalMesh()
     {

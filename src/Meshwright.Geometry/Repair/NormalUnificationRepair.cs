@@ -40,17 +40,22 @@ public static class NormalUnificationRepair
     }
 
     /// <summary>Unifies winding across one shell's triangles, then corrects the whole shell's
-    /// orientation if it came out consistently inward-facing. Returns triangles flipped.</summary>
+    /// orientation if it came out consistently inward-facing. Returns the number of triangles
+    /// whose final winding differs from their original winding — not the sum of flips performed,
+    /// which double-counts any triangle flipped once by <see cref="MakeWindingConsistent"/> and
+    /// again by the whole-shell re-flip below (a triangle flipped twice ends up back where it
+    /// started).</summary>
     private static int UnifyShell(DMesh3 mesh, int[] triangleIds)
     {
-        int flippedCount = MakeWindingConsistent(mesh, triangleIds);
+        var flipped = new HashSet<int>();
+        MakeWindingConsistent(mesh, triangleIds, flipped);
 
         double signedVolume = SignedVolume(mesh, triangleIds);
         if (Math.Abs(signedVolume) < NearZeroVolumeThreshold)
         {
             // No reliable "inside" to orient towards (open boundary, non-manifold shell, or a
             // degenerate flat shell) - leave the winding-consistent result as-is.
-            return flippedCount;
+            return flipped.Count;
         }
 
         if (signedVolume < 0.0)
@@ -58,21 +63,29 @@ public static class NormalUnificationRepair
             foreach (int tid in triangleIds)
             {
                 mesh.ReverseTriOrientation(tid);
+                Toggle(flipped, tid);
             }
-
-            flippedCount += triangleIds.Length;
         }
 
-        return flippedCount;
+        return flipped.Count;
+    }
+
+    /// <summary>Adds <paramref name="tid"/> to <paramref name="flipped"/> if absent, or removes it
+    /// if present — flipping a triangle twice restores its original winding, so it should no
+    /// longer count as flipped.</summary>
+    private static void Toggle(HashSet<int> flipped, int tid)
+    {
+        if (!flipped.Add(tid))
+        {
+            flipped.Remove(tid);
+        }
     }
 
     /// <summary>Breadth-first walk over triangle adjacency, flipping any triangle that disagrees
-    /// with the already-visited (assumed-correct) neighbor it was reached from. Returns triangles
-    /// flipped.</summary>
-    private static int MakeWindingConsistent(DMesh3 mesh, int[] triangleIds)
+    /// with the already-visited (assumed-correct) neighbor it was reached from. Records each
+    /// flipped triangle id in <paramref name="flipped"/>.</summary>
+    private static void MakeWindingConsistent(DMesh3 mesh, int[] triangleIds, HashSet<int> flipped)
     {
-        int flippedCount = 0;
-
         var visited = new HashSet<int>();
         var frontier = new Stack<int>();
         frontier.Push(triangleIds[0]);
@@ -101,14 +114,12 @@ public static class NormalUnificationRepair
                 if (!AgreesAcrossEdge(mesh, edgeId, tid, neighbor))
                 {
                     mesh.ReverseTriOrientation(neighbor);
-                    flippedCount++;
+                    Toggle(flipped, neighbor);
                 }
 
                 frontier.Push(neighbor);
             }
         }
-
-        return flippedCount;
     }
 
     /// <summary>Same consistency test as <see cref="Diagnostics.InvertedNormalDetector"/>: two

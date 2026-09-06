@@ -49,6 +49,14 @@ public partial class RepairPanel : UserControl
 
     private void UpdateStatsDisplay()
     {
+        // Runs on every MeshDocument.Changed (load, apply, undo, redo — see MainWindow's single
+        // subscription, §11 2026-09-05), not only when this panel's own button was clicked. A
+        // repair message left over from a mesh that no longer exists — e.g. Auto Repair's report
+        // still showing after loading an unrelated file — is exactly the stale-result defect
+        // (§11 2026-09-06, backlog item 21); clearing here and letting RunOperationCore set a
+        // fresh one right after covers apply, load, undo and redo alike.
+        SetResultMessage(string.Empty);
+
         if (_document?.Mesh is null)
         {
             BeforeStats.Text = "(No mesh loaded)";

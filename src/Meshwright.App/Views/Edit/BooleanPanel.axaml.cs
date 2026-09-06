@@ -138,6 +138,14 @@ public partial class BooleanPanel : UserControl
 
     private void UpdateStatsDisplay()
     {
+        // Runs on every MeshDocument.Changed (load, apply, undo, redo), not only this panel's own
+        // Apply — clears a stale result line left from a previous mesh (backlog item 21);
+        // OnApplyClickCore sets a fresh message right after this when the change came from here.
+        if (ResultMessageText is not null)
+        {
+            ResultMessageText.Text = string.Empty;
+        }
+
         if (_document?.Mesh is null)
         {
             BeforeStats.Text = "(No mesh loaded)";

@@ -295,6 +295,20 @@ namespace g3
 
             edges = new DVector<int>(copy.edges);
             edges_refcount = new RefCountVector(copy.edges_refcount);
+
+            // Meshwright deviation from upstream (see VENDOR.md): every other mutator in this file
+            // calls updateTimeStamp() so that CachedBounds/CachedIsClosed recompute on next access,
+            // but this raw field-for-field overwrite never did, even though it completely replaces
+            // the mesh's contents. A caller that reads CachedIsClosed (directly, or transitively
+            // through MeshBoundaryLoops.Compute(), which early-returns no loops when
+            // CachedIsClosed is true) before this Copy() and again afterward got the pre-Copy
+            // answer back the second time too, because cached_is_closed_timestamp still matched
+            // the unmoved Timestamp. Concretely: Meshwright.Core.Operations.PlaneCutKeepSideOperation
+            // (and its Discard/Split siblings) call mesh.Copy(result) to install a plane cut's
+            // result; MeshDocument.Load already primed CachedIsClosed to true for the original
+            // closed mesh, so an uncapped cut's genuinely open result kept reporting zero boundary
+            // loops until this call was added.
+            updateTimeStamp(true);
         }
 
 

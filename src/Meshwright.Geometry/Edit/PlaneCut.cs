@@ -27,12 +27,17 @@ public sealed class PlaneCut
     /// <param name="planeNormal">Normal vector of the cutting plane (must be normalized).</param>
     /// <param name="mode">CutMode.Keep keeps positive side + cap; Discard keeps negative side + cap; Split returns both + caps.</param>
     /// <param name="capMode">HoleFillMode for the cap (Flat, Planar, or Smooth).</param>
+    /// <param name="addCap">
+    /// When false, the cross-section is left open: no cap triangles are generated and the result
+    /// mesh(es) carry a boundary loop where the cut passed through the surface. SPECIFICATION.md
+    /// §5.1 calls the cap "optional" — this is the knob that makes it so.
+    /// </param>
     /// <returns>
     /// PlaneCutResult with PositiveSideMesh (always present), NegativeSideMesh (only for Split mode),
     /// and cap triangle count. If the plane passes through no geometry, PositiveSideMesh is a copy
     /// of the input and MeshWasModified is false.
     /// </returns>
-    public PlaneCutResult Cut(DMesh3 mesh, Vector3d planePoint, Vector3d planeNormal, CutMode mode, HoleFillMode capMode)
+    public PlaneCutResult Cut(DMesh3 mesh, Vector3d planePoint, Vector3d planeNormal, CutMode mode, HoleFillMode capMode, bool addCap = true)
     {
         if (planeNormal.LengthSquared < 0.99) // Rough normalization check
         {
@@ -65,7 +70,7 @@ public sealed class PlaneCut
         // through anything with a hole in it crosses several separate boundary loops at once, so
         // this is a set of loops, some of them holes inside others, not one loop.
         var basis = PlaneBasis.Create(planePoint, planeNormal);
-        List<List<int>> capLoops = CutCrossSection.ExtractLoops(splitMesh.CutSegments);
+        List<List<int>> capLoops = addCap ? CutCrossSection.ExtractLoops(splitMesh.CutSegments) : [];
         List<Index3i> capTriangles = capLoops.Count == 0
             ? []
             : CutCrossSection.Triangulate(capLoops, splitMesh.SplitMesh, basis, flatFan: capMode == HoleFillMode.Flat);

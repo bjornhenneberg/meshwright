@@ -182,9 +182,20 @@ public class BeforeAfterStatsTests
         string before = ((Run)GetField(panel, "BeforeStatsText")!).Text!;
         string after = ((Run)GetField(panel, "AfterStatsText")!).Text!;
 
-        Assert.Contains("bounds: 5", before);
+        // Full bounding-box size (10x10x10 cube), not g3's Extents (half the size) — see
+        // SPECIFICATION.md §11, backlog item 21: TransformPanel used to report "bounds: 5" for
+        // this exact cube.
+        Assert.Contains("bounds: 10", before);
         Assert.NotEqual(before, after);
-        Assert.DoesNotContain("bounds: 5", after);
+        Assert.Contains("bounds: 20", after);
+
+        // The Bounds readout used to give dimensions only, never min/max, so nothing told the
+        // user where the model sits relative to Z=0 (backlog item 21). The cube spans (0,0,0) to
+        // (10,10,10) before the scale, and doubling about the origin takes it to (0,0,0)-(20,20,20).
+        Assert.Contains("min (0, 0, 0)", before);
+        Assert.Contains("max (10, 10, 10)", before);
+        Assert.Contains("min (0, 0, 0)", after);
+        Assert.Contains("max (20, 20, 20)", after);
     }
 
     [AvaloniaFact]
@@ -222,5 +233,119 @@ public class BeforeAfterStatsTests
         Assert.Contains("Shells: 2", before);
         Assert.NotEqual(before, after);
         Assert.DoesNotContain("Shells: 2", after);
+    }
+
+    // --- Backlog item 21: TransformPanel's "Drop to Z=0" button called straight into
+    // OnAlignToBedClickCore ("DropToZ0 is an alias for AlignToBed"), so clicking it reported
+    // "Aligned to bed: ..." — the other button's name.
+
+    [AvaloniaFact]
+    public async Task TransformPanel_DropToZ0Click_ReportsItsOwnName()
+    {
+        var document = new MeshDocument();
+        var mesh = BuildCube(10.0);
+        TranslateInPlace(mesh, 0, 0, 10); // lift it off the bed first
+        document.Load(mesh);
+        var panel = new TransformPanel();
+        SimulateMainWindowRefreshWiring(document, panel);
+        panel.SetDocument(document);
+
+        MethodInfo method = typeof(TransformPanel).GetMethod("OnDropToZ0Click", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        method.Invoke(panel, new object?[] { null, null });
+        if (panel.PendingOperationForTesting is { } pending)
+        {
+            await pending;
+        }
+
+        Assert.Contains("Dropped to Z=0", panel.OperationResultMessage);
+        Assert.DoesNotContain("Aligned to bed", panel.OperationResultMessage);
+    }
+
+    // --- Backlog item 21: the italic result lines (e.g. PlaneCutPanel's "Cut plane kept
+    // positive side with 96 cap triangles...") never cleared, so a message from a previously
+    // loaded mesh stayed on screen after a completely different file was opened. The live
+    // Before:/After: stats already refresh correctly through MeshDocument.Changed (that's what
+    // the rest of this file protects); only the result line was stale. These tests reproduce the
+    // fix's mechanism directly: SetDocument (called on every Changed, including a fresh Load, via
+    // the same MainWindow.RefreshFromDocument wiring simulated above) must clear it.
+
+    [AvaloniaFact]
+    public async Task PlaneCutPanel_ApplyThenLoadNewMesh_ClearsStaleResultMessage()
+    {
+        var document = new MeshDocument();
+        document.Load(BuildCube(10.0));
+        var panel = new PlaneCutPanel();
+        SimulateMainWindowRefreshWiring(document, panel);
+        panel.SetDocument(document);
+
+        panel.FindControl<TextBox>("PlanePointXInput")!.Text = "5";
+        panel.FindControl<TextBox>("PlanePointYInput")!.Text = "5";
+        panel.FindControl<TextBox>("PlanePointZInput")!.Text = "5";
+        panel.FindControl<TextBox>("PlaneNormalXInput")!.Text = "0";
+        panel.FindControl<TextBox>("PlaneNormalYInput")!.Text = "0";
+        panel.FindControl<TextBox>("PlaneNormalZInput")!.Text = "1";
+
+        await InvokeOnApplyClick(panel);
+
+        Assert.False(string.IsNullOrEmpty(panel.OperationResultMessage));
+
+        // A brand new mesh is loaded — MainWindow.RefreshFromDocument calls SetDocument on every
+        // panel via the Changed subscription simulated above, exactly like opening a new file.
+        document.Load(BuildCube(20.0));
+
+        Assert.True(string.IsNullOrEmpty(panel.OperationResultMessage),
+            $"Expected the stale plane-cut result to be cleared on load, got: \"{panel.OperationResultMessage}\"");
+    }
+
+    [AvaloniaFact]
+    public async Task DecimatePanel_ApplyThenLoadNewMesh_ClearsStaleResultMessage()
+    {
+        var document = new MeshDocument();
+        document.Load(BuildCube(10.0)); // 12 triangles
+        var panel = new DecimatePanel();
+        SimulateMainWindowRefreshWiring(document, panel);
+        panel.SetDocument(document);
+
+        panel.FindControl<TextBox>("TargetInput")!.Text = "8";
+        await InvokeOnApplyClick(panel);
+
+        string? resultAfterApply = panel.FindControl<TextBlock>("ResultText")!.Text;
+        Assert.False(string.IsNullOrEmpty(resultAfterApply));
+
+        document.Load(BuildCube(20.0));
+
+        string? resultAfterLoad = panel.FindControl<TextBlock>("ResultText")!.Text;
+        Assert.True(string.IsNullOrEmpty(resultAfterLoad),
+            $"Expected the stale decimate result to be cleared on load, got: \"{resultAfterLoad}\"");
+    }
+
+    [AvaloniaFact]
+    public void PlaneCutPanel_Undo_ClearsStaleResultMessage()
+    {
+        // Decision (SPECIFICATION.md §11, backlog item 21): Undo clears the result line too, not
+        // only Load. The message describes an operation whose effect Undo may have just reverted;
+        // leaving it on screen would misdescribe the mesh Undo restored just as much as a stale
+        // message from a previous file would. Both go through the same MeshDocument.Changed
+        // subscription (SetDocument), so this falls out of the same fix rather than needing a
+        // separate call site.
+        var document = new MeshDocument();
+        document.Load(BuildCube(10.0));
+        var panel = new PlaneCutPanel();
+        SimulateMainWindowRefreshWiring(document, panel);
+        panel.SetDocument(document);
+
+        var translate = new Meshwright.Core.Operations.TranslateOperation(new Vector3d(1, 0, 0));
+        document.Apply(translate);
+        Assert.True(document.CanUndo);
+
+        // Simulate a result message left over from this panel's own last Apply.
+        FieldInfo resultField = typeof(PlaneCutPanel).GetField("ResultMessageText", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var resultTextBlock = (TextBlock)resultField.GetValue(panel)!;
+        resultTextBlock.Text = "Cut plane kept positive side with 96 cap triangles (2112 -> 1280 triangles).";
+
+        document.Undo();
+
+        Assert.True(string.IsNullOrEmpty(panel.OperationResultMessage),
+            $"Expected the stale result to be cleared on undo, got: \"{panel.OperationResultMessage}\"");
     }
 }

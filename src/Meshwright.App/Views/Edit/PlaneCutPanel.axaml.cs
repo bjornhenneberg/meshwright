@@ -80,6 +80,15 @@ public partial class PlaneCutPanel : UserControl
 
     private void UpdateStatsDisplay()
     {
+        // Runs on every MeshDocument.Changed (load, apply, undo, redo), not only this panel's own
+        // Apply. A stale result line from a previously loaded mesh — e.g. "96 cap triangles" still
+        // showing after a different file is opened — is backlog item 21; OnApplyClickCore sets a
+        // fresh message right after this whenever the change came from this panel.
+        if (ResultMessageText is not null)
+        {
+            ResultMessageText.Text = string.Empty;
+        }
+
         if (_document?.Mesh is null)
         {
             BeforeStats.Text = "(No mesh loaded)";
@@ -247,10 +256,10 @@ public partial class PlaneCutPanel : UserControl
         {
             IMeshOperation operation = cutMode switch
             {
-                CutMode.Keep => new PlaneCutKeepSideOperation(_currentPlanePoint, _currentPlaneNormal, capMode),
-                CutMode.Discard => new PlaneCutDiscardSideOperation(_currentPlanePoint, _currentPlaneNormal, capMode),
-                CutMode.Split => new PlaneCutSplitOperation(_currentPlanePoint, _currentPlaneNormal, capMode),
-                _ => new PlaneCutKeepSideOperation(_currentPlanePoint, _currentPlaneNormal, capMode),
+                CutMode.Keep => new PlaneCutKeepSideOperation(_currentPlanePoint, _currentPlaneNormal, capMode, addCap),
+                CutMode.Discard => new PlaneCutDiscardSideOperation(_currentPlanePoint, _currentPlaneNormal, capMode, addCap),
+                CutMode.Split => new PlaneCutSplitOperation(_currentPlanePoint, _currentPlaneNormal, capMode, addCap),
+                _ => new PlaneCutKeepSideOperation(_currentPlanePoint, _currentPlaneNormal, capMode, addCap),
             };
 
             // Captured before Apply: Apply raises MeshDocument.Changed once the operation

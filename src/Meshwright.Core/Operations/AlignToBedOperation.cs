@@ -24,8 +24,14 @@ public sealed class AlignToBedOperation : MeshOperationBase
         }
 
         Transform.AlignToBed(mesh);
+
+        // The mesh translates by -minZ. A mesh sitting below the bed (minZ < 0) moves up to reach
+        // Z=0; a mesh floating above it (minZ > 0) moves down. Reporting "moved down by {minZ}"
+        // unconditionally reads as "moved down by -1 mm" for the up-moving case.
+        double displacement = -minZ;
+        string direction = displacement >= 0 ? "up" : "down";
         return new OperationResult(
             Changed: true,
-            Summary: $"Aligned to bed: moved down by {minZ:0.##} mm so lowest point is at Z=0.");
+            Summary: $"Aligned to bed: moved {direction} by {Math.Abs(displacement):0.##} mm so lowest point is at Z=0.");
     }
 }

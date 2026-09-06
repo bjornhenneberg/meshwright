@@ -362,4 +362,68 @@ public class PlaneCutTests
         Assert.Equal(originalTriangleCount, document.Mesh!.TriangleCount);
         Assert.False(document.CanUndo);
     }
+
+    // --- Backlog item 20: Add Cap must be a real, honoured switch, not just a parsed-and-ignored
+    // checkbox. Volume alone can't tell an open cut from a capped one (both sides can end up with
+    // the same enclosed volume once triangulated); the invariant that actually distinguishes them
+    // is boundary loop count, per SPECIFICATION.md §11's guidance on this defect.
+
+    [Fact]
+    public void PlaneCut_AddCapFalse_LeavesOpenBoundary()
+    {
+        var mesh = BuildCube(10.0);
+        var planeCut = new PlaneCut();
+        Vector3d planePoint = new Vector3d(5.0, 5.0, 5.0);
+        Vector3d planeNormal = Vector3d.AxisZ;
+
+        PlaneCutResult uncapped = planeCut.Cut(mesh, planePoint, planeNormal, CutMode.Keep, HoleFillMode.Flat, addCap: false);
+
+        Assert.True(uncapped.MeshWasModified);
+        Assert.Equal(0, uncapped.CapTrianglesAdded);
+
+        var loops = new MeshBoundaryLoops(uncapped.PositiveSideMesh);
+        Assert.NotEmpty(loops.Loops);
+    }
+
+    [Fact]
+    public void PlaneCut_AddCapTrue_ProducesMoreTrianglesAndNoBoundary_ThanAddCapFalse()
+    {
+        var meshForCapped = BuildCube(10.0);
+        var meshForUncapped = BuildCube(10.0);
+        var planeCut = new PlaneCut();
+        Vector3d planePoint = new Vector3d(5.0, 5.0, 5.0);
+        Vector3d planeNormal = Vector3d.AxisZ;
+
+        PlaneCutResult capped = planeCut.Cut(meshForCapped, planePoint, planeNormal, CutMode.Keep, HoleFillMode.Flat, addCap: true);
+        PlaneCutResult uncapped = planeCut.Cut(meshForUncapped, planePoint, planeNormal, CutMode.Keep, HoleFillMode.Flat, addCap: false);
+
+        Assert.True(capped.PositiveSideMesh.TriangleCount > uncapped.PositiveSideMesh.TriangleCount);
+
+        var cappedLoops = new MeshBoundaryLoops(capped.PositiveSideMesh);
+        Assert.Empty(cappedLoops.Loops);
+
+        var uncappedLoops = new MeshBoundaryLoops(uncapped.PositiveSideMesh);
+        Assert.NotEmpty(uncappedLoops.Loops);
+    }
+
+    [Fact]
+    public void PlaneCutKeepSideOperation_AddCapFalse_ReportsOpenNotCapTriangles()
+    {
+        var document = new MeshDocument();
+        document.Load(BuildCube(10.0));
+
+        var operation = new PlaneCutKeepSideOperation(
+            new Vector3d(5.0, 5.0, 5.0),
+            Vector3d.AxisZ.Normalized,
+            HoleFillMode.Flat,
+            addCap: false);
+
+        OperationResult result = document.Apply(operation);
+
+        Assert.Contains("left open", result.Summary);
+        Assert.DoesNotContain("cap triangles", result.Summary);
+
+        var loops = new MeshBoundaryLoops(document.Mesh!);
+        Assert.NotEmpty(loops.Loops);
+    }
 }

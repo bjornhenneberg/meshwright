@@ -1,3 +1,4 @@
+using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using g3;
 using Meshwright.App.Views.Edit;
@@ -63,5 +64,54 @@ public class DecimatePanelTests
 
         Assert.Equal(0, panel.CurrentTriangleCount);
         Assert.Equal(0, panel.ResolvedTargetTriangleCount);
+    }
+
+    // --- Backlog item 21: switching Mode to Percentage left the unit label reading
+    // "triangles" — the panel showed "Target: 100 triangles" for a 100-*percent* target.
+
+    [AvaloniaFact]
+    public void DefaultMode_TargetUnitLabel_ReadsTriangles()
+    {
+        var panel = new DecimatePanel();
+
+        Assert.Equal("triangles", panel.FindControl<TextBlock>("TargetUnitLabel")!.Text);
+    }
+
+    [AvaloniaFact]
+    public void SwitchingToPercentageMode_TargetUnitLabel_ReadsPercent()
+    {
+        var panel = new DecimatePanel();
+        var modeCombo = panel.FindControl<ComboBox>("ModeCombo")!;
+
+        modeCombo.SelectedIndex = 1; // Percentage
+
+        Assert.Equal("%", panel.FindControl<TextBlock>("TargetUnitLabel")!.Text);
+    }
+
+    [AvaloniaFact]
+    public void SwitchingToPercentageMode_WithNoMeshLoaded_StillUpdatesTheLabel()
+    {
+        // The label used to only get set in UpdateLivePreview's no-mesh branch, hardcoded to
+        // "triangles" — so with no mesh loaded, switching to Percentage left it wrong even
+        // though "No mesh loaded" also shows in the live-preview text.
+        var panel = new DecimatePanel();
+        Assert.Null(panel.Mesh);
+        var modeCombo = panel.FindControl<ComboBox>("ModeCombo")!;
+
+        modeCombo.SelectedIndex = 1; // Percentage
+
+        Assert.Equal("%", panel.FindControl<TextBlock>("TargetUnitLabel")!.Text);
+    }
+
+    [AvaloniaFact]
+    public void SwitchingBackToTriangleCountMode_TargetUnitLabel_ReadsTrianglesAgain()
+    {
+        var panel = new DecimatePanel();
+        var modeCombo = panel.FindControl<ComboBox>("ModeCombo")!;
+
+        modeCombo.SelectedIndex = 1; // Percentage
+        modeCombo.SelectedIndex = 0; // back to TriangleCount
+
+        Assert.Equal("triangles", panel.FindControl<TextBlock>("TargetUnitLabel")!.Text);
     }
 }

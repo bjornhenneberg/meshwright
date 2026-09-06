@@ -50,3 +50,17 @@ Vendored 2026-09-02 from geometry3Sharp commit `ece336493111ffe372a4bfc7fee5026d
 | `core/ProgressCancel.cs` | `ProgressCancel`, `ICancelSource`, `CancelFunction` (cancellation hook `MeshRefinerBase.Progress` is typed against) |
 
 No trims were needed — `Reducer.cs`'s own dependencies beyond the five files above (`DMesh3`, `MathUtil`, `IndexUtil`, `gParallel`, `DVector<T>`, `IProjectionTarget` (`spatial/SpatialInterfaces.cs`), `Vector3d`/`Index2i`/`Index3i`) were already vendored from M1/M2. `IProjectionTarget` in particular meant `Reducer`'s optional projection-target support (`SetProjectionTarget`) compiles as-is; `DecimateOperation` does not use it (no target surface concept exists yet in Meshwright), so the `TargetProjectionMode.NoProjection`/absent-target path is what's actually exercised.
+
+---
+
+Bugfix deviation from upstream (2026-09-06), in `mesh/DMesh3.cs`: `Copy(DMesh3 copy, ...)` now
+calls `updateTimeStamp(true)` before returning. Upstream's version overwrites every field
+(vertices, triangles, edges, all three refcount buffers) but never touches `timestamp`, unlike
+every other mutating method in this file. `CachedBounds` and `CachedIsClosed` compare their own
+cached-at timestamp against `Timestamp` to decide whether to recompute, so a caller that reads
+`CachedIsClosed` (directly, or transitively through `MeshBoundaryLoops.Compute()`'s
+early-return-if-closed check) before a `Copy()` and again afterward got the pre-`Copy()` answer
+back the second time, silently, on any mesh whose closedness had already been queried once
+(which `MeshDocument.Load` always does, via diagnostics). Found via `PlaneCutKeepSideOperation`
+et al., which use `mesh.Copy(result)` to install a plane cut's result — an uncapped cut's
+genuinely open output was reporting zero boundary loops.

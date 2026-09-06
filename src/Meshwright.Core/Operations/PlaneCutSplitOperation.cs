@@ -15,9 +15,10 @@ public sealed class PlaneCutSplitOperation : MeshOperationBase
     private readonly Vector3d _planePoint;
     private readonly Vector3d _planeNormal;
     private readonly HoleFillMode _capMode;
+    private readonly bool _addCap;
     private readonly PlaneCut _planeCut = new();
 
-    public PlaneCutSplitOperation(Vector3d planePoint, Vector3d planeNormal, HoleFillMode capMode = HoleFillMode.Planar)
+    public PlaneCutSplitOperation(Vector3d planePoint, Vector3d planeNormal, HoleFillMode capMode = HoleFillMode.Planar, bool addCap = true)
     {
         if (planeNormal.LengthSquared < 0.99)
         {
@@ -27,13 +28,14 @@ public sealed class PlaneCutSplitOperation : MeshOperationBase
         _planePoint = planePoint;
         _planeNormal = planeNormal;
         _capMode = capMode;
+        _addCap = addCap;
     }
 
     public override string Name => "Plane Cut (Split)";
 
     protected override OperationResult Execute(DMesh3 mesh)
     {
-        PlaneCutResult result = _planeCut.Cut(mesh, _planePoint, _planeNormal, CutMode.Split, _capMode);
+        PlaneCutResult result = _planeCut.Cut(mesh, _planePoint, _planeNormal, CutMode.Split, _capMode, _addCap);
 
         if (!result.MeshWasModified)
         {
@@ -63,14 +65,21 @@ public sealed class PlaneCutSplitOperation : MeshOperationBase
 
         mesh.CompactInPlace();
 
-        return new OperationResult(
-            Changed: true,
-            Summary: string.Format(
+        string summary = _addCap
+            ? string.Format(
                 CultureInfo.InvariantCulture,
                 "Split into two shells with {0} cap triangles ({1} -> {2} triangles, {3} on the negative side).",
                 result.CapTrianglesAdded,
                 result.TrianglesBefore,
                 mesh.TriangleCount,
-                negativeTriangles));
+                negativeTriangles)
+            : string.Format(
+                CultureInfo.InvariantCulture,
+                "Split into two shells, left open ({0} -> {1} triangles, {2} on the negative side).",
+                result.TrianglesBefore,
+                mesh.TriangleCount,
+                negativeTriangles);
+
+        return new OperationResult(Changed: true, Summary: summary);
     }
 }

@@ -1,5 +1,6 @@
 using System.Numerics;
 using System.Threading.Tasks;
+using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using g3;
 using Meshwright.App.Gizmos;
@@ -100,6 +101,42 @@ public class HollowGizmoWiringTests
         string expectedThickness = ((double)gizmo.WallThickness).ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
         Assert.Contains($"{expectedThickness}mm wall thickness", panel.OperationResultMessage);
         Assert.DoesNotContain("2mm wall thickness", panel.OperationResultMessage);
+    }
+
+    // --- Backlog item 21: HollowPanel.SetGizmo used to call UpdateGizmoStatusDisplay()
+    // unconditionally at wire-up, and that method always formatted a wall-thickness message
+    // regardless of whether the gizmo had actually been touched — so a freshly loaded mesh
+    // announced "Wall thickness set via gizmo: 0.3mm" (HollowGizmo's computed default) even
+    // though the textbox (2.0mm by default) is what Apply will actually use.
+
+    [AvaloniaFact]
+    public void HollowPanel_SetGizmo_BeforeTouch_AnnouncesNothing()
+    {
+        var panel = new HollowPanel();
+        var gizmo = new HollowGizmo(new Vector3(5, 10, 5), Vector3.UnitY, initialWallThickness: 0.3f);
+
+        panel.SetGizmo(gizmo);
+
+        string? status = panel.FindControl<TextBlock>("GizmoStatusText")?.Text;
+        Assert.True(string.IsNullOrEmpty(status), $"Expected no gizmo status before it's touched, got: \"{status}\"");
+    }
+
+    [AvaloniaFact]
+    public void HollowPanel_AfterGizmoDragged_AnnouncesTheDraggedThickness()
+    {
+        var panel = new HollowPanel();
+        var anchor = new Vector3(5, 10, 5);
+        var gizmo = new HollowGizmo(anchor, Vector3.UnitY, initialWallThickness: 2f);
+        panel.SetGizmo(gizmo);
+
+        var harness = ViewportHarness.Framed(anchor, 20f);
+        Assert.True(harness.PressAtWorld(gizmo, gizmo.InnerPoint));
+        harness.MoveToPixel(gizmo, harness.RequireProjectToPixel(anchor - Vector3.UnitY * 3f));
+        Assert.True(gizmo.WasTouched);
+
+        string? status = panel.FindControl<TextBlock>("GizmoStatusText")?.Text;
+        Assert.False(string.IsNullOrEmpty(status));
+        Assert.Contains("gizmo", status);
     }
 
     /// <summary>Apply now runs the operation off the UI thread (backlog item 13), so this awaits

@@ -29,6 +29,14 @@ public partial class DecimatePanel : UserControl
     public void SetDocument(MeshDocument doc)
     {
         _document = doc;
+
+        // Called on every MeshDocument.Changed (load, apply, undo, redo), not only this panel's
+        // own Apply — clears a stale result line left from a previous mesh, e.g. "Reduced from
+        // 2112 to 734 triangles" still showing after a different file is opened (backlog item 21).
+        // OnApplyClickCore sets a fresh message right after this when the change came from here.
+        ResultText.Text = string.Empty;
+        ResultText.IsVisible = false;
+
         Mesh = doc.Mesh;
     }
 
@@ -65,12 +73,16 @@ public partial class DecimatePanel : UserControl
 
     private void UpdateLivePreview()
     {
+        // Mode 1 is Percentage; every other mode targets an absolute triangle count. This has to
+        // be kept in sync regardless of whether a mesh is loaded, or switching to Percentage with
+        // no mesh loaded left the label reading "triangles" for a percent target.
+        TargetUnitLabel.Text = ModeCombo.SelectedIndex == 1 ? "%" : "triangles";
+
         int current = CurrentTriangleCount;
 
         if (current == 0)
         {
             LivePreviewText.Text = "No mesh loaded";
-            TargetUnitLabel.Text = "triangles";
             return;
         }
 

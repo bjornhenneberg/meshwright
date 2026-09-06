@@ -15,9 +15,10 @@ public sealed class PlaneCutDiscardSideOperation : MeshOperationBase
     private readonly Vector3d _planePoint;
     private readonly Vector3d _planeNormal;
     private readonly HoleFillMode _capMode;
+    private readonly bool _addCap;
     private readonly PlaneCut _planeCut = new();
 
-    public PlaneCutDiscardSideOperation(Vector3d planePoint, Vector3d planeNormal, HoleFillMode capMode = HoleFillMode.Planar)
+    public PlaneCutDiscardSideOperation(Vector3d planePoint, Vector3d planeNormal, HoleFillMode capMode = HoleFillMode.Planar, bool addCap = true)
     {
         if (planeNormal.LengthSquared < 0.99)
         {
@@ -27,13 +28,14 @@ public sealed class PlaneCutDiscardSideOperation : MeshOperationBase
         _planePoint = planePoint;
         _planeNormal = planeNormal;
         _capMode = capMode;
+        _addCap = addCap;
     }
 
     public override string Name => "Plane Cut (Discard Positive Side)";
 
     protected override OperationResult Execute(DMesh3 mesh)
     {
-        PlaneCutResult result = _planeCut.Cut(mesh, _planePoint, _planeNormal, CutMode.Discard, _capMode);
+        PlaneCutResult result = _planeCut.Cut(mesh, _planePoint, _planeNormal, CutMode.Discard, _capMode, _addCap);
 
         if (!result.MeshWasModified)
         {
@@ -51,13 +53,19 @@ public sealed class PlaneCutDiscardSideOperation : MeshOperationBase
         mesh.Copy(resultMesh);
         mesh.CompactInPlace();
 
-        return new OperationResult(
-            Changed: true,
-            Summary: string.Format(
+        string summary = _addCap
+            ? string.Format(
                 CultureInfo.InvariantCulture,
                 "Cut plane discarded positive side with {0} cap triangles ({1} -> {2} triangles).",
                 result.CapTrianglesAdded,
                 result.TrianglesBefore,
-                result.TrianglesAfter));
+                result.TrianglesAfter)
+            : string.Format(
+                CultureInfo.InvariantCulture,
+                "Cut plane discarded positive side, left open ({0} -> {1} triangles).",
+                result.TrianglesBefore,
+                result.TrianglesAfter);
+
+        return new OperationResult(Changed: true, Summary: summary);
     }
 }
