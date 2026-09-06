@@ -51,6 +51,12 @@
                     ToggleType="CheckBox" IsChecked="True" HotKey="Ctrl+Shift+B" />
           <Separator />
         </MenuItem>
+        <Separator />
+        <!-- The axis and the position live on the bar under the viewport rather than being
+             mirrored here: one control per piece of state, so there is no second copy to drift
+             out of step with the plane actually being drawn (§11, 2026-09-06). -->
+        <MenuItem Name="ShowCrossSectionMenuItem" Header="Cross-_Section" Click="OnToggleCrossSectionClick"
+                  ToggleType="CheckBox" HotKey="Ctrl+Shift+C" />
       </MenuItem>
     </Menu>
 
@@ -125,18 +131,40 @@
       </ScrollViewer>
     </Border>
 
-    <!-- Center: Viewport -->
-    <Panel>
-      <views:MeshViewportControl Name="Viewport" />
-      <!-- Transparent hit-test overlay: on Linux the GL surface doesn't reliably participate in
-           Avalonia's input routing, so pointer events are forwarded through this overlay instead. -->
-      <Border Name="ViewportInputOverlay"
-              Background="Transparent"
-              PointerPressed="OnViewportPointerPressed"
-              PointerMoved="OnViewportPointerMoved"
-              PointerReleased="OnViewportPointerReleased"
-              PointerWheelChanged="OnViewportPointerWheelChanged" />
-    </Panel>
+    <!-- Center: Viewport, with the cross-section slider docked under it -->
+    <DockPanel>
+      <!-- Hidden until View -> Cross-Section is on. A slider is docked below the viewport rather
+           than added as an eighth sidebar tab because it is a way of looking at the model, not an
+           operation on it: nothing here changes a triangle or pushes an undo entry. -->
+      <Border Name="CrossSectionBar" DockPanel.Dock="Bottom" IsVisible="False"
+              Padding="8,6" Background="{DynamicResource SystemAltHighColor}">
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <TextBlock Text="Cross-section" VerticalAlignment="Center" FontWeight="SemiBold" />
+          <!-- Both are subscribed in code-behind, on the Avalonia properties rather than on the
+               SelectionChanged/ValueChanged routed events: a routed event never fires for a
+               control exercised outside a visual tree, which is how the drain-hole gizmo shipped
+               placing every hole at a hard-coded 2 mm behind a green suite (§11, 2026-09-06). -->
+          <ComboBox Name="CrossSectionAxisCombo" Width="110" VerticalAlignment="Center"
+                    ToolTip.Tip="Which axis the section plane slides along" />
+          <Slider Name="CrossSectionSlider" Width="360" VerticalAlignment="Center"
+                  ToolTip.Tip="Where the section plane sits, in millimetres" />
+          <TextBlock Name="CrossSectionPositionText" VerticalAlignment="Center" MinWidth="88" />
+          <Button Name="CrossSectionFlipButton" Content="Flip Side" Click="OnFlipCrossSectionClick"
+                  ToolTip.Tip="Show the other half instead" />
+        </StackPanel>
+      </Border>
+      <Panel>
+        <views:MeshViewportControl Name="Viewport" />
+        <!-- Transparent hit-test overlay: on Linux the GL surface doesn't reliably participate in
+             Avalonia's input routing, so pointer events are forwarded through this overlay instead. -->
+        <Border Name="ViewportInputOverlay"
+                Background="Transparent"
+                PointerPressed="OnViewportPointerPressed"
+                PointerMoved="OnViewportPointerMoved"
+                PointerReleased="OnViewportPointerReleased"
+                PointerWheelChanged="OnViewportPointerWheelChanged" />
+      </Panel>
+    </DockPanel>
   </DockPanel>
 </Window>
 

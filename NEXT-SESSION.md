@@ -8,9 +8,11 @@ cross-platform desktop tool for repairing meshes for 3D printing (C# /
 milestone batch, §11 is a dated decision log (read the last ~15 rows — they are
 the most useful pages in the repo), and "Immediate next steps" at the end is
 the backlog. Items 1–21 and 25 are done; 22, 24, 26 and 27 are open, and 23 is
-part-done — its first two slices (camera and display modes; build plate) landed
-2026-09-06, and the docs for both are written. **Start with item 23's next
-slice, the cross-section preview slider.**
+part-done — its first three slices (camera and display modes; build plate;
+cross-section slider) landed 2026-09-06, and the docs for all three are written.
+**Start with item 23's last slice, the import conveniences** (mm/inch detection,
+drag-and-drop, recent files — which needs the settings file). Item 28 is new and
+came out of the cross-section slice.
 
 ## How to work
 
@@ -51,9 +53,9 @@ wrong**. §11 is largely a catalogue of it. Treat a success message — includin
 your own — as a claim to check.
 
 1. Build and run `dotnet test tests/Meshwright.Tests -c Release`. Baseline is
-   **722 passing, 0 skipped**. Never accept a newly skipped test without a
+   **742 passing, 0 skipped**. Never accept a newly skipped test without a
    stated reason.
-2. The GPU suite is `tests/Meshwright.Tests.Gpu` (22 tests, ~0.5 s). **Always
+2. The GPU suite is `tests/Meshwright.Tests.Gpu` (28 tests, ~0.5 s). **Always
    run it under `timeout`** — it used to hang past ten minutes, and a hang
    orphans a test host that outlives the session. Five had accumulated on this
    machine once, one for 22 hours.
@@ -154,20 +156,17 @@ drain-hole gizmo placed every hole at a hard-coded 2 mm behind a green suite.
 
 ## State
 
-`main` is clean and pushed, at `13c03a2`. **722 tests passing, 0 skipped**; GPU
-suite **22** passing. **CI green on Linux, Windows and macOS** on the current
-commit, and Pages has deployed it.
+`main` carries the cross-section slice. **742 tests passing, 0 skipped**; GPU
+suite **28** passing, both re-run on the merge commit.
 
-The last session touched **documentation only** — no source file changed, so
-those test numbers are inherited from the build plate slice rather than re-run.
-`docs/usage.html` now covers the build plate and registration pins, and
-`README.md` was rewritten: it had become an index into `SPECIFICATION.md`
-(milestone codes as the status, "see §8" for the licence, `reports/M4/` for the
-platform split), and now answers what a stranger opens a repo to find out. **Keep
-it that way** — when you finish a slice, update the README and the site in the
-same language a user would use, and mention the spec only under Contributing.
-Two build-plate screenshots were copied from the slice's report into
-`docs/images/`; do the same rather than re-shooting the app for the site.
+`README.md`, `docs/index.html` and `docs/usage.html` are current as of the
+cross-section slice. `README.md` was rewritten on 2026-09-06: it had become an
+index into `SPECIFICATION.md` (milestone codes as the status, "see §8" for the
+licence, `reports/M4/` for the platform split), and now answers what a stranger
+opens a repo to find out. **Keep it that way** — when you finish a slice, update
+the README and the site in the same language a user would use, and mention the
+spec only under Contributing. Screenshots for the site are copied out of the
+slice's own report into `docs/images/` rather than re-shot.
 
 - `gh` is authenticated and git has a credential helper, so you can push. The
   token has `workflow` scope for `.github/workflows/` changes.
@@ -238,11 +237,27 @@ the next slices inherit:
   check marks back. Tests that raise `Click` directly cannot see this class of
   bug — drive `KeyPressQwerty`.
 
-Remaining, in order:
+The **cross-section slider is done** (2026-09-06, branch
+`feat/viewport-cross-section`, report in
+`reports/M4/20260906T233000Z-viewport-cross-section/report.md`): `Ctrl+Shift+C`
+opens a bar under the viewport with an axis picker, a millimetre slider and Flip
+Side. Things the next slices inherit:
 
-1. **Cross-section preview slider.** (Note item 26: cutting a model to try it
-   will show 1,808 issues on a clean sponge, and that is not your bug.)
-2. **Import conveniences**: mm/inch unit detection and scaling, drag-and-drop,
+- It is **not a fourth render pass** — it is a fragment discard inside the mesh
+  pass and its flagged-edge overlay, so it costs the same at any triangle count.
+  The build plate and the gizmo are deliberately **not** clipped.
+- **Avalonia's framebuffer has no stencil attachment** (probed in the running
+  app: `stencilSize=0`, `depthSize=24`). Anything wanting stencil — a capped
+  section, an outline pass, a masked overlay — needs its own FBO and a blit.
+  This is why the section has no cap; that is now item 28.
+- **A world-millimetre value carried across a model change is meaningless.** The
+  section inherited 0 mm from the sample tetrahedron and opened a 40 mm cube on
+  an empty viewport. Found by opening the app after the suite was green — the
+  third time in three viewport slices that the defect was only visible on screen.
+
+Remaining:
+
+1. **Import conveniences**: mm/inch unit detection and scaling, drag-and-drop,
    recent files. **Recent files needs settings persistence, which does not exist
    anywhere in the codebase yet** — skipped for exactly that reason on
    2026-09-04, now a v1.0 dependency. Decided 2026-09-06: JSON in the platform
@@ -276,7 +291,7 @@ calls `RefreshReport` unconditionally, so an operation returning
 `Changed: false` still pushes an undo entry and makes MainWindow rebuild every
 gizmo — a user whose pin will not fit loses the pin they had positioned.
 
-**A verification gap left behind**: the drain-hole **refusal path** (a hole too
+**A verification gap left behind** (still open): the drain-hole **refusal path** (a hole too
 big for the surface) has two tests but no on-screen evidence. Cheap to close
 next time the app is open.
 

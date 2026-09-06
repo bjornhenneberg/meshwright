@@ -259,6 +259,7 @@
       <tr><td><code>Ctrl+Shift+P</code> / <code>Ctrl+Shift+O</code></td><td>Perspective / orthographic projection</td></tr>
       <tr><td><code>Ctrl+Shift+S</code> / <code>Ctrl+Shift+W</code> / <code>Ctrl+Shift+X</code></td><td>Shaded / wireframe / x-ray display</td></tr>
       <tr><td><code>Ctrl+Shift+B</code></td><td>Show or hide the build plate</td></tr>
+      <tr><td><code>Ctrl+Shift+C</code></td><td>Show or hide the cross-section slider</td></tr>
       <tr><td><code>Ctrl+Z</code> / <code>Ctrl+Y</code></td><td>Undo / redo the last operation</td></tr>
     </table>
     <p>
@@ -279,6 +280,66 @@
       part's far wall, or a stray floating fragment inside the model becomes
       visible. The red/yellow error highlight stays on in every display mode.
     </p>
+
+    <h3>Looking inside: the cross-section</h3>
+    <p>
+      <strong>View &rarr; Cross-Section</strong> (<code>Ctrl+Shift+C</code>) opens
+      a bar under the viewport with an axis picker, a slider and a
+      <strong>Flip Side</strong> button. Everything on one side of the plane stops
+      being drawn, so you can see into the model. Nothing is cut: the mesh, the
+      triangle count and the undo history are untouched, and switching it off puts
+      the model back exactly as it was.
+    </p>
+    <p>
+      The slider is in millimetres and travels the model's own extent along the
+      axis you pick, so both ends of it are useful and the number beside it is the
+      one you would measure with callipers. It reads <code>Z &le; 20 mm</code>
+      rather than <code>Z = 20 mm</code> because that tells you which half you are
+      looking at — <strong>Flip Side</strong> swaps it. Surfaces facing away from
+      you, which is what the inside of a wall is, are tinted so they stay
+      distinguishable from the outside of the model.
+    </p>
+
+    <figure>
+      <img src="images/cross-section-hollow.png" width="1740" height="1032"
+           alt="A 40 mm cube hollowed to a 2 mm wall, opened by the cross-section slider at
+                Z is less than or equal to 20 mm, showing the cavity and the wall thickness.">
+      <figcaption>
+        This is what the slider is for. A 40&nbsp;mm cube hollowed to a
+        2&nbsp;mm wall looks exactly like a solid one from the outside; opened at
+        <code>Z &le; 20 mm</code>, the cavity, the floor and the wall are all
+        there to be seen. (The red is the error highlight: the diagnostics panel
+        flags the hollow's inner shell as a stray disconnected shell, and the
+        section is what shows you where it is.)
+      </figcaption>
+    </figure>
+
+    <p>
+      It is also the fastest way to aim a plane cut. The cut gizmo is drawn on top
+      of the section rather than being clipped by it, so you can open the model,
+      see what the cut will run through, and place the plane there. The build
+      plate is not clipped either — it is what you are measuring against.
+    </p>
+    <p>
+      Two things it does not do. There is <strong>no cap on the opened face</strong>:
+      you are looking into the model, not at a picture of the cut surface, so a
+      solid part reads as an open shell. For the real cut face, make the cut —
+      <strong>Plane Cut</strong> with <strong>Add Cap</strong> gives you the exact
+      capped cross-section, and it is undoable. And the plane is
+      <strong>axis-aligned</strong>: X, Y or Z, with no arbitrary orientation.
+    </p>
+
+    <figure>
+      <img src="images/cross-section-sponge.png" width="1740" height="1032"
+           alt="A Menger sponge model opened by the cross-section slider at Z is less than or
+                equal to 0 mm, its internal tunnel structure visible.">
+      <figcaption>
+        A Menger sponge at <code>Z &le; 0 mm</code>. The section costs the same
+        whatever the triangle count — it decides which pixels are drawn rather
+        than editing geometry — so the slider is as smooth on a
+        139,989-triangle model as on this 2,112-triangle one.
+      </figcaption>
+    </figure>
 
     <h3>The build plate</h3>
     <p>
@@ -614,9 +675,17 @@
         same gap that leaves the File menu without a recent-files list — so a
         bed that is not on the list has to be approximated by the nearest one.
         The choice is forgotten on exit, too: every launch starts on the Ender 3
-        bed with the plate shown. There is no cross-section
-        preview slider either — that is the remaining piece of the viewport
-        work.
+        bed with the plate shown.
+      </li>
+      <li>
+        <strong>The cross-section does not cap the face it opens, and only cuts
+        along X, Y or Z.</strong> A solid part opened by the slider reads as an
+        open shell, because the preview hides fragments rather than building the
+        cut surface — the framebuffer the app renders into has no stencil buffer
+        to cap with, and re-deriving the section on every slider position would
+        cost more the bigger the model got, which is the one thing the preview is
+        meant not to do. Use <strong>Plane Cut</strong> with <strong>Add
+        Cap</strong> when you want the real cut face; it is undoable.
       </li>
       <li>
         <strong>OBJ import does not weld coincident vertices, and nothing tells
