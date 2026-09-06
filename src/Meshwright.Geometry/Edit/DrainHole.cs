@@ -342,20 +342,10 @@ public sealed class DrainHole
         double areaRemoved = areaBefore - TotalArea(work);
         int verticesAdded = work.VertexCount - verticesBefore;
 
-        // Commit.
+        // Commit. DMesh3.Copy re-stamps the mesh, so the fresh opening is visible to
+        // CachedIsClosed and to MeshBoundaryLoops, which early-returns on it. That was a local
+        // workaround here until the root cause was fixed in the vendored Copy (see VENDOR.md).
         mesh.Copy(work);
-
-        // DMesh3.Copy replaces the mesh's contents without advancing its Timestamp, and DMesh3 keys
-        // CachedIsClosed off that stamp — which MeshBoundaryLoops early-returns on. Left alone, a mesh
-        // whose closedness had been cached before the drill (Inspect does exactly that on every load)
-        // keeps answering "closed" afterwards, and the drain hole becomes invisible to hole detection,
-        // hole filling and the diagnostics panel alike. Re-stamping the mesh by writing one vertex
-        // back to where it already is costs nothing and moves nothing.
-        foreach (int vid in mesh.VertexIndices())
-        {
-            mesh.SetVertex(vid, mesh.GetVertex(vid));
-            break;
-        }
 
         string message = string.Format(
             CultureInfo.InvariantCulture,
