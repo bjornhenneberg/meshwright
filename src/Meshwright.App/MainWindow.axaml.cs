@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Numerics;
 using System.Reflection;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -13,10 +14,12 @@ using Meshwright.App.Gizmos;
 using Meshwright.App.Views.Edit;
 using Meshwright.Core;
 using Meshwright.Core.Operations;
+using Meshwright.Core.Settings;
 using Meshwright.Geometry.Diagnostics;
 using Meshwright.Geometry.Printing;
 using Meshwright.IO;
 using Meshwright.IO.Stl;
+using Meshwright.IO.Units;
 using Meshwright.Rendering.Camera;
 using Meshwright.Rendering.Gizmos;
 using Meshwright.Rendering.GL;
@@ -29,15 +32,33 @@ public partial class MainWindow : Window
 
     private readonly MeshDocument _document = new();
 
+    /// <summary>Where the remembered state lives. See <see cref="AppSettings"/>.</summary>
+    private readonly SettingsStore _settingsStore;
+
+    private readonly AppSettings _settings;
+
     /// <summary>
-    /// The printer bed the viewport draws and the out-of-bounds warning measures against. Held
-    /// in-session only: it belongs in <c>settings.json</c> alongside the unit preference and the
-    /// recent-files list (§11, 2026-09-06), and that file is built with recent files rather than
-    /// as a side quest here.
+    /// The printer bed the viewport draws and the out-of-bounds warning measures against.
+    /// Restored from and written back to <see cref="AppSettings.BuildVolumeName"/>.
     /// </summary>
     private BuildVolume _buildVolume = BuildVolume.Default;
 
     private bool _showBuildPlate = true;
+
+    /// <summary>
+    /// The window's size and position as it last was while <em>not</em> maximized. Avalonia does
+    /// not expose a maximized window's restore bounds, and <see cref="Window.Position"/> and
+    /// <see cref="Layoutable.Width"/> read back the maximized geometry, so remembering them at
+    /// close time would leave a user who maximizes once with a window permanently the size of
+    /// their screen. This is updated only while the state is Normal.
+    /// </summary>
+    private WindowPlacement? _normalPlacement;
+
+    /// <summary>
+    /// The mm/inch offer currently on screen, or null when the bar is hidden. Only ever an offer:
+    /// nothing is scaled until <see cref="OnAcceptUnitSuggestionClick"/> runs.
+    /// </summary>
+    private UnitScaleSuggestion? _pendingUnitSuggestion;
 
     // Cross-section preview state. The position is a world coordinate in millimetres along
     // _crossSectionAxis, not a fraction of the model, so the number beside the slider is the
@@ -64,11 +85,30 @@ public partial class MainWindow : Window
     private Action? _deactivateCurrentGizmoOwner;
 
     public MainWindow()
+        : this(null)
     {
+    }
+
+    /// <summary>
+    /// <paramref name="settingsStore"/> lets a test point the persisted state at its own file.
+    /// Left null, the real one in the platform config directory is used — which is also what the
+    /// unit suite gets, via the <c>MESHWRIGHT_SETTINGS_FILE</c> override its module initializer
+    /// sets, so that running the tests can never read or rewrite the developer's own settings.
+    /// </summary>
+    public MainWindow(SettingsStore? settingsStore)
+    {
+        _settingsStore = settingsStore ?? new SettingsStore();
+        _settings = _settingsStore.Load();
+        _buildVolume = ResolveBuildVolume(_settings.BuildVolumeName);
+        _showBuildPlate = _settings.ShowBuildPlate;
+
         InitializeComponent();
+        RestoreWindowPlacement();
         InitializeEditPanels();
         InitializeBuildPlateMenu();
         InitializeCrossSectionControls();
+        InitializeDragAndDrop();
+        RefreshRecentFilesMenu();
 
         // Every mesh change refreshes the UI from one place. The Edit panels apply their
         // operations straight to the document, so without this they'd change the mesh with
@@ -91,6 +131,15 @@ public partial class MainWindow : Window
         LoadSampleMesh();
         RefreshBuildPlate();
         RefreshCrossSection();
+        RefreshViewMenuChecks();
+
+        // A settings file that could not be read is worth one sentence. Silently starting with
+        // defaults is how a user loses their recent files and their printer and never finds out
+        // which of the two of you dropped them.
+        if (_settingsStore.LoadWarning is { } warning)
+        {
+            StatusText.Text = warning;
+        }
     }
 
     /// <summary>Current text of the undo/redo status indicator, exposed for testing.</summary>
@@ -220,10 +269,15 @@ public partial class MainWindow : Window
         {
             MeshImportResult import = MeshImporter.ImportFileWithDiagnostics(path);
             ApplyLoadedMesh(import.Mesh, StatusFor($"Loaded {Path.GetFileName(path)}", import));
+            RememberRecentFile(path);
         }
         catch (Exception ex)
         {
             StatusText.Text = $"Failed to load {Path.GetFileName(path)}: {ex.Message}";
+
+            // A path that no longer opens should not keep its place at the top of the list; the
+            // menu entry would otherwise go on failing every time it is picked.
+            ForgetRecentFile(path);
         }
     }
 
@@ -255,7 +309,10 @@ public partial class MainWindow : Window
         }
 
         MeshImportResult import = StlReader.ReadWithDiagnostics(stream);
-        ApplyLoadedMesh(import.Mesh, StatusFor("Loaded sample tetrahedron", import));
+
+        // No unit offer for the built-in sample: it is a 1-unit tetrahedron nobody chose to open,
+        // so asking about its units on every launch would be asking a question with no answer.
+        ApplyLoadedMesh(import.Mesh, StatusFor("Loaded sample tetrahedron", import), offerUnitScaling: false);
     }
 
     private async void OnOpenFileClick(object? sender, RoutedEventArgs e)
@@ -291,6 +348,16 @@ public partial class MainWindow : Window
             return;
         }
 
+        // Prefer the real path when the picker can give one: it is what the recent-files list has
+        // to store, and a stream cannot be reopened next session. The stream branch below stays
+        // for the pickers that hand back no path at all (a portal-brokered or remote location),
+        // where the file opens normally but cannot be remembered.
+        if (files[0].TryGetLocalPath() is { } localPath)
+        {
+            OpenFileFromPath(localPath);
+            return;
+        }
+
         try
         {
             await using Stream stream = await files[0].OpenReadAsync();
@@ -303,7 +370,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private void ApplyLoadedMesh(DMesh3 mesh, string statusPrefix)
+    private void ApplyLoadedMesh(DMesh3 mesh, string statusPrefix, bool offerUnitScaling = true)
     {
         _document.Load(mesh);
 
@@ -311,6 +378,8 @@ public partial class MainWindow : Window
         // edits deliberately leave the view alone (see MeshViewportControl.Mesh).
         Viewport.FrameMesh();
         SetStatus(statusPrefix);
+
+        ShowUnitSuggestion(offerUnitScaling ? ImportUnits.Suspect(mesh) : null);
     }
 
     private void OnResetViewClick(object? sender, RoutedEventArgs e) => Viewport.FrameMesh();
@@ -381,6 +450,8 @@ public partial class MainWindow : Window
         if (sender is MenuItem { Tag: BuildVolume volume })
         {
             _buildVolume = volume;
+            _settings.BuildVolumeName = volume.Name;
+            SaveSettings();
             RefreshBuildPlate();
             RefreshViewMenuChecks();
             StatusText.Text = $"Build plate: {volume.Name}";
@@ -396,6 +467,8 @@ public partial class MainWindow : Window
         // RefreshViewMenuChecks then writes the check mark back from the real state, which keeps
         // both entry points consistent.
         _showBuildPlate = !_showBuildPlate;
+        _settings.ShowBuildPlate = _showBuildPlate;
+        SaveSettings();
         RefreshBuildPlate();
         RefreshViewMenuChecks();
         StatusText.Text = _showBuildPlate ? "Build plate shown" : "Build plate hidden";
@@ -908,6 +981,346 @@ public partial class MainWindow : Window
             .Select(issue => $"[{issue.Severity}] {issue.Category}: {issue.Message}")
             .ToList();
     }
+
+    // ---------------------------------------------------------------------------------------
+    // Import conveniences: remembered settings, recent files, drag-and-drop, and the unit offer.
+    // ---------------------------------------------------------------------------------------
+
+    /// <summary>The settings actually in effect, exposed for testing.</summary>
+    public AppSettings SettingsForTesting => _settings;
+
+    /// <summary>
+    /// Writes the settings file and reports a failure on the status line. Called at each point a
+    /// remembered value changes rather than only at shutdown: a crash or a kill -9 should not be
+    /// able to lose the file you opened two minutes ago, and the file is a few hundred bytes.
+    /// </summary>
+    private void SaveSettings()
+    {
+        if (!_settingsStore.Save(_settings) && _settingsStore.SaveWarning is { } warning)
+        {
+            StatusText.Text = warning;
+        }
+    }
+
+    /// <summary>
+    /// Matches a remembered printer name back to a preset. An unknown name — a settings file from
+    /// a later version, or a preset since renamed — falls back to the default bed rather than
+    /// failing to start or inventing a bed of its own.
+    /// </summary>
+    private static BuildVolume ResolveBuildVolume(string? name) =>
+        BuildVolume.Presets.FirstOrDefault(volume => volume.Name == name) ?? BuildVolume.Default;
+
+    private void RestoreWindowPlacement()
+    {
+        // Recorded on every move and resize while the window is in its normal state, and written
+        // to settings when it closes.
+        PositionChanged += (_, _) => RecordNormalPlacement();
+
+        if (_settings.Window is not { } placement || !placement.IsUsable)
+        {
+            return;
+        }
+
+        Width = placement.Width;
+        Height = placement.Height;
+        WindowStartupLocation = WindowStartupLocation.Manual;
+        Position = new PixelPoint(placement.X, placement.Y);
+        _normalPlacement = placement;
+
+        if (placement.Maximized)
+        {
+            WindowState = WindowState.Maximized;
+        }
+    }
+
+    private void RecordNormalPlacement()
+    {
+        if (WindowState != WindowState.Normal)
+        {
+            return;
+        }
+
+        var candidate = new WindowPlacement(
+            Position.X,
+            Position.Y,
+            (int)Math.Round(Bounds.Width <= 0 ? Width : Bounds.Width),
+            (int)Math.Round(Bounds.Height <= 0 ? Height : Bounds.Height),
+            Maximized: false);
+
+        // Nonsense geometry (a window mid-creation, or a headless backend that reports nothing)
+        // must not overwrite a good record with one that will be ignored on the way back in.
+        if (candidate.IsUsable)
+        {
+            _normalPlacement = candidate;
+        }
+    }
+
+    protected override void OnClosing(WindowClosingEventArgs e)
+    {
+        RecordNormalPlacement();
+
+        if (_normalPlacement is { } placement)
+        {
+            _settings.Window = placement with { Maximized = WindowState == WindowState.Maximized };
+            SaveSettings();
+        }
+
+        base.OnClosing(e);
+    }
+
+    protected override void OnSizeChanged(SizeChangedEventArgs e)
+    {
+        base.OnSizeChanged(e);
+        RecordNormalPlacement();
+    }
+
+    private void RememberRecentFile(string path)
+    {
+        _settings.RememberRecentFile(path);
+        SaveSettings();
+        RefreshRecentFilesMenu();
+    }
+
+    private void ForgetRecentFile(string path)
+    {
+        _settings.ForgetRecentFile(path);
+        SaveSettings();
+        RefreshRecentFilesMenu();
+    }
+
+    /// <summary>
+    /// Rebuilds File → Open Recent from <see cref="AppSettings.RecentFiles"/>.
+    ///
+    /// <para>
+    /// Generated rather than bound so the disambiguation below can exist: two files called
+    /// <c>model.stl</c> from different folders are one useless menu unless the entry says which
+    /// folder, and appending the folder to every entry would make the common case unreadable. The
+    /// full path is on the tooltip either way.
+    /// </para>
+    /// </summary>
+    private void RefreshRecentFilesMenu()
+    {
+        RecentFilesMenuItem.Items.Clear();
+
+        if (_settings.RecentFiles.Count == 0)
+        {
+            RecentFilesMenuItem.Items.Add(new MenuItem { Header = "No recent files", IsEnabled = false });
+            return;
+        }
+
+        var duplicatedNames = _settings.RecentFiles
+            .GroupBy(Path.GetFileName)
+            .Where(group => group.Count() > 1)
+            .Select(group => group.Key)
+            .ToHashSet();
+
+        foreach (string path in _settings.RecentFiles)
+        {
+            string name = Path.GetFileName(path);
+            string header = duplicatedNames.Contains(name)
+                ? $"{name}  —  {Path.GetDirectoryName(path)}"
+                : name;
+
+            // An underscore in a file name is an access-key marker to a MenuItem header, so
+            // "my_model.stl" would show as "mymodel.stl" with a hidden shortcut on the m.
+            var item = new MenuItem { Header = header.Replace("_", "__"), Tag = path };
+            ToolTip.SetTip(item, path);
+            item.Click += OnRecentFileClick;
+            RecentFilesMenuItem.Items.Add(item);
+        }
+
+        RecentFilesMenuItem.Items.Add(new Separator());
+
+        var clear = new MenuItem { Header = "_Clear Recent Files" };
+        clear.Click += OnClearRecentFilesClick;
+        RecentFilesMenuItem.Items.Add(clear);
+    }
+
+    private void OnRecentFileClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem { Tag: string path } || _document.IsBusy)
+        {
+            return;
+        }
+
+        // Checked here rather than when the menu was built: a list of ten paths is checked once,
+        // at the moment it matters, instead of stat-ing every entry (possibly across a network
+        // mount) each time the File menu is refreshed.
+        if (!File.Exists(path))
+        {
+            StatusText.Text = $"{Path.GetFileName(path)} is no longer at {path} — removed from recent files.";
+            ForgetRecentFile(path);
+            return;
+        }
+
+        OpenFileFromPath(path);
+    }
+
+    private void OnClearRecentFilesClick(object? sender, RoutedEventArgs e)
+    {
+        _settings.RecentFiles.Clear();
+        SaveSettings();
+        RefreshRecentFilesMenu();
+        StatusText.Text = "Recent files cleared";
+    }
+
+    /// <summary>The recent-files entries currently in the menu, most recent first. Exposed for
+    /// testing: the assertion that matters is what the menu offers, not what the list holds.</summary>
+    public IReadOnlyList<string> RecentFileMenuPaths => RecentFilesMenuItem.Items
+        .OfType<MenuItem>()
+        .Select(item => item.Tag as string)
+        .Where(tag => tag is not null)
+        .Select(tag => tag!)
+        .ToList();
+
+    /// <summary>Opens the nth recent-files entry the way clicking it does, for tests that cannot
+    /// open a menu.</summary>
+    public void ClickRecentFileForTesting(int index) =>
+        OnRecentFileClick(RecentFilesMenuItem.Items.OfType<MenuItem>().ElementAt(index), new RoutedEventArgs());
+
+    /// <summary>
+    /// Makes the whole window a drop target.
+    ///
+    /// <para>
+    /// On the <b>Window</b>, deliberately, and not on <c>MeshViewportControl</c>. On Linux the GL
+    /// surface does not reliably take part in Avalonia's input routing — which is why
+    /// <c>ViewportInputOverlay</c> exists to forward pointer events at all — so handlers attached
+    /// to the viewport control would be attached to the one control that never sees the event.
+    /// Dropping anywhere on the window is also what a user expects: the sidebars and the toolbar
+    /// are part of the same window and there is nothing else a mesh file could mean.
+    /// </para>
+    /// </summary>
+    private void InitializeDragAndDrop()
+    {
+        DragDrop.SetAllowDrop(this, true);
+        AddHandler(DragDrop.DragEnterEvent, OnDragOverWindow);
+        AddHandler(DragDrop.DragOverEvent, OnDragOverWindow);
+        AddHandler(DragDrop.DragLeaveEvent, OnDragLeaveWindow);
+        AddHandler(DragDrop.DropEvent, OnDropOnWindow);
+    }
+
+    private void OnDragOverWindow(object? sender, DragEventArgs e)
+    {
+        DroppedFiles dropped = DroppedFiles.From(e.DataTransfer);
+
+        // The refusal is shown, not just enacted. A window that simply declines a drop leaves the
+        // user guessing whether the app is broken, the file is wrong, or the drag missed.
+        bool accepted = dropped.Importable is not null && !_document.IsBusy;
+        e.DragEffects = accepted ? DragDropEffects.Copy : DragDropEffects.None;
+        e.Handled = true;
+
+        ShowDropHint(dropped, accepted);
+    }
+
+    private void OnDragLeaveWindow(object? sender, RoutedEventArgs e) => HideDropHint();
+
+    private void OnDropOnWindow(object? sender, DragEventArgs e)
+    {
+        HideDropHint();
+        e.Handled = true;
+
+        if (_document.IsBusy)
+        {
+            StatusText.Text = "Can't open a file while an operation is running.";
+            return;
+        }
+
+        DroppedFiles dropped = DroppedFiles.From(e.DataTransfer);
+        if (dropped.Importable is not { } path)
+        {
+            StatusText.Text = dropped.RefusalMessage;
+            return;
+        }
+
+        OpenFileFromPath(path);
+
+        // One document at a time is the v1.0 model (§5.1), so a multi-file drop opens the first
+        // mesh and says so rather than silently discarding the rest.
+        if (dropped.Paths.Count > 1)
+        {
+            StatusText.Text += $" — {dropped.Paths.Count - 1} other dropped file(s) ignored; Meshwright opens one mesh at a time.";
+        }
+    }
+
+    private void ShowDropHint(DroppedFiles dropped, bool accepted)
+    {
+        DropHintText.Text = accepted
+            ? $"Open {Path.GetFileName(dropped.Importable!)}"
+            : dropped.RefusalMessage;
+        DropHintOverlay.BorderBrush = accepted
+            ? Avalonia.Media.Brushes.DeepSkyBlue
+            : Avalonia.Media.Brushes.Orange;
+        DropHintOverlay.IsVisible = true;
+    }
+
+    private void HideDropHint() => DropHintOverlay.IsVisible = false;
+
+    /// <summary>The drop hint's text while it is on screen, or null. Exposed for testing.</summary>
+    public string? DropHintMessage => DropHintOverlay.IsVisible ? DropHintText.Text : null;
+
+    /// <summary>
+    /// Shows or hides the mm/inch offer. <paramref name="suggestion"/> null hides the bar, which
+    /// is what every ordinary import does.
+    /// </summary>
+    private void ShowUnitSuggestion(UnitScaleSuggestion? suggestion)
+    {
+        _pendingUnitSuggestion = _settings.OfferUnitScaling ? suggestion : null;
+
+        if (_pendingUnitSuggestion is not { } offer)
+        {
+            UnitSuggestionBar.IsVisible = false;
+            return;
+        }
+
+        UnitSuggestionText.Text = offer.Message;
+        UnitSuggestionAcceptButton.Content = offer.AcceptLabel;
+        UnitSuggestionBar.IsVisible = true;
+    }
+
+    /// <summary>The mm/inch offer's text while it is on screen, or null when nothing is being
+    /// suggested. Exposed for testing: the assertion that matters is that an ordinary import
+    /// says <em>nothing</em>, and that a suspicious one has not been scaled by the time this
+    /// appears.</summary>
+    public string? UnitSuggestionMessage => UnitSuggestionBar.IsVisible ? UnitSuggestionText.Text : null;
+
+    private async void OnAcceptUnitSuggestionClick(object? sender, RoutedEventArgs e) =>
+        await ApplyUnitSuggestionAsync();
+
+    private async System.Threading.Tasks.Task ApplyUnitSuggestionAsync()
+    {
+        if (_pendingUnitSuggestion is null || _document.IsBusy || _document.Mesh is null)
+        {
+            return;
+        }
+
+        UnitSuggestionBar.IsVisible = false;
+        _pendingUnitSuggestion = null;
+
+        // Through the document, so it lands on the undo stack like any other change to the mesh
+        // (§4: never silently destroy the model). Accepting a guess must be as reversible as
+        // every other operation, because the guess can be wrong.
+        OperationResult result = await _document.ApplyAsync(new InterpretAsInchesOperation());
+
+        // The model is now 25.4x its previous size, so the camera framing it had is no longer
+        // framing it. This is the one other place besides an open where refitting is right.
+        Viewport.FrameMesh();
+        StatusText.Text = result.Summary;
+    }
+
+    private void OnDismissUnitSuggestionClick(object? sender, RoutedEventArgs e)
+    {
+        UnitSuggestionBar.IsVisible = false;
+        _pendingUnitSuggestion = null;
+        StatusText.Text = "Kept the model at the size the file describes.";
+    }
+
+    /// <summary>Presses the offer's "Scale to mm" button, for tests that cannot click. Returns the
+    /// task the click handler fires and forgets, so a test can await the rescale rather than
+    /// asserting against a mesh that has not been touched yet.</summary>
+    public System.Threading.Tasks.Task AcceptUnitSuggestionForTesting() => ApplyUnitSuggestionAsync();
+
+    /// <summary>Presses the offer's "Keep as-is" button, for tests that cannot click.</summary>
+    public void DismissUnitSuggestionForTesting() => OnDismissUnitSuggestionClick(this, new RoutedEventArgs());
 
     private void OnViewportPointerPressed(object? sender, PointerPressedEventArgs e) =>
         Viewport.HandleExternalPointerPressed(e);
