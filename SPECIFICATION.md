@@ -664,6 +664,11 @@ source, and matches how this audience already buys tools.
 | 2026-09-05 | The GPU suite's hangs were xunit parallelism, not the GPU. Three test classes each took their own `IClassFixture<GpuTestFixture>`, and xunit runs collections in parallel by default, so several fixtures called `Glfw.CreateWindow` concurrently; GLFW/GLX window creation on Linux is not thread-safe and the race hangs forever, which is why the suite was green at M4-8 with fewer GPU test classes to race. Diagnosed from managed stacks off a live hung host showing two threads stopped inside `GpuTestFixture..ctor` — captured through the .NET diagnostic IPC sockets in `/tmp`, since `ptrace_scope=1` blocks gdb from attaching to a non-descendant without sudo. The tell that it was never a driver stall: 22 s of CPU over 94 minutes and no thread in a DRM ioctl. Fixed by `DisableTestParallelization` for that assembly; the suite now completes in 483 ms rather than hanging past ten minutes. Always run it under `timeout`, or a hang orphans a test host — five had accumulated on the dev host, one for 22 hours |
 | 2026-09-05 | M4-3's Windows/macOS half landed **unverified by construction**, and says so. The 2026-09-04 Linux-only decision held on the point that mattered — this dev host cannot *run* a Windows or macOS build — but its implied corollary was wrong: GitHub's `windows-latest`/`macos-latest` runners are real machines with their own toolchains, so CI can build Manifold per-platform rather than shipping a placeholder. New `build-and-test-windows`/`build-and-test-macos` jobs build Manifold from source (no prebuilt binary is committed for those platforms, unlike `linux-x64`) and run `Meshwright.Tests` only, excluding the GPU suite since the runners have no GPU. Packaging (`package-windows.sh` zip, `package-macos.sh` unsigned `.app` zip; no MSI, no notarisation) ships honestly: a build without the native library disables Boolean behind a `NOTICE.txt` instead of crashing when the user clicks it. Two real bugs were found while verifying rather than assuming: `Directory.Build.props` unconditionally bundled the Linux `.so` into Windows/macOS publishes, so a Windows package carried unloadable Linux binaries (now RID-gated, and checked in both directions — a Windows publish now carries no natives, a Linux one still carries both); and `fetch-corpus.sh` verified checksums with `sha256sum`, which stock macOS does not have, where both call sites treated the missing tool as a checksum mismatch and would have failed the macOS job with 53 bogus mismatches blaming the corpus. The DllImport naming reasoning — `libmanifoldc.dll`/`libmanifoldc.dylib` matching .NET's default probing — held; what it missed was the *location* rather than the name, which cost two further CI rounds (see the 2026-09-06 row) |
 | 2026-09-06 | Native libraries are copied **next to the managed assemblies**, not only into `runtimes/<rid>/native/`. Every Manifold test failed on macOS with `DllNotFoundException` while the dylib sat correctly under `runtimes/osx-arm64/native/` in the test output. CI diagnostics eliminated every other explanation: the file was arm64, ad-hoc signed, carried `@loader_path` on its `LC_RPATH`, had its dependency resolving, and a plain `ctypes.CDLL` of that exact path printed `dlopen OK`. The library was always loadable; .NET never looked there. `runtimes/<rid>/native/` is a deps.json contract and these loose files are not in deps.json, so the fact that it works on Linux is incidental rather than guaranteed — which is why the gap survived until a second platform ran the same code. Both libraries are copied, not just the entry point, since `libmanifoldc` records its dependency on `libmanifold` as `@rpath`-relative and the two must sit together. Verified without a Mac: hiding `runtimes/` in the Linux test output reproduces the macOS condition exactly — the interop tests failed that way before the change and pass on the flat copy after it |
+| 2026-09-06 | A control that reads a value it never uses is worse than a missing control: it is a promise the app breaks silently. A UX audit of the real GUI found three — Plane Cut's "Add Cap" checkbox (parsed into a local and discarded; no cut operation has an uncapped path at all, so §5.1's "optional cap" is unreachable), Drain Holes' "Countersink Depth" (validated, echoed into the summary as "1mm countersink", never used to change geometry), and the drain-hole gizmo's diameter (hard-coded to 2.0 at placement, so the Placed Holes list and the viewport marker both describe a hole the user did not ask for). Each shipped behind a green suite because the tests drive the operations directly and never assert that a UI control changes the operation's output — the gap a test suite cannot see unless something asserts the wiring itself. **Open** — the three controls are still inert as of this row |
+| 2026-09-06 | Drain Holes does not drill; it deletes whole triangles inside the requested radius and adds nothing. On a coarse mesh a Ø0.5 mm request removed a full 2 × 2 mm face — 16× the requested area — leaving the model open (0 issues → 1 boundary hole, surface area 24 → 20, vertex count unchanged at 8, proof nothing was constructed) while reporting "Applied 1 drain hole(s)… (Ø0.5mm, removed 2 triangles)". The honesty failure is one line: `DrainHoleResult.DiameterAchieved` is documented as the achieved diameter but returns the *requested* one verbatim, so it can never disagree with the request, and `DepthDrilled` is `diameter * 2.0` — a constant dressed as a measurement. A field named for what was achieved must be measured from the result, never copied from the input. **Open** — the feature is destructive as it stands and needs a real drilling implementation, not a patched message |
+| 2026-09-06 | Decimation names the target it missed (correct, per the 2026-09-05 row) but the reason it gives is false: reducing the clean Menger sponge to 734 triangles introduced 67 self-intersections while the summary said further collapses "would have created invalid geometry". A quality-collapse loop that refuses individual collapses on a *local* validity test still has to be checked against the whole-mesh invariants afterwards — the app's own status bar reported the 67 issues in the same frame the panel denied them. **Open** |
+| 2026-09-06 | Most of §5.1's "Viewport / UX" block was never built, and nothing said so. Orthographic projection (`OrbitCamera` only ever constructs a perspective matrix), standard view presets (the View menu holds Reset View alone), the build plate grid, the out-of-bounds warning, the wireframe and x-ray display modes and the cross-section preview slider are absent from the code entirely — not unwired, as M2's Repair UI was, but never written. So are import's unit detection/mm-inch scaling, drag-and-drop and recent-files list. This is the M2-Repair-UI shape of gap at larger scale: the spec, `README.md` and `docs/usage.html` all described a viewport richer than the one that exists. `docs/usage.html` now documents each absence; the scope decision — build them for v1.0 or move them to v1.x — is still open |
+| 2026-09-06 | Detection and repair must agree about what a defect is, the way `SelfIntersectionDetector` and `SelfIntersectionRepair` already share one search. `BoundaryHoleDetector` excludes import seams via `PositionTopology.SeamEdges`, so it correctly reports no hole at a non-manifold junction that import split; `HoleFillRepair` finds its loops with `MeshBoundaryLoops`, which is vertex-index-based and has no such exclusion, so the same junction is an open loop to it. Inspect can therefore report zero holes on a file whose Auto Repair run adds geometry across a seam. Found while fact-checking a documentation claim, which is its own argument for writing the limitations down. **Open** — documented in `docs/usage.html`, not yet reconciled in code |
 
 ## 12. Development environment
 
@@ -785,3 +790,42 @@ M0.
     rewrites the display afterward. Plane Cut on a 2112-triangle, 4.39-volume
     mesh now correctly reports "Before: 2112 / 4.39" rather than repeating
     the after figures — verified live.
+
+19. **Drain Holes is destructive and reports success.** It deletes every
+    triangle within the requested radius and adds nothing: a Ø0.5 mm hole on a
+    coarse cube removed a whole 2 × 2 mm face, 16× the requested area, and left
+    the model open. `DiameterAchieved` returns the requested value verbatim and
+    `DepthDrilled` is `diameter * 2.0`, so neither can ever disagree with the
+    request. Countersink depth is validated and reported but never touches
+    geometry, and the gizmo places every hole at a hard-coded Ø2 mm regardless
+    of the field. Needs a real drilling implementation with the opening measured
+    from the result. The invariant that catches it: surface area removed ≈ πr²,
+    and vertex count must *increase*.
+20. **Plane Cut's "Add Cap" checkbox is inert**, and `PlaneCut.Cut` has no
+    uncapped path at all, so §5.1's "optional cap" is unreachable. An uncapped
+    cut must leave a non-zero boundary loop count — volume alone will not catch
+    this.
+21. **Panel reporting defects found by the same audit**: the Transform panel
+    reports `bounds.Extents`, which g3 defines as *half* the box size, so a
+    2 × 2 × 2 mesh reads "1 × 1 × 1" in the panel used for scaling; the Hollow
+    panel announces "Wall thickness set via gizmo" from startup with the gizmo
+    untouched, naming a different number from the one Apply will use; Auto
+    Repair double-counts globally re-flipped triangles and reported "flipped 13
+    triangles" on a 12-triangle mesh; Decimate's unit label stays "triangles" in
+    Percentage mode; panel result lines never clear on file load; and
+    "Drop to Z=0" is an alias for Align to Bed that prints the other button's
+    name and renders a move up as "moved down by -1 mm".
+22. **Decimation introduces the invalid geometry it claims to have avoided** —
+    734 triangles and 67 self-intersections from a clean mesh, while the summary
+    says further collapses "would have created invalid geometry". The local
+    validity test each collapse passes has to be checked against whole-mesh
+    invariants afterwards.
+23. **Most of §5.1's Viewport / UX block does not exist** (see §11,
+    2026-09-06). Orthographic projection, view presets, the build plate grid and
+    out-of-bounds warning, wireframe and x-ray modes, the cross-section slider,
+    unit handling, drag-and-drop and recent files are all absent from the code.
+    This is the largest remaining v1.0 gap and needs a scope decision first:
+    build them for 1.0, or move them to §5.2.
+24. **Hole filling and hole detection disagree about import seams** — see §11,
+    2026-09-06. `BoundaryHoleDetector` excludes seams by position;
+    `HoleFillRepair` finds loops by vertex index and does not.
