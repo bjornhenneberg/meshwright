@@ -34,6 +34,9 @@ right listing every problem found](docs/images/overview.png)
 - **See it on the bed** — a build plate sized to your printer, with a warning
   naming any side the model hangs over and by how much. Orthographic or
   perspective, seven view presets, wireframe and x-ray.
+- **See inside it** — a cross-section slider that opens the model along X, Y or
+  Z without cutting anything, so you can check a hollow's wall thickness or find
+  the shell hiding in the middle of a part.
 
 Every spatial parameter is set with a gizmo in the viewport, with text boxes as
 the precision fallback. Everything is undoable. STL and OBJ in and out.
@@ -54,7 +57,10 @@ that runs on Linux, Windows and macOS. What is **not** there yet:
 - **Import is literal.** No unit detection (a model authored in inches loads
   25.4x undersized with no prompt), no drag-and-drop, and only STL and OBJ —
   3MF and PLY are not implemented.
-- **No cross-section preview**, and no headless or batch command line.
+- **The cross-section does not cap the face it opens**, so a solid part reads as
+  an open shell, and it only cuts along X, Y or Z. Plane Cut gives you the real
+  capped face when you want it.
+- **No headless or batch command line.**
 
 The usage guide's [known rough edges](https://bjornhenneberg.github.io/meshwright/usage.html#known)
 is the honest list, including the places where an operation can surprise you.

@@ -36,6 +36,7 @@ public sealed class MeshViewportControl : OpenGlControlBase
     private MeshDisplayMode _displayMode = MeshDisplayMode.Shaded;
     private BuildVolume? _buildVolume = BuildVolume.Default;
     private bool _modelFitsBuildVolume = true;
+    private CrossSectionPlane? _crossSection;
 
     private bool _isOrbiting;
     private bool _isPanning;
@@ -104,6 +105,21 @@ public sealed class MeshViewportControl : OpenGlControlBase
         set
         {
             _modelFitsBuildVolume = value;
+            RequestNextFrameRendering();
+        }
+    }
+
+    /// <summary>
+    /// The non-destructive section plane, or null to draw the whole model. Held here for the same
+    /// reason as <see cref="DisplayMode"/> - the renderer does not exist until the GL context is
+    /// initialised - and pushed to the renderer on every render.
+    /// </summary>
+    public CrossSectionPlane? CrossSection
+    {
+        get => _crossSection;
+        set
+        {
+            _crossSection = value;
             RequestNextFrameRendering();
         }
     }
@@ -242,7 +258,18 @@ public sealed class MeshViewportControl : OpenGlControlBase
             _buildPlateRenderer.Render(view, projection);
         }
 
+        // The cross-section is not a fourth pass. It hides half of an existing one: the mesh pass
+        // and its flagged-edge overlay both discard fragments in the hidden half-space, which is
+        // why the cost does not depend on triangle count and the slider stays smooth on the
+        // 139,989-triangle sample.
+        //
+        // It is deliberately not applied to the two passes around it. The build plate is the
+        // reference the model is being judged against - sawing the bed in half would remove the
+        // thing the section is measured relative to - and the gizmo is an overlay drawn on top of
+        // everything with the depth test off, so clipping it would make the plane cut handle
+        // vanish exactly when a user opens the model to aim it.
         _renderer.DisplayMode = _displayMode;
+        _renderer.CrossSection = _crossSection;
         _renderer.Render(view, projection, System.Numerics.Matrix4x4.Identity);
 
         // Render active gizmo (if any) on top of the mesh — literally on top, with the depth test

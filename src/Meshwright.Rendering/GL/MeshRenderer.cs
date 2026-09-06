@@ -25,12 +25,15 @@ public sealed class MeshRenderer : IDisposable
 
         out vec3 vNormal;
         out float vHighlight;
+        out vec3 vWorldPosition;
 
         void main()
         {
+            vec4 world = uModel * vec4(aPosition, 1.0);
             vNormal = mat3(uModel) * aNormal;
             vHighlight = aHighlight;
-            gl_Position = uProjection * uView * uModel * vec4(aPosition, 1.0);
+            vWorldPosition = world.xyz;
+            gl_Position = uProjection * uView * world;
         }
         """;
 
@@ -39,6 +42,7 @@ public sealed class MeshRenderer : IDisposable
 
         in vec3 vNormal;
         in float vHighlight;
+        in vec3 vWorldPosition;
         out vec4 FragColor;
 
         uniform vec3 uLightDirection;
@@ -51,11 +55,39 @@ public sealed class MeshRenderer : IDisposable
         uniform float uAlpha;
         uniform float uUnlit;
 
+        // Cross-section (see CrossSectionPlane): uSectionEnabled = 1 hides every fragment in the
+        // half-space dot(n, p) + d > 0, and uSectionColor tints the inward-facing surfaces that
+        // hiding it exposes.
+        uniform float uSectionEnabled;
+        uniform vec4 uSectionPlane;
+        uniform vec3 uSectionColor;
+
         void main()
         {
+            if (uSectionEnabled > 0.5 && dot(uSectionPlane.xyz, vWorldPosition) + uSectionPlane.w > 0.0)
+            {
+                discard;
+            }
+
             vec3 normal = normalize(vNormal);
-            float diffuse = max(dot(normal, normalize(-uLightDirection)), 0.0);
             vec3 baseColor = mix(uBaseColor, uHighlightColor, vHighlight);
+
+            // Only while a section is open: the far side of the shell is now in view, and its
+            // triangles face away from the camera. Left alone they shade to the ambient floor and
+            // the opened model reads as a black hole. The normal is flipped so the interior is lit
+            // like a surface, and tinted so it is still distinguishable from the outside.
+            //
+            // Guarded on uSectionEnabled deliberately. Doing it unconditionally would shade every
+            // back face as if it faced the camera, and back faces on a closed mesh are exactly
+            // what an inverted normal looks like - a defect this app exists to find, which the
+            // viewport currently shows as a dark patch (see InvertedNormalDetector).
+            if (uSectionEnabled > 0.5 && !gl_FrontFacing)
+            {
+                normal = -normal;
+                baseColor = mix(baseColor, uSectionColor, 0.65);
+            }
+
+            float diffuse = max(dot(normal, normalize(-uLightDirection)), 0.0);
             vec3 color = mix(baseColor * (0.2 + 0.8 * diffuse), baseColor, uUnlit);
             FragColor = vec4(color, uAlpha);
         }
@@ -70,20 +102,36 @@ public sealed class MeshRenderer : IDisposable
         uniform mat4 uView;
         uniform mat4 uProjection;
 
+        out vec3 vWorldPosition;
+
         void main()
         {
-            gl_Position = uProjection * uView * uModel * vec4(aPosition, 1.0);
+            vec4 world = uModel * vec4(aPosition, 1.0);
+            vWorldPosition = world.xyz;
+            gl_Position = uProjection * uView * world;
         }
         """;
 
     private const string EdgeFragmentShaderSource = """
         #version 330 core
 
+        in vec3 vWorldPosition;
         out vec4 FragColor;
+
         uniform vec3 uEdgeColor;
+        uniform float uSectionEnabled;
+        uniform vec4 uSectionPlane;
 
         void main()
         {
+            // Clipped on the same terms as the surface. Without this the flagged-edge overlay
+            // keeps drawing in the half the section has removed, leaving yellow wireframe hanging
+            // in empty space over geometry that is no longer there.
+            if (uSectionEnabled > 0.5 && dot(uSectionPlane.xyz, vWorldPosition) + uSectionPlane.w > 0.0)
+            {
+                discard;
+            }
+
             FragColor = vec4(uEdgeColor, 1.0);
         }
         """;
@@ -128,6 +176,17 @@ public sealed class MeshRenderer : IDisposable
 
     /// <summary>Surface opacity used by <see cref="MeshDisplayMode.XRay"/>.</summary>
     public float XRayAlpha { get; set; } = 0.35f;
+
+    /// <summary>
+    /// The section plane hiding half the model, or null to draw all of it. See
+    /// <see cref="CrossSectionPlane"/>: nothing about the uploaded mesh changes, only which of its
+    /// fragments survive, so switching this on and off is free at any triangle count.
+    /// </summary>
+    public CrossSectionPlane? CrossSection { get; set; }
+
+    /// <summary>Tint applied to the inward-facing surfaces a section exposes, so the inside of the
+    /// shell is not mistaken for the outside of it.</summary>
+    public Vector3 SectionColor { get; set; } = new(0.95f, 0.62f, 0.32f);
 
     public MeshRenderer(Silk.NET.OpenGL.GL gl)
     {
@@ -291,6 +350,9 @@ public sealed class MeshRenderer : IDisposable
         _gl.Uniform1(_gl.GetUniformLocation(_program, "uAlpha"), DisplayMode == MeshDisplayMode.XRay ? XRayAlpha : 1f);
         _gl.Uniform1(_gl.GetUniformLocation(_program, "uUnlit"), DisplayMode == MeshDisplayMode.Wireframe ? 1f : 0f);
 
+        SetSectionUniforms(_program);
+        _gl.Uniform3(_gl.GetUniformLocation(_program, "uSectionColor"), SectionColor.X, SectionColor.Y, SectionColor.Z);
+
         ApplyDisplayModeState();
 
         _gl.BindVertexArray(_vao);
@@ -309,11 +371,31 @@ public sealed class MeshRenderer : IDisposable
             int edgeColorLocation = _gl.GetUniformLocation(_edgeProgram, "uEdgeColor");
             _gl.Uniform3(edgeColorLocation, EdgeHighlightColor.X, EdgeHighlightColor.Y, EdgeHighlightColor.Z);
 
+            SetSectionUniforms(_edgeProgram);
+
             _gl.LineWidth(EdgeHighlightLineWidth);
             _gl.BindVertexArray(_edgeVao);
             _gl.DrawArrays(PrimitiveType.Lines, 0, (uint)_edgeVertexCount);
             _gl.BindVertexArray(0);
         }
+    }
+
+    /// <summary>
+    /// Pushes the current <see cref="CrossSection"/> to <paramref name="program"/>. Both the
+    /// surface and the flagged-edge overlay read the same two uniforms from the same source, so
+    /// they cannot end up clipping against different planes.
+    /// </summary>
+    private void SetSectionUniforms(uint program)
+    {
+        if (CrossSection is not { } section)
+        {
+            _gl.Uniform1(_gl.GetUniformLocation(program, "uSectionEnabled"), 0f);
+            return;
+        }
+
+        Vector4 plane = section.HiddenHalfSpace;
+        _gl.Uniform1(_gl.GetUniformLocation(program, "uSectionEnabled"), 1f);
+        _gl.Uniform4(_gl.GetUniformLocation(program, "uSectionPlane"), plane.X, plane.Y, plane.Z, plane.W);
     }
 
     /// <summary>

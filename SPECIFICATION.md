@@ -128,7 +128,7 @@ The smallest set that makes someone uninstall Meshmixer.
 - ~~Shaded, wireframe, x-ray and error-highlight display modes~~ ✅
 - ~~Build plate grid with configurable printer size, out-of-bounds warning~~ ✅
 - ~~Undo/redo across all operations~~ ✅
-- Cross-section preview slider
+- ~~Cross-section preview slider~~ ✅
 
 ### 5.2 v1.x — Follow-up
 
@@ -705,6 +705,10 @@ source, and matches how this audience already buys tools.
 | 2026-09-06 | A dim UI element needs a **contrast floor, not just a taste**. The minor grid shipped at 0.35 of the plate colour, which against the viewport's (0.15, 0.15, 0.18) clear colour resolves to the background to within one 8-bit step: the Menger sponge stood on a fine grid that was in the vertex buffer, present in every unit assertion, and invisible to a person looking at the screen. Found by opening the app, not by the suite. The GPU test that now pins it measures the **contrast** of the pixels the minor tier adds over a major-only frame, because the first attempt — counting pixels that are "not the clear colour" — passed at the broken value: a one-step difference is still a difference |
 | 2026-09-06 | Avalonia updates a menu item's `IsChecked` when the item is **clicked** but not when it is activated by its **HotKey**, so a handler that reads `IsChecked` makes its own shortcut a silent no-op and every radio check mark can end up describing a state the app is not in. `Ctrl+Shift+B` did nothing at all, and — pre-existing from the camera slice — `Ctrl+Shift+O` really did switch the viewport to orthographic while the menu went on showing the dot next to Perspective. Handlers now derive their state (the toggle flips its own flag; the radios read their `Tag`) and `RefreshViewMenuChecks` writes every check mark back from the live viewport, so the menu cannot disagree with what is on screen. Tests that raise `Click` directly cannot see this — the regression tests drive `KeyPressQwerty` |
 | 2026-09-06 | Gizmos were being **depth-tested against the mesh**, so a gizmo inside the solid drew nothing. `MeshViewportControl` said "render active gizmo on top of the mesh" while leaving `DepthTest` enabled; the plane cut gizmo is anchored at the mesh centre and sized to a tenth of the viewport, so on any closed model it was drawn entirely inside the surface and no plane square, normal arrow or pin circle appeared at all. Found the only way it could be — by placing a pin in the running app and seeing nothing happen while the panel correctly reported "Pin placed at (0.03, 0.24, 0), Ø0.4 mm". The depth test is now disabled around the gizmo render and restored after, which is what the comment always claimed |
+| 2026-09-06 | The cross-section preview is **a fragment discard in the mesh pass, not a fourth render pass**. The viewport draws build plate, mesh, then gizmo, in that order and for stated reasons; a section is not another thing to draw but a decision about which fragments of an existing pass survive, so the mesh shader and the flagged-edge overlay both discard the half-space `dot(n, p) + d > 0` and the two passes around them are deliberately untouched. The build plate is not clipped because it is the reference the model is being measured against — sawing the bed in half removes the thing the section is relative to — and the gizmo is not clipped because it is an overlay drawn with the depth test off, and clipping it would make the plane cut handle vanish at exactly the moment a user opens the model to aim it. The consequence that justifies the whole shape: the cost is independent of triangle count, nothing is re-uploaded when the plane moves, and the slider is as smooth on the 139,989-triangle tower as on a cube |
+| 2026-09-06 | The section **does not cap the face it opens**, and the reason was measured rather than assumed. Stencil parity is the textbook cap, and the framebuffer Avalonia hands `OnOpenGlRender` has no stencil attachment — probed in the running app, `stencilSize=0` against `depthSize=24`, with the stencil query itself returning `InvalidOperation` because there is no attachment to describe. Capping therefore means an offscreen render target plus a blit, or re-deriving the cross-section on the CPU for every slider position; the second would give up the triangle-count independence that is the point. Plane Cut with Add Cap already produces the exact capped face, undoably, so the preview is honest about being a way of looking *into* the model rather than a picture of the cut surface, and the docs say so in those words. Logged as item 28 |
+| 2026-09-06 | Back faces are shaded and tinted **only while a section is open**. Opening a model puts its inward-facing surfaces in view and they shade to the 0.2 ambient floor, so the opened part reads as a black hole; under a section the normal is flipped and the surface tinted. Doing it unconditionally would have been a regression rather than an improvement, because a back face on a closed mesh is exactly what an inverted normal looks like, and the viewport drawing it dark is a diagnostic this app exists to provide (`InvertedNormalDetector`). The GPU test renders the same inside-out box twice with only the section differing, and asserts the tint is absent in one and present in the other |
+| 2026-09-06 | The section's position is a **world millimetre**, and one carried over from a different model means nothing. The slider travels the loaded model's own extent along the chosen axis, so both ends are useful at 2 mm and at 120 mm, and the readout says `Z ≤ 20 mm` rather than `Z = 20 mm` because the latter is equally true of both halves and cannot describe what Flip Side just did. Switching the section on always re-centres on whatever is loaded now: a clamp that only re-centred positions falling *outside* the model left a 40 mm cube inheriting 0 mm from the sample tetrahedron, and the first thing the feature ever showed was an empty viewport — arithmetically correct, and indistinguishable from having deleted the model. Found by opening the app after the suite was green, the same way as the black silhouette and the invisible minor grid above |
 
 ## 12. Development environment
 
@@ -865,7 +869,14 @@ M0.
       printer presets in View → Build Plate (`Ctrl+Shift+B` hides it), and a
       status-bar warning naming every side the model overhangs and by how much,
       with the bed outline turning amber to match. See the §11 rows for that date.
-    - **Cross-section preview slider** — next.
+    - ~~**Cross-section preview slider**~~ — done 2026-09-06.
+      `View → Cross-Section` (`Ctrl+Shift+C`) opens a bar under the viewport with
+      an axis picker, a millimetre slider over the model's own extent, and Flip
+      Side. Implemented as a fragment discard in the mesh pass and its
+      flagged-edge overlay, so it costs the same at any triangle count and edits
+      nothing; the build plate and the gizmo are deliberately not clipped. **It
+      does not cap the opened face** — see §11 and item 28. Report in
+      `reports/M4/20260906T233000Z-viewport-cross-section/report.md`.
     - **Import conveniences**: mm/inch unit detection and scaling,
       drag-and-drop, recent files. Recent files needs settings persistence,
       which nothing in the codebase provides yet — decided 2026-09-06 as JSON in
@@ -895,6 +906,19 @@ M0.
     halves are individually just as clean). Either the halves should be separated
     before being merged, or a split should produce two documents rather than one
     mesh. Found while verifying pins, not caused by them.
+
+28. **The cross-section preview does not cap the face it opens.** A solid part
+    opened by the slider reads as an open shell, because the preview hides
+    fragments rather than constructing the cut surface. The textbook fix is
+    stencil parity, and Avalonia's framebuffer has no stencil attachment
+    (measured, 2026-09-06: `stencilSize=0`, `depthSize=24`), so capping means
+    either an offscreen render target of our own plus a blit, or re-deriving the
+    cross-section on the CPU per slider position — and the second gives up the
+    triangle-count independence that is the point of the preview. Plane Cut with
+    Add Cap already produces the exact capped face, so this is a refinement, not
+    a gap in capability. Related: a section plane that is not axis-aligned, and a
+    draggable in-viewport section gizmo, which the gizmo-first direction argues
+    for.
 
 27. **A refused operation still counts as a change.** `MeshDocument.ApplyAsync`
     calls `RefreshReport` unconditionally, so an operation that returns

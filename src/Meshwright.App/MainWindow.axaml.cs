@@ -39,6 +39,19 @@ public partial class MainWindow : Window
 
     private bool _showBuildPlate = true;
 
+    // Cross-section preview state. The position is a world coordinate in millimetres along
+    // _crossSectionAxis, not a fraction of the model, so the number beside the slider is the
+    // number a user could measure.
+    private bool _showCrossSection;
+    private CrossSectionAxis _crossSectionAxis = CrossSectionAxis.Z;
+    private bool _crossSectionFlipped;
+    private double _crossSectionPosition;
+
+    /// <summary>Guards the slider's own PropertyChanged while <see cref="RefreshCrossSection"/>
+    /// writes the range and value back into it, so rescaling for a new mesh cannot be mistaken
+    /// for the user dragging.</summary>
+    private bool _updatingCrossSectionControls;
+
     // Gizmos for interactive operations
     private DrainHoleGizmo? _drainHoleGizmo;
     private PlaneCutGizmo? _planeCutGizmo;
@@ -55,6 +68,7 @@ public partial class MainWindow : Window
         InitializeComponent();
         InitializeEditPanels();
         InitializeBuildPlateMenu();
+        InitializeCrossSectionControls();
 
         // Every mesh change refreshes the UI from one place. The Edit panels apply their
         // operations straight to the document, so without this they'd change the mesh with
@@ -76,6 +90,7 @@ public partial class MainWindow : Window
 
         LoadSampleMesh();
         RefreshBuildPlate();
+        RefreshCrossSection();
     }
 
     /// <summary>Current text of the undo/redo status indicator, exposed for testing.</summary>
@@ -407,6 +422,8 @@ public partial class MainWindow : Window
         WireframeDisplayMenuItem.IsChecked = Viewport.DisplayMode == MeshDisplayMode.Wireframe;
         XRayDisplayMenuItem.IsChecked = Viewport.DisplayMode == MeshDisplayMode.XRay;
 
+        ShowCrossSectionMenuItem.IsChecked = _showCrossSection;
+
         ShowBuildPlateMenuItem.IsChecked = _showBuildPlate;
         foreach (MenuItem item in BuildPlateMenuItem.Items.OfType<MenuItem>())
         {
@@ -416,6 +433,152 @@ public partial class MainWindow : Window
             }
         }
     }
+
+    /// <summary>
+    /// Fills the axis picker and subscribes to the two cross-section controls.
+    ///
+    /// <para>
+    /// Both subscriptions are on the Avalonia properties rather than on the
+    /// <c>SelectionChanged</c>/<c>ValueChanged</c> routed events they each also raise. A routed
+    /// event does not fire for a control exercised outside a visual tree, which is how the
+    /// drain-hole gizmo shipped placing every hole at a hard-coded 2 mm behind a green suite
+    /// (§11, 2026-09-06) - and it would make a headless test of this slider pass without the
+    /// slider ever moving the plane.
+    /// </para>
+    /// </summary>
+    private void InitializeCrossSectionControls()
+    {
+        CrossSectionAxisCombo.ItemsSource = Enum.GetValues<CrossSectionAxis>();
+        CrossSectionAxisCombo.SelectedItem = _crossSectionAxis;
+
+        CrossSectionAxisCombo.PropertyChanged += (_, e) =>
+        {
+            if (e.Property == ComboBox.SelectedItemProperty && e.NewValue is CrossSectionAxis axis && axis != _crossSectionAxis)
+            {
+                _crossSectionAxis = axis;
+
+                // A new axis means a new travel: park the plane mid-model rather than carrying a
+                // Z millimetre count over onto X, where it may be outside the model entirely.
+                _crossSectionPosition = double.NaN;
+                RefreshCrossSection();
+                StatusText.Text = $"Cross-section along {axis}";
+            }
+        };
+
+        CrossSectionSlider.PropertyChanged += (_, e) =>
+        {
+            if (e.Property == Slider.ValueProperty && !_updatingCrossSectionControls)
+            {
+                _crossSectionPosition = CrossSectionSlider.Value;
+                RefreshCrossSection();
+            }
+        };
+    }
+
+    private void OnToggleCrossSectionClick(object? sender, RoutedEventArgs e)
+    {
+        // Flips the field, never the menu item's own IsChecked: Avalonia leaves that value alone
+        // when the item is activated by its HotKey, so reading it would make Ctrl+Shift+C a silent
+        // no-op the way Ctrl+Shift+B once was. RefreshViewMenuChecks writes the mark back.
+        _showCrossSection = !_showCrossSection;
+
+        // Switching it on always opens the model down the middle. The position is a world
+        // millimetre, so one carried over from whatever was loaded before is only accidentally
+        // meaningful here: a 40 mm cube inherited a position of 0 from the sample mesh and the
+        // first thing the feature ever showed was an all-but-empty viewport - the section working
+        // exactly as asked, and looking like it had deleted the model. Found in the running app.
+        if (_showCrossSection)
+        {
+            _crossSectionPosition = double.NaN;
+        }
+
+        RefreshCrossSection();
+        RefreshViewMenuChecks();
+        StatusText.Text = _showCrossSection
+            ? $"Cross-section along {_crossSectionAxis}"
+            : "Cross-section off";
+    }
+
+    private void OnFlipCrossSectionClick(object? sender, RoutedEventArgs e)
+    {
+        _crossSectionFlipped = !_crossSectionFlipped;
+        RefreshCrossSection();
+        StatusText.Text = $"Cross-section showing {CrossSectionPositionText.Text}";
+    }
+
+    /// <summary>
+    /// Rescales the slider to the model's extent along the current axis and pushes the resulting
+    /// plane to the viewport.
+    ///
+    /// <para>
+    /// The slider's travel is the model's own bounding box along that axis, so both ends of it are
+    /// useful: at one end nothing is hidden and at the other the model is gone, with every
+    /// intermediate position landing inside the part. A fixed range in millimetres would put the
+    /// whole of the 2 mm Menger sponge in the first pixel of the slider and leave the 120 mm tower
+    /// off the end of it.
+    /// </para>
+    /// </summary>
+    private void RefreshCrossSection()
+    {
+        CrossSectionBar.IsVisible = _showCrossSection;
+
+        g3.AxisAlignedBox3d bounds = _document.Mesh is { TriangleCount: > 0 } mesh
+            ? mesh.CachedBounds
+            : new g3.AxisAlignedBox3d(g3.Vector3d.Zero, 1.0);
+        (double min, double max) = CrossSectionRange.Along(bounds, _crossSectionAxis);
+
+        // A model flat along this axis (a plate sectioned along Z) would otherwise give the slider
+        // no travel at all and pin it to one value.
+        if (max - min < 1e-9)
+        {
+            min -= 0.5;
+            max += 0.5;
+        }
+
+        if (double.IsNaN(_crossSectionPosition) || _crossSectionPosition < min || _crossSectionPosition > max)
+        {
+            _crossSectionPosition = (min + max) / 2.0;
+        }
+
+        _updatingCrossSectionControls = true;
+        try
+        {
+            CrossSectionSlider.Minimum = min;
+            CrossSectionSlider.Maximum = max;
+            CrossSectionSlider.SmallChange = (max - min) / 200.0;
+            CrossSectionSlider.LargeChange = (max - min) / 20.0;
+            CrossSectionSlider.Value = _crossSectionPosition;
+            CrossSectionAxisCombo.SelectedItem = _crossSectionAxis;
+        }
+        finally
+        {
+            _updatingCrossSectionControls = false;
+        }
+
+        // States which half survives, not just where the plane is. "Z = 0.49 mm" is true of both
+        // sides of the same plane, so on its own it cannot tell a user which half Flip Side just
+        // gave them.
+        CrossSectionPositionText.Text =
+            $"{_crossSectionAxis} {(_crossSectionFlipped ? "\u2265" : "\u2264")} {_crossSectionPosition:0.##} mm";
+
+        Viewport.CrossSection = _showCrossSection
+            ? new CrossSectionPlane(_crossSectionAxis, (float)_crossSectionPosition, _crossSectionFlipped)
+            : null;
+    }
+
+    /// <summary>The section plane the viewport is actually drawing, or null when there is none.
+    /// Exposed for testing: the assertion that matters is that moving the slider moves <em>this</em>,
+    /// not merely that the slider's own value changed.</summary>
+    public CrossSectionPlane? ActiveCrossSection => Viewport.CrossSection;
+
+    /// <summary>Whether the cross-section bar under the viewport is on screen, exposed for testing.</summary>
+    public bool CrossSectionBarVisible => CrossSectionBar.IsVisible;
+
+    /// <summary>The millimetre readout beside the slider, exposed for testing.</summary>
+    public string? CrossSectionPositionLabel => CrossSectionPositionText.Text;
+
+    /// <summary>Drives the slider the way a drag does, for tests that cannot deliver pointer input.</summary>
+    public void SetCrossSectionSliderForTesting(double position) => CrossSectionSlider.Value = position;
 
     /// <summary>
     /// Pushes the selected bed to the viewport and evaluates the current mesh against it. One
@@ -633,9 +796,11 @@ public partial class MainWindow : Window
         UpdateDiagnosticsPanel(report);
         RefreshUndoRedoState();
 
-        // The model may have moved or grown: re-test it against the bed. Every operation, undo
-        // and redo comes through here, so no edit can leave a stale verdict on screen.
+        // The model may have moved or grown: re-test it against the bed, and re-scale the
+        // cross-section slider to the new extents. Every operation, undo and redo comes through
+        // here, so no edit can leave a stale verdict or a section plane sitting outside the model.
         RefreshBuildPlate();
+        RefreshCrossSection();
     }
 
     /// <summary>Sets the status line to "&lt;what just happened&gt; (N triangles) — N issues found".</summary>
