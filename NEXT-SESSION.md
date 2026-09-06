@@ -148,50 +148,72 @@ passing. **CI green on Linux, Windows and macOS** on the current commit.
 
 ## Backlog
 
+Both scope questions were decided by the user on 2026-09-06: **build the
+Viewport/UX block for v1.0**, and **promote registration pins into v1.0**. §5.1
+and §11 are updated. Neither is started.
+
+**23. Build §5.1's Viewport / UX block.** The largest remaining v1.0 gap and a
+multi-batch job. Nothing of it exists in the code — orthographic projection,
+standard view presets, the build plate grid with configurable printer size and
+its out-of-bounds warning, wireframe and x-ray display modes, the cross-section
+preview slider, mm/inch unit handling, drag-and-drop, recent files. Suggested
+order: the camera and display modes first (one subsystem, immediately visible
+in the app), then the build plate and out-of-bounds warning, then the
+cross-section slider, then the import conveniences. **Recent files needs
+settings persistence, which does not exist anywhere in the codebase yet** — it
+was skipped for exactly that reason on 2026-09-04, and is now a v1.0
+dependency. Do one slice per branch.
+
+**25. Registration pins on cut faces.** A peg-and-socket pair on a plane cut's
+mating faces: one shape, configurable diameter and clearance. **Generate the
+geometry directly, not by handing two meshes to a boolean** — the user
+complaint that motivated the promotion was a 20-minute boolean union on a
+hollow cube, so a slow implementation misses the point. Per the gizmo-first
+direction, pin placement wants a viewport interaction, not a textbox.
+
 **22. Decimation introduces the invalid geometry it says it declined to
 create.** Reducing the clean Menger sponge to 734 triangles produced 67
 self-intersections while the panel said further collapses "would have created
-invalid geometry" — and the app's own status bar reported the 67 in the same
-frame. The local validity test each edge collapse passes has to be checked
-against whole-mesh invariants afterwards. **Best item; real geometry work.**
+invalid geometry" — and the status bar reported the 67 in the same frame. The
+local validity test each edge collapse passes has to be checked against
+whole-mesh invariants afterwards. Real geometry work, and self-contained.
 
 **24. Hole filling and hole detection disagree about import seams.**
 `BoundaryHoleDetector` excludes seams via `PositionTopology.SeamEdges`;
 `HoleFillRepair` finds loops with `MeshBoundaryLoops`, which is vertex-index
-based and has no such exclusion. So Inspect can report zero holes on a file
-whose Auto Repair then adds geometry across a seam. Small and sharp. This is a
-*different* bug from the `DMesh3.Copy` one that was fixed on 2026-09-06 —
-don't assume that fix covered it.
-
-**23. Most of §5.1's Viewport / UX block does not exist** — orthographic
-projection, view presets, build plate grid, out-of-bounds warning, wireframe
-and x-ray modes, the cross-section slider, unit handling, drag-and-drop and
-recent files. Absent from the code, not merely unwired. The largest remaining
-v1.0 gap, but **it needs the user's scope decision first** (below).
+based and has no such exclusion. Inspect can report zero holes on a file whose
+Auto Repair then adds geometry across a seam. Small and sharp. A *different*
+bug from the `DMesh3.Copy` one fixed on 2026-09-06 — don't assume that covered
+it.
 
 **A verification gap left behind**: the drain-hole **refusal path** (a hole too
-big for the surface) has two tests but no on-screen evidence, because synthetic
-clicks landed in another agent's window. Cheap to close next time the app is
-open.
+big for the surface) has two tests but no on-screen evidence. Cheap to close
+next time the app is open.
 
-**Packaging follow-ups** stay deferred: §9 reads "Linux + Windows first; macOS
-once there is revenue". An MSI is buildable on the `windows-latest` runner but
-unverifiable from this host, and there is no tagged release yet.
+## Researching on the web
+
+Reddit is reachable now — see `scripts/browse.py`, which drives a real headed
+Chromium over the DevTools protocol. `curl` and `WebFetch` get 403s and
+*headless* Chromium gets a "Prove your humanity" challenge; a normal browser
+window on `DISPLAY=:0` is served normally. Start the browser once, then run the
+script against it (usage is in the file's docstring). **If a bot challenge ever
+does appear, stop and tell the user** — do not work around it.
+
+`reports/research/meshmixer-alternatives.md` now has a real Reddit section.
+Its strongest finding is one the user should weigh: **macOS demand looks
+stronger than §9's "macOS once there is revenue" assumes.** The
+highest-engagement thread found in the whole effort is Mac users with no
+option — Fusion 360 "almost unusable" on M1, Blender too steep — installing
+abandoned Meshmixer from a Wayback Machine snapshot and thanking each other for
+the link, years on, despite a publicised security flaw. Windows has 3D Builder
+absorbing the simple cases; macOS has nothing.
 
 ## Waiting on the user
 
-Neither is yours to decide; both change what v1.0 contains.
-
-1. **Item 23**: build the missing Viewport/UX block for v1.0, or move it to
-   §5.2?
-2. **Registration pins**: §3 names "adding registration pins" as a target-user
-   workflow while §5.2 defers pins to v1.x, and plane-cut splitting is already
-   v1.0. Promote a minimal peg-and-socket pair into §5.1? Proposed wording is
-   in `reports/research/meshmixer-alternatives.md`.
-
-Also note **item 5 (Meshmixer research) is only partially done** — Reddit was
-unreachable to the last agent's tooling and Autodesk's forum 403s, so "read a
-week of threads" was not met. Its conclusions are directional, not settled.
+One open question, raised by the Reddit research rather than by the code:
+**does §9's "macOS once there is revenue" still hold?** See above. Don't act on
+it unilaterally — it changes release scope and costs money (notarisation is
+~$99/year).
 
 Push freely; the user has given standing authorisation. Ask before starting
 anything not on this list.
