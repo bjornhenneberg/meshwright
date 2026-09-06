@@ -161,6 +161,18 @@ drain-hole gizmo placed every hole at a hard-coded 2 mm behind a green suite.
 `main` carries the import-conveniences slice. **809 tests passing, 0 skipped**;
 GPU suite **28** passing, both re-run on the merge commit.
 
+**That merge went red on Windows CI** and needed a follow-up
+(`fix/settings-tests-windows-paths`). Four `AppSettingsTests` asserted on
+literal `"/tmp/a.stl"` strings, and `Path.GetFullPath` turns those into
+`C:\tmp\a.stl` on Windows: the product was right and the expectations were
+not. Worth knowing because **CI is the only place Windows and macOS ever run,
+and only a push to `main` or a PR triggers it** — so an unportable test is
+invisible until the merge, and the cost is a red `main` until you notice. If a
+new test hard-codes a path, a separator, a line ending or a case comparison, ask
+what it does on Windows before merging; `Path.Combine`/`Path.GetTempPath` and
+asserting against `Path.GetFullPath(input)` rather than a literal is usually the
+whole fix. Do not merge and walk away — wait for the run.
+
 `README.md`, `docs/index.html` and `docs/usage.html` are current as of the
 import-conveniences slice. `README.md` was rewritten on 2026-09-06: it had become an
 index into `SPECIFICATION.md` (milestone codes as the status, "see §8" for the
