@@ -72,7 +72,8 @@ Two techniques that worked when guessing did not, both worth reusing:
 Both verified by the dispatcher, not just reported. **Always run the GPU suite
 under `timeout`.**
 
-CI has not run since the merge — check it before building on this.
+**CI is green on Linux, Windows and macOS** on this exact commit — 562 tests
+on each (run 34027380886).
 
 - `gh` is authenticated and git has a credential helper, so you can push. The
   token has `workflow` scope.
