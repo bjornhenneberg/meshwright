@@ -4,6 +4,7 @@ using g3;
 using Meshwright.App.Gizmos;
 using Meshwright.Geometry.Spatial;
 using Meshwright.Rendering.Camera;
+using Meshwright.Rendering.Gizmos;
 using Meshwright.Tests.Gizmos;
 using Xunit;
 
@@ -62,8 +63,14 @@ public class OrthographicPickingTests
                 float along = Vector3.Dot(world - ray.Origin, ray.Direction);
                 float missDistance = Vector3.Distance(ray.PointAt(along), world);
 
-                Assert.True(missDistance < radius * 1e-3f,
-                    $"Orthographic ray through pixel {pixel} missed {world} by {missDistance} (radius={radius}, scaling={scaling}).");
+                // Measured in pixels, for the reason given in ViewportHarnessTests: picking cares
+                // how far off the click lands on screen, and a bound tied to the model radius is
+                // arbitrarily tighter on small models - which is how the perspective version of
+                // this assertion came to fail on macOS float rounding alone.
+                float worldPerPixel = GizmoScale.WorldPerViewportHeight(world, harness.View, harness.Projection) / harness.PixelSize.Y;
+                Assert.True(missDistance < worldPerPixel * 0.5f,
+                    $"Orthographic ray through pixel {pixel} missed {world} by {missDistance / worldPerPixel} px "
+                    + $"(radius={radius}, scaling={scaling}).");
             }
         }
     }
