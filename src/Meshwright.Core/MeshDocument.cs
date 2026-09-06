@@ -113,9 +113,9 @@ public sealed class MeshDocument
             throw new InvalidOperationException("Another operation is already running.");
         }
 
-        _undoStack.RecordBeforeApply(Mesh);
+        DMesh3 snapshot = _undoStack.Capture(Mesh);
         OperationResult result = operation.Apply(Mesh);
-        RefreshReport(operation.Name);
+        CommitIfChanged(result, snapshot, operation.Name);
         return result;
     }
 
@@ -141,7 +141,7 @@ public sealed class MeshDocument
         }
 
         DMesh3 mesh = Mesh;
-        _undoStack.RecordBeforeApply(mesh);
+        DMesh3 snapshot = _undoStack.Capture(mesh);
 
         _currentOperationCancellable = operation is IProgressReportingMeshOperation;
         _currentOperationCts = new CancellationTokenSource();
@@ -161,7 +161,7 @@ public sealed class MeshDocument
                 ? await Task.Run(() => reporting.Apply(mesh, progress, token)).ConfigureAwait(true)
                 : await Task.Run(() => operation.Apply(mesh)).ConfigureAwait(true);
 
-            RefreshReport(operation.Name);
+            CommitIfChanged(result, snapshot, operation.Name);
             return result;
         }
         finally
@@ -216,6 +216,31 @@ public sealed class MeshDocument
         Mesh = restored;
         RefreshReport("Redo");
         return true;
+    }
+
+    /// <summary>
+    /// Turns an operation's own verdict into history and a UI refresh — or into nothing at all.
+    ///
+    /// <para>
+    /// An operation that returns <see cref="OperationResult.Changed"/> false <b>refused</b>: a pin
+    /// that will not fit, a drain hole too big for the surface, a plane through no geometry. It
+    /// left the mesh exactly as it found it, so there is nothing to undo and nothing on screen to
+    /// re-read. This used to refresh unconditionally, which pushed an undo step for a
+    /// no-op, cleared the redo stack, and made the window rebuild every gizmo and empty its gizmo
+    /// slot — so a user whose pin would not fit lost the pin they had spent time positioning and
+    /// had to place it again to try a smaller one (backlog item 27). The refusal message itself is
+    /// returned to the caller either way; it is the panel that shows it.
+    /// </para>
+    /// </summary>
+    private void CommitIfChanged(OperationResult result, DMesh3 snapshot, string operationName)
+    {
+        if (!result.Changed)
+        {
+            return;
+        }
+
+        _undoStack.Commit(snapshot);
+        RefreshReport(operationName);
     }
 
     private void RefreshReport(string reason)

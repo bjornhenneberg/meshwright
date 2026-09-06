@@ -10,9 +10,9 @@ corpus), M4-2 (gizmo wiring + menu/undo-redo UI), M4-6 (corpus ground
 truth), M4-7 (non-manifold import fix), M4-3 (CI + packaging,
 all three platforms), M4-4
 (docs/release), M4-8 (make the app do what it says) and M4-9 (correctness
-gaps closed) are complete, 520/520 unit tests passing; see the M4 entry in
-§11 and §7. The 8 GPU tests pass (re-run 2026-09-05, after fixing a test
-parallelism hang unrelated to the geometry code — see §11).
+gaps closed) are complete; see the M4 entry in
+§11 and §7. As of 2026-09-06 the unit suite is 809 passing, 0 skipped, and the GPU
+suite is 28 passing (always run under `timeout` — see §11).
 
 **Caveat on "complete":** M4-8 found that M2's repair operations and M3's
 edit operations had been called complete while being unreachable or invisible
@@ -84,8 +84,11 @@ The smallest set that makes someone uninstall Meshmixer.
 - 3MF and PLY are deferred to v1.x. STL covers the overwhelming majority of real
   files; OBJ covers the rest. The importer interface is designed for more formats
   from the start, but none are implemented in 1.0.
-- Unit handling: detect/assign mm vs inch, scale on import
-- Drag-and-drop, recent files list
+- ~~Unit handling: detect/assign mm vs inch, scale on import~~ ✅ (offered, never
+  applied — see §11, 2026-09-06)
+- ~~Drag-and-drop~~ ✅ implemented, but **inert on Linux**: Avalonia's X11 backend
+  has no drag-and-drop at all (measured — §11, 2026-09-06). Item 29
+- ~~Recent files list~~ ✅, on `settings.json` in the platform config directory
 
 **Inspect**
 - Mesh statistics: triangle count, volume, surface area, bounding box, shell count
@@ -709,6 +712,15 @@ source, and matches how this audience already buys tools.
 | 2026-09-06 | The section **does not cap the face it opens**, and the reason was measured rather than assumed. Stencil parity is the textbook cap, and the framebuffer Avalonia hands `OnOpenGlRender` has no stencil attachment — probed in the running app, `stencilSize=0` against `depthSize=24`, with the stencil query itself returning `InvalidOperation` because there is no attachment to describe. Capping therefore means an offscreen render target plus a blit, or re-deriving the cross-section on the CPU for every slider position; the second would give up the triangle-count independence that is the point. Plane Cut with Add Cap already produces the exact capped face, undoably, so the preview is honest about being a way of looking *into* the model rather than a picture of the cut surface, and the docs say so in those words. Logged as item 28 |
 | 2026-09-06 | Back faces are shaded and tinted **only while a section is open**. Opening a model puts its inward-facing surfaces in view and they shade to the 0.2 ambient floor, so the opened part reads as a black hole; under a section the normal is flipped and the surface tinted. Doing it unconditionally would have been a regression rather than an improvement, because a back face on a closed mesh is exactly what an inverted normal looks like, and the viewport drawing it dark is a diagnostic this app exists to provide (`InvertedNormalDetector`). The GPU test renders the same inside-out box twice with only the section differing, and asserts the tint is absent in one and present in the other |
 | 2026-09-06 | The section's position is a **world millimetre**, and one carried over from a different model means nothing. The slider travels the loaded model's own extent along the chosen axis, so both ends are useful at 2 mm and at 120 mm, and the readout says `Z ≤ 20 mm` rather than `Z = 20 mm` because the latter is equally true of both halves and cannot describe what Flip Side just did. Switching the section on always re-centres on whatever is loaded now: a clamp that only re-centred positions falling *outside* the model left a 40 mm cube inheriting 0 mm from the sample tetrahedron, and the first thing the feature ever showed was an empty viewport — arithmetically correct, and indistinguishable from having deleted the model. Found by opening the app after the suite was green, the same way as the black silhouette and the invisible minor grid above |
+| 2026-09-06 | **Settings are one file with one type**, `AppSettings` in `~/.config/meshwright/settings.json` (`%APPDATA%\meshwright\` on Windows) via `System.Text.Json`. Four things wanted persistence independently — the recent-files list, the printer bed, whether the build plate is drawn, and the window's size and place — and three of them had already shipped as in-session fields each carrying a comment saying they belonged here. Growing a settings subsystem per feature is how those comments accumulate. Every property has a default and nothing is required, so a file from an older build, or a hand-edited one missing half its keys, still loads |
+| 2026-09-06 | **Nothing in `SettingsStore` throws.** A read-only config directory, a file half-written by a machine that lost power, a JSON document someone edited badly — none of those are reasons the app should fail to start or fail to open a mesh. Each failure instead leaves a plain-language sentence in `LoadWarning`/`SaveWarning` that the window puts on the status line, because *silently* starting with defaults and *silently* discarding every change are the "reported success while being wrong" failures this log catalogues. The write is atomic (sibling `.tmp`, then `File.Move`) and happens at each change rather than at shutdown, so a crash cannot lose the file you opened two minutes ago |
+| 2026-09-06 | The printer bed is remembered **by name, not by dimensions**, so correcting a preset's published size in a later version reaches everyone who picked that printer instead of pinning them to the number that was wrong when they chose it; an unknown name falls back to the default rather than failing to load. The window is remembered only while **not maximized** — Avalonia does not expose a maximized window's restore bounds and `Position`/`Width` read back the maximized geometry, so saving at close would leave anyone who maximizes once with a window permanently the size of their screen — and a placement is only restored if it `IsUsable`: a 4×4 window, or one whose corner is far off any plausible desktop, comes back invisible with no fix but finding and deleting the settings file |
+| 2026-09-06 | `MESHWRIGHT_SETTINGS_FILE` overrides the settings location, and the unit suite sets it from a module initializer. Hundreds of tests construct a `MainWindow`, which now reads persisted state on construction; without the override every one of them would read the settings of whoever ran them — a developer who had hidden the build plate would see `BuildPlateMenuTests` fail locally and pass in CI — and the suite would rewrite their recent-files list as it went |
+| 2026-09-06 | **An STL carries no units, so the mm/inch guess is offered and never applied.** Neither STL nor OBJ records one; 25.4 appears nowhere in either file, and no amount of reading one recovers what its author meant. Applying the guess on open would be the most expensive entry in this log: the model would look identical (the camera frames whatever it is given), the triangle count would not move, the diagnostics would be unchanged, and the only evidence would be an export measuring twenty-five times too big. So the suspicion is a sentence above the viewport stating **both readings and the rule that produced it**, next to a button; doing nothing is the default and accepting is an ordinary undoable step. The rule is "largest dimension under 12 mm, and at least 5 mm read as inches" — below 12 mm the inch reading lands in the 25–300 mm range most printed things occupy, and the lower bound stops the app offering a different wrong answer for something too small to be a part either way. The built-in sample mesh is exempt: nobody chose to open it |
+| 2026-09-06 | The mm/inch scale is applied **about the world origin, not the model's centre**. Reinterpreting a unit is not a resize — it changes what every number in the file meant, including how far the model sits from the origin. Scaling about the centroid would leave a part a CAD package placed 3 inches off centre sitting 3 mm off centre, which is a different model from the one the file describes. It is its own `InterpretAsInchesOperation` rather than a `ScaleOperation`, purely so the undo entry and the status line say what happened: "Scaled by 25.4x around (0, 0, 0)" is the same arithmetic and tells a user nothing about why their model just grew |
+| 2026-09-06 | **Drag-and-drop is attached to the `Window`, never to `MeshViewportControl`.** On Linux the GL surface does not reliably take part in Avalonia's input routing — which is why `ViewportInputOverlay` exists to forward pointer events at all — so a drop target on the viewport control would be attached to the one control that never sees the event. The tests raise the real routed `DragDrop` events on that overlay and expect the window's handler to see them; moving the four `AddHandler` calls to `Viewport` makes eight of them fail, which is how the placement was checked rather than assumed |
+| 2026-09-06 | **Avalonia's X11 backend has no drag-and-drop implementation, in either direction**, so no file dropped from another application can reach the app on Linux. Measured, not inferred: the running window carries no `XdndAware` property at all while every GTK, Electron and Firefox window on the same display does; setting `XdndAware` by hand still produced nothing (a real GTK drag reached `drag-begin` then `drag-end` with `drag-data-get` never firing, i.e. the target never accepted); and the platform drag-drop types exist in `Avalonia.Win32`, `Avalonia.Native` and `Avalonia.Headless` but not in `Avalonia.X11`, which contains no XDND atoms of any kind. The handling is kept — it is correct for Windows and macOS, and the routing is right everywhere — and the README, the site and the usage guide all say plainly that Linux users should use File → Open, Open Recent, or the command line. Writing our own XDND receiver is item 29 |
+| 2026-09-06 | **A refused operation is not a change** (item 27). `MeshDocument` used to `RefreshReport` unconditionally, so an operation returning `Changed: false` — every refusal path — pushed an undo step for a no-op, cleared the redo stack, and made the window rebuild every gizmo and empty its gizmo slot, so a user whose pin would not fit lost the pin they had positioned. The undo snapshot is now *captured* before the operation, since operations mutate in place, and only *committed* if the operation says it changed something. Suppressing the refresh deliberately does not suppress the explanation: the result is returned either way and the panel shows it, with a test to keep it that way |
 
 ## 12. Development environment
 
@@ -877,10 +889,17 @@ M0.
       nothing; the build plate and the gizmo are deliberately not clipped. **It
       does not cap the opened face** — see §11 and item 28. Report in
       `reports/M4/20260906T233000Z-viewport-cross-section/report.md`.
-    - **Import conveniences**: mm/inch unit detection and scaling,
-      drag-and-drop, recent files. Recent files needs settings persistence,
-      which nothing in the codebase provides yet — decided 2026-09-06 as JSON in
-      the platform config directory.
+    - ~~**Import conveniences**~~ — done 2026-09-06.
+      `~/.config/meshwright/settings.json` (`%APPDATA%\meshwright\` on Windows),
+      plain `System.Text.Json`, holding the recent-files list, the printer bed,
+      whether the build plate is drawn, the window's size and place, and whether
+      the unit question is asked — the three in the middle had each shipped as an
+      in-session field with a comment saying they belonged here. `File → Open
+      Recent` keeps ten entries. The mm/inch guess is **offered and never
+      applied**. Drag-and-drop is implemented and routed but **cannot work on
+      Linux**: Avalonia's X11 backend has no drag-and-drop implementation, which
+      is now item 29. Report in
+      `reports/M4/20260906T2359Z-import-conveniences/report.md`.
 25. ~~**Registration pins on cut faces**~~ — done. A peg-and-socket pair on a
     plane cut's mating faces, generated directly: the pin circle joins the cut
     cross-section as one more loop, so the existing parity-nested capping code
@@ -920,11 +939,24 @@ M0.
     draggable in-viewport section gizmo, which the gizmo-first direction argues
     for.
 
-27. **A refused operation still counts as a change.** `MeshDocument.ApplyAsync`
-    calls `RefreshReport` unconditionally, so an operation that returns
-    `Changed: false` — every refusal path: a pin that will not fit, a drain hole
-    too big for the surface, a plane through no geometry — still raises `Changed`,
-    still pushes an undo entry, and still makes `MainWindow.RefreshFromDocument`
-    rebuild every gizmo and clear the viewport slot. In practice a user who asks
-    for a pin that does not fit loses the pin they had positioned and has to place
-    it again to try a smaller one. Small and sharp.
+27. ~~**A refused operation still counts as a change.**~~ — done 2026-09-06.
+    The undo snapshot is now *captured* before the operation (it has to be —
+    operations mutate in place) and only *committed* if the operation reports
+    `Changed: true`. A refusal leaves both stacks exactly as they were, raises
+    nothing, and so rebuilds no gizmo: the drain hole or pin the user positioned
+    by hand is still there to try a smaller diameter with. The refusal message is
+    still returned to the caller and shown by the panel, with a test to stop a
+    later simplification making refusals silent. Verified on screen in
+    `reports/M4/20260906T2359Z-import-conveniences/report.md`, which also closes
+    the drain-hole refusal path's standing verification gap.
+
+29. **Drag-and-drop cannot work on Linux, because Avalonia's X11 backend has no
+    drag-and-drop implementation.** Measured three ways on 2026-09-06 (§11). A
+    fix means writing an XDND receiver: an `InputOnly` X11 child window over the
+    toplevel carrying `XdndAware`, on our own display connection, handling
+    `XdndEnter`/`XdndPosition`/`XdndDrop` and `XConvertSelection` for
+    `text/uri-list`. Real platform work with a real risk to the viewport's
+    primary input path — the same routing the transparent pointer overlay exists
+    to work around — so it is its own slice, not a corner of an import one.
+    Watch upstream first: this is a long-standing Avalonia gap and may land
+    there.

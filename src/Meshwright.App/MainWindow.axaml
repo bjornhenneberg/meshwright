@@ -11,6 +11,8 @@
     <Menu DockPanel.Dock="Top">
       <MenuItem Header="_File">
         <MenuItem Name="OpenMenuItem" Header="_Open..." Click="OnOpenFileClick" />
+        <!-- Filled in code from AppSettings.RecentFiles; see RefreshRecentFilesMenu. -->
+        <MenuItem Name="RecentFilesMenuItem" Header="Open _Recent" />
         <MenuItem Name="ExportMenuItem" Header="_Export..." Click="OnExportFileClick" />
         <Separator />
         <MenuItem Header="E_xit" Click="OnExitClick" />
@@ -131,8 +133,25 @@
       </ScrollViewer>
     </Border>
 
-    <!-- Center: Viewport, with the cross-section slider docked under it -->
+    <!-- Center: Viewport, with the unit offer above it and the cross-section slider under it -->
     <DockPanel>
+      <!-- The mm/inch offer. An STL carries no units, so this is a guess about intent, and it is
+           only ever offered: nothing is scaled until the button here is pressed, and doing nothing
+           is the default. Silently multiplying a model by 25.4 would look identical on screen and
+           be discovered at the printer (§11). -->
+      <Border Name="UnitSuggestionBar" DockPanel.Dock="Top" IsVisible="False"
+              Padding="10,7" Background="#3A3320" BorderBrush="#FFB020" BorderThickness="0,0,0,1">
+        <Grid ColumnDefinitions="*,Auto,Auto">
+          <TextBlock Name="UnitSuggestionText" Grid.Column="0" VerticalAlignment="Center"
+                     TextWrapping="Wrap" Foreground="#FFD98A" Margin="0,0,10,0" />
+          <Button Name="UnitSuggestionAcceptButton" Grid.Column="1" Margin="0,0,6,0"
+                  Click="OnAcceptUnitSuggestionClick"
+                  ToolTip.Tip="Scale the model as if the file was written in inches. Undoable." />
+          <Button Name="UnitSuggestionDismissButton" Grid.Column="2" Content="Keep as-is"
+                  Click="OnDismissUnitSuggestionClick"
+                  ToolTip.Tip="Leave the model exactly as the file describes it" />
+        </Grid>
+      </Border>
       <!-- Hidden until View -> Cross-Section is on. A slider is docked below the viewport rather
            than added as an eighth sidebar tab because it is a way of looking at the model, not an
            operation on it: nothing here changes a triangle or pushes an undo entry. -->
@@ -163,6 +182,17 @@
                 PointerMoved="OnViewportPointerMoved"
                 PointerReleased="OnViewportPointerReleased"
                 PointerWheelChanged="OnViewportPointerWheelChanged" />
+        <!-- Shown while a mesh file is being dragged over the window. Not hit-test visible: it
+             must not become the thing the drag is over. The drag handlers are on the Window, not
+             on this or on the viewport control - the GL surface does not reliably participate in
+             Avalonia's input routing on Linux, which is why ViewportInputOverlay above exists at
+             all, and a drop target attached to it would be attached to the one control that never
+             sees the event. -->
+        <Border Name="DropHintOverlay" IsVisible="False" IsHitTestVisible="False"
+                Background="#99102030" BorderBrush="#4FC3F7" BorderThickness="3">
+          <TextBlock Name="DropHintText" HorizontalAlignment="Center" VerticalAlignment="Center"
+                     FontSize="26" FontWeight="Bold" Foreground="#DCF2FF" TextAlignment="Center" />
+        </Border>
       </Panel>
     </DockPanel>
   </DockPanel>
