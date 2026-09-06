@@ -106,3 +106,24 @@ explained.
 
 Items 26 (a split leaves both halves in one mesh) and 27 (a refused operation
 still counts as a change) are still open and were deliberately left alone.
+
+## What the merge cost, and why
+
+The merge went green on Linux and Windows and **red on macOS**, on a test this
+slice did not write: `ViewportHarnessTests.ProjectToPixel_RoundTripsThroughRayThroughPixel`
+missed by 0.00056 against a `radius * 1e-3` = 0.0005 limit on the 0.5 mm model.
+
+That bound was already within 1% of failing on Linux (0.000495 measured), and
+moving the default camera elevation to the true isometric angle changed the pose
+enough for a different architecture's float rounding to tip it over. It is also
+inconsistent by construction: `radius * 1e-3` is 0.05 px at radius 500 and
+0.22 px at radius 0.5.
+
+Both the perspective and the orthographic round trips now bound the miss at
+**half a logical pixel** — the unit a click is actually aimed in, and the thing
+the round trip exists to protect. Logical rather than device: the same world
+rounding counts double at `RenderScaling` 2, which is a property of the display,
+and a first pass in device pixels failed on macOS at 0.53 for exactly that
+reason. Worst measured: 0.22 logical px on Linux, 0.26 on macOS.
+
+CI is green on Linux, Windows and macOS at `5e0936e`.
