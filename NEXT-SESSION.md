@@ -64,7 +64,16 @@ your own — as a claim to check.
    must increase" — both of which the old broken version failed outright.
 4. **Run the actual app and look at it** unless told not to. A passing suite is
    not evidence a feature works, and neither is a screenshot — read the words
-   next to it too.
+   next to it too. The camera slice found its worst defect this way: the tests
+   were green and three of the seven new view presets drew a black silhouette.
+5. **Embed the screenshots in the markdown**, with a caption saying what to
+   look at — `![Top view, orthographic — no hole side-walls, so the projection
+   really is parallel](top-orthographic.png)`. A PNG dropped beside a report is
+   evidence nobody sees; the `reports/M4/20260905T221759Z-ux-audit/` folder has
+   111 of them and its report embeds none. Pictures are the fastest way to show
+   a UI change is real and the cheapest way for a reader to catch that it
+   isn't, so put before/after pairs side by side and say what changed. Same for
+   any markdown with evidence to show, this handoff included.
 
 Three techniques that worked when guessing did not:
 

@@ -19,9 +19,37 @@ Everything is in the **View** menu and reachable by shortcut:
 | `Ctrl+Shift+S` / `Ctrl+Shift+W` / `Ctrl+Shift+X` | Shaded / wireframe / x-ray |
 
 Projection and display mode are radio groups, so the menu's check marks track
-the real state. All of it was exercised in the running app on the Menger sponge
-and the 139,989-triangle Eiffel tower samples — see the screenshots beside this
-file.
+the real state. Everything below is the real app on the Menger sponge and the
+139,989-triangle Eiffel tower samples, not a headless render.
+
+![All seven view presets in orthographic, on the Menger sponge: front, back,
+left, right, top, bottom on the first row and a half, isometric last. The sponge
+is symmetric, so the six axis views agreeing is the point — every one is square,
+flat and evenly lit, and the isometric shows three faces as equal parallelograms
+with no convergence.](seven-presets-orthographic.png)
+
+*The seven presets, orthographic. All six axis views of a symmetric model should
+look identical, and do; the isometric's three faces are equal parallelograms.*
+
+![Top view of the Menger sponge in orthographic: nine square holes on a flat
+grey face, with no visible side-walls inside any of them](top-orthographic-menger.png)
+
+*Top view, orthographic — the proof the projection is parallel: not one hole
+shows an interior wall. In perspective the outer holes show more of their sides
+the further they sit from the centre.*
+
+![The Menger sponge in wireframe: every triangle edge drawn in white with no
+fill, including the interior tunnel structure](wireframe-menger.png)
+
+*Wireframe — no fill, so the tessellation and the tunnels through the model are
+both visible.*
+
+![The Menger sponge in x-ray: a translucent grey solid through which the
+internal cavity structure is clearly visible](xray-menger.png)
+
+*X-ray — the sponge's interior read through the surface. This is the mesh most
+likely to break an assumption about see-through rendering, which is why it is
+the one shown.*
 
 ## Decisions
 
@@ -54,8 +82,22 @@ With view presets in place, **Front, Left and Bottom rendered the model as a
 black silhouette.** The light was fixed in world space at (-0.5, -1, -0.3);
 nothing had noticed while orbiting was the only way to move, but half the new
 presets look straight at the unlit side, where the shader's 0.2 ambient floor is
-all there is. See `front-orthographic-eiffel-BEFORE-headlight.png` against
-`front-orthographic-eiffel-AFTER-headlight.png`.
+all there is.
+
+![Eiffel tower, front orthographic view, before the fix: the model is a nearly
+black silhouette, barely distinguishable from the dark
+background](front-orthographic-eiffel-BEFORE-headlight.png)
+
+*Before — Front view, world-fixed light. The model is there; it is lit at the
+ambient floor and reads as a smudge. Left and Bottom were the same.*
+
+![Eiffel tower, front orthographic view, after the fix: the tower is fully lit
+in light grey, an engineering elevation with symmetric legs and no perspective
+convergence](front-orthographic-eiffel-AFTER-headlight.png)
+
+*After — the same view with the headlight. It is also a clean elevation: the
+legs are symmetric and nothing converges, which is what the orthographic
+projection is for.*
 
 No test could see it, because none of them had a notion of brightness.
 `MeshRenderer` now derives a key light from the view matrix, placed over the

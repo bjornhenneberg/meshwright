@@ -68,9 +68,20 @@ Agentic work (via `parallel-orchestrator` / `verifier` / `milestone-lead`)
 writes durable, human-reviewable evidence instead of just a chat summary:
 
 - `reports/<milestone>/<UTC-timestamp>-<batch-name>/report.md` — one per
-  verified batch: pass/fail per check, build/test logs, and screenshots or
-  short frame sequences for anything UI-facing (captured via
-  `Avalonia.Headless`, since there's no display server on CI/this dev host).
+  verified batch: pass/fail per check, build/test logs, and screenshots of the
+  real running app for anything UI-facing. There **is** a display on this dev
+  host (`DISPLAY=:0`; see `NEXT-SESSION.md` for how to drive it), so capture
+  the app people will actually use; `Avalonia.Headless` is a fallback for CI,
+  not the default.
+
+  **Embed every screenshot in the markdown, with a caption saying what to look
+  at.** `![Front view, orthographic — the legs are symmetric and no perspective
+  convergence](front-orthographic.png)`, not a PNG sitting beside the report
+  that only someone opening the folder will ever see. A picture is the fastest
+  proof that a UI change is real, and the cheapest way for a reviewer to catch
+  that it isn't; it earns nothing while it is an unreferenced file. Before/after
+  pairs go next to each other, and the caption says what changed. This applies
+  to any markdown that has evidence to show, not only batch reports.
 - `reports/<milestone>/SUMMARY.md` — written once a whole milestone's batches
   are verified; links every batch report plus an overall recap.
 - `reports/build-hook/` — transient per-edit build/test logs from the
