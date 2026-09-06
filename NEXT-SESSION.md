@@ -69,52 +69,89 @@ Two techniques that worked when guessing did not, both worth reusing:
 
 `main` is clean and pushed. **CI is green on Linux, Windows and macOS** — all
 520 tests on each, with Manifold built from source in-job on Windows/macOS.
+Verified this session: 520 passing / 0 skipped, and the **GPU suite 8 passing
+in 265 ms** with no orphaned hosts left behind. **Always run the GPU suite
+under `timeout`.**
 
-- **GPU suite: 8 passing, ~0.5 s.** It used to hang past ten minutes; the
-  cause was xunit running three `IClassFixture<GpuTestFixture>` classes in
-  parallel against a `Glfw.CreateWindow` path that is not thread-safe on
-  Linux. **Always run it under `timeout`** — a hang orphans a test host that
-  outlives the session, and five had accumulated on this machine, one for 22
-  hours.
+Last session ended on a **session rate limit**. Two fix agents were dispatched
+and both died at the API before touching a file — the tree was left clean, and
+the worktree one was auto-removed. Nothing is half-applied; the findings below
+are all still open.
+
 - `gh` is authenticated and git has a credential helper, so you can push. The
-  token needed `workflow` scope added to push `.github/workflows/` changes;
-  it has it now.
+  token has `workflow` scope.
 - **Stale worktrees**: two old unrelated ones (`agent-a0ef1435...`,
   `agent-a15af9a8...`) and `meshwright.worktrees/progress-check-inquiry`
   predate all recent work — leave them alone unless you know what they are.
 
+## What last session did
+
+A UX pass on the real GUI (backlog item 1), the additive `docs/usage.html`
+pass (item 2), and the Meshmixer-alternative research (item 5) all ran and
+landed. The two follow-up *fix* dispatches did not.
+
+- **`docs/usage.html`** gained six rough-edges entries and lost a stale one
+  that had gone wrong the moment M4-3 landed. Every claim was re-checked in
+  source before landing; one bullet the agent wrote was corrected because it
+  contradicted `NonManifoldDetector`, which groups edges by position.
+- **`reports/research/meshmixer-alternatives.md`** exists, with a caveat worth
+  reading: Reddit was unreachable to the agent's tooling and Autodesk's forum
+  403s, so the brief — "read a week of *Meshmixer alternative* threads" — was
+  substantially not met. ~18 pages, 8 domains, no hobbyist voices in their own
+  words. **Treat item 5 as partially done.** Its one substantive finding is
+  real and independently checked: §3 names "adding registration pins" as a
+  target-user workflow while §5.2 defers pins to v1.x, and plane-cut splitting
+  is already v1.0. Whether to promote a minimal peg-and-socket pair into §5.1
+  is a scope call for the user; proposed wording is in the report.
+- **`reports/M4/20260905T221759Z-ux-audit/`** — 112 screenshots and a report.
+  Twelve confirmed defects. Five §11 rows and backlog items 19–24 were landed
+  centrally from it.
+
 ## Backlog
 
-Nothing is blocked or half-finished. Pick from these.
+Items 19–24 in §11's "Immediate next steps" are all new, all confirmed, and
+none are started. Best first:
 
-**1. A broader UX pass. (Opus or Sonnet, needs the real GUI.)**
-The most valuable thing left. With items 12–18 and M4-3 all landed, sit down
-with the app for a while — real GUI, no synthetic scripting — and hunt the
-next tier of "reports success while being wrong". That instinct found items
-17 and 18, and last session it caught a docs page describing two fixed bugs
-as current. Launch guidance is in memory under
-`reference-running-meshwright-gui` (`DISPLAY=:0`, the app takes a file path
-argument). `samples/broken-cube.stl` has one of every defect,
-`~/Downloads/Menger_sponge_sample.stl` is clean with holes right through it,
-`~/Downloads/Eiffel_tower_sample.STL` is 139,989 triangles for the
-responsiveness target in §6.4.
+**19. Drain Holes is destructive and reports success.** The worst thing in the
+app right now — it deletes every triangle within the radius and adds nothing,
+so a Ø0.5 mm request took a whole 2 × 2 mm face and left the model open, while
+reporting the diameter it had been handed. Needs a real drilling
+implementation, not a patched message. **Opus, in a worktree.** The invariants
+that catch it: surface area removed ≈ πr², and vertex count must *increase*
+(the old code left it unchanged, proof nothing was constructed).
 
-**2. Finish the `docs/usage.html` rough-edges pass. (Sonnet.)**
-All 15 entries were verified against source and the two stale ones removed,
-so the *subtractive* half is done — do not re-audit those 13. What remains is
-additive: find real current limitations missing from the list entirely.
-Ground every claim in code actually read.
+**20 + 21. The inert-control and false-reporting cluster.** Plane Cut's "Add
+Cap" checkbox (and `PlaneCut.Cut` has no uncapped path to reach at all), the
+Transform panel printing `bounds.Extents` — half the box size — in the panel
+used for scaling to a print bed, Hollow's gizmo status lying from startup,
+Auto Repair's double-counted flip total, Decimate's unit label, stale panel
+result lines, and "Drop to Z=0" printing the other button's name. **Sonnet**;
+one agent can take the lot, but keep it out of the drain-hole files if 19 is
+running concurrently. Full detail per defect, with file and line, is in the
+audit report.
 
-**3. Item 5, still open since the beginning. (Sonnet.)**
-"Read a week of *Meshmixer alternative* threads and turn them into a
-prioritised feature list to check against §5.1." The only original backlog
-item never started, and the one most likely to change what v1.0 should
-contain. Worth doing before more features get built on assumption.
+**22. Decimation introduces the invalid geometry it says it declined to
+create** — 67 self-intersections from a clean mesh. Real geometry work: the
+local validity test each collapse passes has to be checked against whole-mesh
+invariants afterwards. **Opus.**
 
-**4. Packaging follow-ups, deliberately deferred.**
-An MSI for Windows (currently a zip) and macOS signing/notarisation. §9 defers
-notarisation until there is revenue, so confirm that still holds before
-starting — this may stay deferred.
+**23. Most of §5.1's Viewport / UX block does not exist.** Orthographic, view
+presets, build plate grid, out-of-bounds warning, wireframe, x-ray,
+cross-section slider, unit handling, drag-and-drop, recent files — absent from
+the code, not merely unwired. This is the largest remaining v1.0 gap and it
+needs **a scope decision from the user before any dispatch**: build for 1.0,
+or move to §5.2.
+
+**24. Hole filling and hole detection disagree about import seams.**
+`BoundaryHoleDetector` excludes seams by position; `HoleFillRepair` finds
+loops by vertex index and does not, so Inspect can report zero holes on a file
+whose Auto Repair run adds geometry across a seam. Small, sharp, and exactly
+the shape this project keeps getting bitten by. **Sonnet.**
+
+**Packaging follow-ups** stay deferred: §9 still reads "Linux + Windows first;
+macOS once there is revenue", so notarisation is deferred by the spec's own
+terms. An MSI is buildable on the `windows-latest` runner but unverifiable
+from this host, and there is no tagged release yet.
 
 Push freely; the user has given standing authorisation. Ask before starting
 anything not on this list.
