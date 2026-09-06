@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Linq;
@@ -26,7 +27,70 @@ public partial class DrainHolePanel : UserControl
     {
         InitializeComponent();
         HolesList.ItemsSource = _holesDisplay;
+
+        // The parameter fields drive the gizmo, not only the Apply button: a hole is placed at the
+        // size in the box, the viewport marker is drawn at that size, and the Placed Holes list
+        // names it. Before this, placement hard-coded 2mm and the list described a hole nobody had
+        // asked for (SPECIFICATION.md §11, 2026-09-06).
+        // Watching the Text property rather than the TextChanged routed event: the routed event only
+        // reaches a control that is live in a visual tree, so a panel exercised outside a window (as
+        // the wiring tests do) would silently never see it — the same "green suite, dead wiring" shape
+        // of failure this change exists to remove.
+        DiameterInput.PropertyChanged += (_, e) =>
+        {
+            if (e.Property == TextBox.TextProperty)
+            {
+                PushParametersToGizmo();
+            }
+        };
+        CountersinkInput.PropertyChanged += (_, e) =>
+        {
+            if (e.Property == TextBox.TextProperty)
+            {
+                PushParametersToGizmo();
+            }
+        };
     }
+
+    /// <summary>
+    /// Copies the parameter fields into the gizmo and onto every placed hole, so one number governs
+    /// what is placed, what is drawn and what Apply cuts.
+    /// </summary>
+    private void PushParametersToGizmo()
+    {
+        if (_gizmo is null)
+        {
+            return;
+        }
+
+        if (TryReadDiameter(out double diameter))
+        {
+            _gizmo.Diameter = diameter;
+            foreach (var hole in _gizmo.Holes)
+            {
+                hole.Diameter = diameter;
+            }
+        }
+
+        if (TryReadCountersink(out double countersink))
+        {
+            _gizmo.CountersinkDepth = countersink;
+            foreach (var hole in _gizmo.Holes)
+            {
+                hole.CountersinkDepth = countersink;
+            }
+        }
+
+        UpdateHolesList();
+    }
+
+    private bool TryReadDiameter(out double diameter) =>
+        double.TryParse(DiameterInput.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out diameter)
+        && diameter > 0.0;
+
+    private bool TryReadCountersink(out double countersink) =>
+        double.TryParse(CountersinkInput.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out countersink)
+        && countersink >= 0.0;
 
     /// <summary>
     /// Sets the mesh document this panel operates on, exposed for testing.
@@ -46,7 +110,7 @@ public partial class DrainHolePanel : UserControl
         _gizmo = gizmo;
         _gizmo.HolePlaced += (s, e) => UpdateHolesList();
         _gizmo.HoleRemoved += (s, e) => UpdateHolesList();
-        UpdateHolesList();
+        PushParametersToGizmo();
     }
 
     /// <summary>
@@ -58,6 +122,22 @@ public partial class DrainHolePanel : UserControl
         _gizmoActivationCallback = onActivate;
         _gizmoDeactivationCallback = onDeactivate;
     }
+
+    /// <summary>Types a value into the Diameter field exactly as a user would, exposed for testing.
+    /// It deliberately only sets the text: whether that reaches the gizmo is the thing under test.</summary>
+    public void SetDiameterTextForTesting(string text) => DiameterInput.Text = text;
+
+    /// <summary>Types a value into the Countersink Depth field, exposed for testing.</summary>
+    public void SetCountersinkTextForTesting(string text) => CountersinkInput.Text = text;
+
+    /// <summary>The Placed Holes list as the user sees it, exposed for testing.</summary>
+    public IReadOnlyList<string> PlacedHoleEntriesForTesting => _holesDisplay;
+
+    /// <summary>Runs "Apply to all holes" as the button does, exposed for testing.</summary>
+    public Task InvokeApplyAllForTesting() => OnApplyAllClickCore();
+
+    /// <summary>Runs "Apply to selected hole" as the button does, exposed for testing.</summary>
+    public Task InvokeApplySelectedForTesting() => OnApplySelectedClickCore();
 
     /// <summary>Current operation result message text, exposed for testing.</summary>
     public string? OperationResultMessage => ResultMessageText?.Text;
@@ -84,6 +164,11 @@ public partial class DrainHolePanel : UserControl
 
     private void UpdateHolesList()
     {
+        // Rebuilding the list drops the ListBox's selection, and the selection is what "Apply to
+        // selected hole" acts on — so typing in the Diameter box must not silently deselect the hole
+        // the user is working on.
+        int selected = HolesList.SelectedIndex;
+
         _holesDisplay.Clear();
         if (_gizmo is null)
         {
@@ -93,15 +178,24 @@ public partial class DrainHolePanel : UserControl
         int index = 1;
         foreach (var hole in _gizmo.Holes)
         {
+            string countersink = hole.CountersinkDepth > 0.0
+                ? string.Format(CultureInfo.InvariantCulture, ", {0:0.##}mm countersink", hole.CountersinkDepth)
+                : "";
             string entry = string.Format(
                 CultureInfo.InvariantCulture,
-                "Hole {0}: Ø{1:0.##}mm @ ({2:0.#}, {3:0.#}, {4:0.#})",
+                "Hole {0}: Ø{1:0.##}mm{2} @ ({3:0.#}, {4:0.#}, {5:0.#})",
                 index++,
                 hole.Diameter,
+                countersink,
                 hole.SurfacePoint.x,
                 hole.SurfacePoint.y,
                 hole.SurfacePoint.z);
             _holesDisplay.Add(entry);
+        }
+
+        if (selected >= 0 && selected < _holesDisplay.Count)
+        {
+            HolesList.SelectedIndex = selected;
         }
     }
 
@@ -251,6 +345,7 @@ public partial class DrainHolePanel : UserControl
         {
             int appliedCount = 0;
             string lastMessage = "";
+            var refusals = new List<string>();
 
             foreach (var hole in _gizmo.Holes)
             {
@@ -269,20 +364,34 @@ public partial class DrainHolePanel : UserControl
                     appliedCount++;
                     lastMessage = result.Summary;
                 }
+                else
+                {
+                    refusals.Add(result.Summary);
+                }
             }
 
             UpdateStatsDisplay();
+            UpdateHolesList();
 
             if (ResultMessageText is not null)
             {
+                // A hole that could not be drilled has to be said out loud: reporting only the
+                // successes would be the "reports success while being wrong" failure this feature
+                // was rebuilt to remove (§4, "Honest diagnostics").
+                var lines = new List<string>();
                 if (appliedCount > 0)
                 {
-                    ResultMessageText.Text = $"Applied {appliedCount} drain hole(s). Last: {lastMessage}";
+                    lines.Add($"Drilled {appliedCount} of {appliedCount + refusals.Count} hole(s). Last: {lastMessage}");
                 }
-                else
+
+                if (refusals.Count > 0)
                 {
-                    ResultMessageText.Text = "No holes could be applied.";
+                    lines.Add($"{refusals.Count} hole(s) not drilled: {refusals[0]}");
                 }
+
+                ResultMessageText.Text = lines.Count > 0
+                    ? string.Join(" ", lines)
+                    : "No holes could be applied.";
             }
         }
         catch (Exception ex)

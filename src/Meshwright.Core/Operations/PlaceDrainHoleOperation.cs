@@ -1,4 +1,3 @@
-using System.Globalization;
 using g3;
 using Meshwright.Geometry.Edit;
 
@@ -9,9 +8,9 @@ namespace Meshwright.Core.Operations;
 /// A drain hole is a cylindrical void cut through the mesh surface, typically 2-4mm diameter,
 /// used to allow trapped resin/filament to drain from hollowed prints.
 ///
-/// This operation removes triangles within the hole diameter to create the void. The hole walls
-/// are the remaining mesh geometry — not perfectly cylindrical, but acceptable for v1.0.
-/// Future versions may add boolean subtraction or explicit geometry for cleaner results.
+/// The hole is cut to the requested diameter by <see cref="DrainHole"/>, which refines the local
+/// surface and stitches a real circular opening rather than deleting whichever triangles happen to
+/// be nearby. The opening is left open on purpose: that is what drains a hollowed print.
 /// </summary>
 public sealed class PlaceDrainHoleOperation : MeshOperationBase
 {
@@ -60,24 +59,15 @@ public sealed class PlaceDrainHoleOperation : MeshOperationBase
             _diameter,
             _countersinkDepth);
 
+        // The summary is the geometry layer's own measured account of what happened — it names the
+        // measured opening, the measured countersink and the surface area actually removed, and says
+        // why when it could not honour the request. Re-describing the request here would put the
+        // requested numbers back into a line the user reads as a result (§11, 2026-09-06).
         if (!result.HolePlaced)
         {
-            return new OperationResult(
-                Changed: false,
-                Summary: "Could not place drain hole at the specified location (no triangles to remove, or point outside mesh).");
+            return new OperationResult(Changed: false, Summary: result.Message);
         }
 
-        string countersinkMsg = _countersinkDepth > 0.0
-            ? string.Format(CultureInfo.InvariantCulture, ", {0:0.##}mm countersink", _countersinkDepth)
-            : "";
-
-        return new OperationResult(
-            Changed: true,
-            Summary: string.Format(
-                CultureInfo.InvariantCulture,
-                "Placed drain hole (Ø{0:0.##}mm{1}, removed {2} triangles).",
-                result.DiameterAchieved,
-                countersinkMsg,
-                result.TrianglesRemoved));
+        return new OperationResult(Changed: true, Summary: result.Message);
     }
 }
