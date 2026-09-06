@@ -63,6 +63,20 @@
           <Button Name="SetViaGizmoButton" Content="Set Plane Via Gizmo" Click="OnSetViaGizmoClick" />
           <TextBlock Name="GizmoStatusText" TextWrapping="Wrap" FontStyle="Italic" FontSize="11" />
         </StackPanel>
+
+        <Border BorderBrush="#40808080" BorderThickness="0,1,0,0" Padding="0,8,0,0">
+          <StackPanel Spacing="4">
+            <CheckBox Name="AddPinCheckBox" Content="Registration Pin (Split only)" />
+            <TextBlock Text="Diameter (mm):" />
+            <TextBox Name="PinDiameterInput" Text="4.0" />
+            <TextBlock Text="Clearance (mm):" />
+            <TextBox Name="PinClearanceInput" Text="0.2" />
+            <TextBlock Text="Depth (mm, blank = one diameter):" />
+            <TextBox Name="PinDepthInput" Text="" Watermark="auto" />
+            <Button Name="PlacePinViaGizmoButton" Content="Place Pin Via Gizmo" Click="OnPlacePinViaGizmoClick" />
+            <TextBlock Name="PinStatusText" TextWrapping="Wrap" FontStyle="Italic" FontSize="11" />
+          </StackPanel>
+        </Border>
         <Button Name="ApplyButton" Content="Apply" Click="OnApplyClick" />
 
         <StackPanel Spacing="4">

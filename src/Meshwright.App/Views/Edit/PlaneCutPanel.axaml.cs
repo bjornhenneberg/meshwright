@@ -23,9 +23,37 @@ public partial class PlaneCutPanel : UserControl
     private Action? _gizmoActivationCallback;
     private Action? _gizmoDeactivationCallback;
 
+    private bool _pinPlacementActive;
+
     public PlaneCutPanel()
     {
         InitializeComponent();
+
+        // Watched on TextProperty rather than the TextChanged routed event: the routed event never
+        // fires for a panel exercised outside a visual tree, which is how the drain-hole gizmo came
+        // to draw a hard-coded 2 mm circle behind a green suite (§11, 2026-09-06). The pin outline
+        // in the viewport has to be the size this box says.
+        PinDiameterInput.PropertyChanged += (_, e) =>
+        {
+            if (e.Property == TextBox.TextProperty)
+            {
+                PushPinDiameterToGizmo();
+            }
+        };
+    }
+
+    private void PushPinDiameterToGizmo()
+    {
+        if (_gizmo is null)
+        {
+            return;
+        }
+
+        if (double.TryParse(PinDiameterInput.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out double diameter)
+            && diameter > 0.0)
+        {
+            _gizmo.PinDiameter = (float)diameter;
+        }
     }
 
     /// <summary>
@@ -46,6 +74,114 @@ public partial class PlaneCutPanel : UserControl
     {
         _gizmo = gizmo;
         _gizmo.Changed += (s, e) => UpdateGizmoStatusDisplay();
+        _gizmo.PinChanged += (s, e) => UpdatePinStatusDisplay();
+        PushPinDiameterToGizmo();
+    }
+
+    private void UpdatePinStatusDisplay()
+    {
+        if (PinStatusText is null || _gizmo is null)
+        {
+            return;
+        }
+
+        PinStatusText.Text = _gizmo.PinWasPlaced
+            ? string.Format(
+                CultureInfo.InvariantCulture,
+                "Pin placed at ({0:0.##}, {1:0.##}, {2:0.##}), Ø{3:0.##} mm.",
+                _gizmo.PinCenter.X,
+                _gizmo.PinCenter.Y,
+                _gizmo.PinCenter.Z,
+                _gizmo.PinDiameter)
+            : "Pin position: automatic (widest part of the cut face).";
+    }
+
+    /// <summary>Whether the gizmo is currently placing pins rather than moving the plane, exposed for testing.</summary>
+    public bool PinPlacementActive => _pinPlacementActive;
+
+    /// <summary>Current pin status line, exposed for testing.</summary>
+    public string? PinStatusMessage => PinStatusText?.Text;
+
+    /// <summary>
+    /// The pin the next Apply will ask for, or null when the checkbox is clear or the numbers do not
+    /// parse. Exposed so a test can start at the typed field values and end at a measurement of the
+    /// resulting mesh, rather than trusting that the controls are wired to anything.
+    /// </summary>
+    public RegistrationPinOptions? CurrentPinOptions => BuildPinOptions();
+
+    private RegistrationPinOptions? BuildPinOptions()
+    {
+        if (AddPinCheckBox?.IsChecked != true)
+        {
+            return null;
+        }
+
+        if (!double.TryParse(PinDiameterInput.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out double diameter))
+        {
+            return null;
+        }
+
+        if (!double.TryParse(PinClearanceInput.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out double clearance))
+        {
+            return null;
+        }
+
+        double? depth = null;
+        if (!string.IsNullOrWhiteSpace(PinDepthInput.Text))
+        {
+            if (!double.TryParse(PinDepthInput.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out double typedDepth))
+            {
+                return null;
+            }
+
+            depth = typedDepth;
+        }
+
+        // Gizmo-first: a pin the user has put somewhere in the viewport wins over automatic
+        // placement outright, the same rule the plane itself follows.
+        Vector3d? center = _gizmo is { PinWasPlaced: true }
+            ? new Vector3d(_gizmo.PinCenter.X, _gizmo.PinCenter.Y, _gizmo.PinCenter.Z)
+            : null;
+
+        return new RegistrationPinOptions(diameter, clearance, depth, center);
+    }
+
+    private void OnPlacePinViaGizmoClick(object? sender, RoutedEventArgs e)
+    {
+        if (_gizmo is null)
+        {
+            if (PinStatusText is not null)
+            {
+                PinStatusText.Text = "Gizmo not set up. Cannot place a pin.";
+            }
+
+            return;
+        }
+
+        if (!_pinPlacementActive)
+        {
+            _pinPlacementActive = true;
+            _gizmo.PinPlacementMode = true;
+            PushPinDiameterToGizmo();
+            PlacePinViaGizmoButton.Content = "Done placing pin";
+            PinStatusText.Text = "Click in the viewport, on the cut plane, to put the pin there.";
+
+            // Placing a pin needs the plane gizmo on screen; take the single viewport slot the same
+            // way the plane button does rather than assuming it is already ours.
+            if (!_gizmoActive)
+            {
+                _gizmoActive = true;
+                SetViaGizmoButton.Content = "Done setting plane";
+                _gizmoActivationCallback?.Invoke();
+            }
+        }
+        else
+        {
+            _pinPlacementActive = false;
+            _gizmo.PinPlacementMode = false;
+            PlacePinViaGizmoButton.Content = "Place Pin Via Gizmo";
+            UpdatePinStatusDisplay();
+        }
     }
 
     /// <summary>
@@ -167,6 +303,18 @@ public partial class PlaneCutPanel : UserControl
         _gizmoActive = false;
         SetViaGizmoButton.Content = "Set Plane Via Gizmo";
         UpdateGizmoStatusDisplay();
+
+        // Pin placement rides on the plane gizmo, so losing the slot ends it too.
+        if (_pinPlacementActive)
+        {
+            _pinPlacementActive = false;
+            if (_gizmo is not null)
+            {
+                _gizmo.PinPlacementMode = false;
+            }
+
+            PlacePinViaGizmoButton.Content = "Place Pin Via Gizmo";
+        }
     }
 
     private async void OnApplyClick(object? sender, RoutedEventArgs e)
@@ -254,11 +402,24 @@ public partial class PlaneCutPanel : UserControl
 
         try
         {
+            RegistrationPinOptions? pinOptions = BuildPinOptions();
+            if (AddPinCheckBox?.IsChecked == true && pinOptions is null)
+            {
+                ResultMessageText.Text = "Invalid registration pin diameter, clearance or depth.";
+                return;
+            }
+
+            if (pinOptions is not null && cutMode != CutMode.Split)
+            {
+                ResultMessageText.Text = "A registration pin needs both halves — choose \"Split Both Sides\". Mesh left unchanged.";
+                return;
+            }
+
             IMeshOperation operation = cutMode switch
             {
                 CutMode.Keep => new PlaneCutKeepSideOperation(_currentPlanePoint, _currentPlaneNormal, capMode, addCap),
                 CutMode.Discard => new PlaneCutDiscardSideOperation(_currentPlanePoint, _currentPlaneNormal, capMode, addCap),
-                CutMode.Split => new PlaneCutSplitOperation(_currentPlanePoint, _currentPlaneNormal, capMode, addCap),
+                CutMode.Split => new PlaneCutSplitOperation(_currentPlanePoint, _currentPlaneNormal, capMode, addCap, pinOptions),
                 _ => new PlaneCutKeepSideOperation(_currentPlanePoint, _currentPlaneNormal, capMode, addCap),
             };
 

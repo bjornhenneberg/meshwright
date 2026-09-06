@@ -10,7 +10,8 @@ public sealed record PlaneCutResult(
     int CapTrianglesAdded,
     int TrianglesBefore,
     int TrianglesAfter,
-    bool MeshWasModified);
+    bool MeshWasModified,
+    RegistrationPinResult? Pin = null);
 
 /// <summary>
 /// Plane cut operation (SPECIFICATION.md §5.1): split a mesh along a plane defined by a point
@@ -27,6 +28,14 @@ public sealed class PlaneCut
     /// <param name="planeNormal">Normal vector of the cutting plane (must be normalized).</param>
     /// <param name="mode">CutMode.Keep keeps positive side + cap; Discard keeps negative side + cap; Split returns both + caps.</param>
     /// <param name="capMode">HoleFillMode for the cap (Flat, Planar, or Smooth).</param>
+    /// <param name="pin">
+    /// When set, a peg-and-socket registration pin pair is generated on the two mating faces so the
+    /// halves align when they are put back together. Only <see cref="CutMode.Split"/> with a cap can
+    /// carry one — there is no mating face otherwise. If the pin cannot be built, <b>nothing</b> is:
+    /// the cut is refused too, the mesh is returned unchanged and <see cref="PlaneCutResult.Pin"/>
+    /// explains why. Splitting anyway would hand back two halves that silently do not align, which
+    /// is the failure §4 ("never silently destroy the model") and §11's refusal rule exist to stop.
+    /// </param>
     /// <param name="addCap">
     /// When false, the cross-section is left open: no cap triangles are generated and the result
     /// mesh(es) carry a boundary loop where the cut passed through the surface. SPECIFICATION.md
@@ -37,7 +46,7 @@ public sealed class PlaneCut
     /// and cap triangle count. If the plane passes through no geometry, PositiveSideMesh is a copy
     /// of the input and MeshWasModified is false.
     /// </returns>
-    public PlaneCutResult Cut(DMesh3 mesh, Vector3d planePoint, Vector3d planeNormal, CutMode mode, HoleFillMode capMode, bool addCap = true)
+    public PlaneCutResult Cut(DMesh3 mesh, Vector3d planePoint, Vector3d planeNormal, CutMode mode, HoleFillMode capMode, bool addCap = true, RegistrationPinOptions? pin = null)
     {
         if (planeNormal.LengthSquared < 0.99) // Rough normalization check
         {
@@ -71,9 +80,47 @@ public sealed class PlaneCut
         // this is a set of loops, some of them holes inside others, not one loop.
         var basis = PlaneBasis.Create(planePoint, planeNormal);
         List<List<int>> capLoops = addCap ? CutCrossSection.ExtractLoops(splitMesh.CutSegments) : [];
+
+        // A registration pin is planned before anything is built, because a pin that cannot be built
+        // refuses the whole cut rather than quietly producing halves that do not align.
+        RegistrationPinPlan? pinPlan = null;
+        if (pin is not null)
+        {
+            if (mode != CutMode.Split)
+            {
+                return Unchanged(mesh, trianglesBefore, RefusePin(pin, "A registration pin needs both halves of the cut, so it can only be added in Split mode. Mesh left unchanged."));
+            }
+
+            if (!addCap)
+            {
+                return Unchanged(mesh, trianglesBefore, RefusePin(pin, "A registration pin needs a capped cut — an open cross-section has no mating face to put one on. Mesh left unchanged."));
+            }
+
+            pinPlan = RegistrationPinBuilder.Plan(mesh, splitMesh.SplitMesh, capLoops, basis, pin, out RegistrationPinResult refusal);
+            if (pinPlan is null)
+            {
+                return Unchanged(mesh, trianglesBefore, refusal);
+            }
+        }
+
+        // Without a pin both halves share one triangulation, wound opposite ways. With one, each half
+        // gets its own: the peg half's cap is punched out at the peg diameter and the socket half's
+        // at the socket diameter, which is what the clearance between them is made of.
+        bool flatFan = capMode == HoleFillMode.Flat;
         List<Index3i> capTriangles = capLoops.Count == 0
             ? []
-            : CutCrossSection.Triangulate(capLoops, splitMesh.SplitMesh, basis, flatFan: capMode == HoleFillMode.Flat);
+            : CutCrossSection.Triangulate(capLoops, splitMesh.SplitMesh, basis, flatFan: flatFan);
+        List<Index3i> positiveCapTriangles = capTriangles;
+        List<Index3i> negativeCapTriangles = capTriangles;
+        if (pinPlan is not null)
+        {
+            positiveCapTriangles = CutCrossSection.Triangulate(
+                WithExtraLoop(capLoops, pinPlan.PegLoop), splitMesh.SplitMesh, basis, flatFan: flatFan);
+            negativeCapTriangles = CutCrossSection.Triangulate(
+                WithExtraLoop(capLoops, pinPlan.SocketLoop), splitMesh.SplitMesh, basis, flatFan: flatFan);
+            capTriangles = positiveCapTriangles;
+        }
+
         int capTrianglesAdded = 0;
 
         // Build the result mesh(es)
@@ -82,6 +129,7 @@ public sealed class PlaneCut
         // so skipping it there left the mode with nothing to return but the positive side —
         // making Discard behave identically to Keep.
         DMesh3? negativeSide = mode is CutMode.Split or CutMode.Discard ? new DMesh3() : null;
+        RegistrationPinResult? pinResult = null;
 
         var vertexMap = new Dictionary<int, (int posMeshId, int? negMeshId)>();
 
@@ -112,15 +160,29 @@ public sealed class PlaneCut
         // translated into the mesh being filled first — passing split-mesh ids straight through
         // had the cap stitching together whichever unrelated vertices happened to hold those
         // indices, which is what left cut results in disconnected pieces instead of one shell.
-        if (capTriangles.Count > 0)
+        int? PositiveLookup(int vid) => vertexMap.TryGetValue(vid, out (int posMeshId, int? negMeshId) ids) ? ids.posMeshId : null;
+        void RememberPositive(int vid, int mappedId) =>
+            vertexMap[vid] = (mappedId, vertexMap.TryGetValue(vid, out (int posMeshId, int? negMeshId) e) ? e.negMeshId : null);
+
+        if (positiveCapTriangles.Count > 0)
         {
             capTrianglesAdded = AppendCap(
                 positiveSide,
-                capTriangles,
+                positiveCapTriangles,
                 splitMesh.SplitMesh,
-                vid => vertexMap.TryGetValue(vid, out (int posMeshId, int? negMeshId) ids) ? ids.posMeshId : null,
-                (vid, mappedId) => vertexMap[vid] = (mappedId, vertexMap.TryGetValue(vid, out (int posMeshId, int? negMeshId) e) ? e.negMeshId : null),
+                PositiveLookup,
+                RememberPositive,
                 reverseWinding: true);
+        }
+
+        // The peg grows out of the hole the cap triangulation just left at the pin circle, sharing
+        // its boundary vertices, so the half stays one closed shell rather than gaining a floating
+        // cylinder next to a hole.
+        (int[] PegRing, int PegEnd)? peg = null;
+        if (pinPlan is not null)
+        {
+            int[] pegBoundary = TranslateRing(positiveSide, splitMesh.SplitMesh, pinPlan.PegLoop, PositiveLookup, RememberPositive);
+            peg = RegistrationPinBuilder.AppendPeg(positiveSide, pegBoundary, planeNormal.Normalized, pinPlan.PegDepth);
         }
 
         // Copy negative-side geometry whenever it is going to be returned (Split or Discard)
@@ -149,15 +211,52 @@ public sealed class PlaneCut
             // normal and keeps the triangulation's own winding. Capping both halves the same way
             // round leaves one of them inside out — its faces point into the solid and its volume
             // comes back with the wrong sign.
-            if (capTriangles.Count > 0)
+            int? NegativeLookup(int vid) => negVertexMap.TryGetValue(vid, out int id) ? id : null;
+            void RememberNegative(int vid, int mappedId) => negVertexMap[vid] = mappedId;
+
+            if (negativeCapTriangles.Count > 0)
             {
                 capTrianglesAdded += AppendCap(
                     negativeSide,
-                    capTriangles,
+                    negativeCapTriangles,
                     splitMesh.SplitMesh,
-                    vid => negVertexMap.TryGetValue(vid, out int id) ? id : null,
-                    (vid, mappedId) => negVertexMap[vid] = mappedId,
+                    NegativeLookup,
+                    RememberNegative,
                     reverseWinding: false);
+            }
+
+            if (pinPlan is not null)
+            {
+                int[] socketBoundary = TranslateRing(negativeSide, splitMesh.SplitMesh, pinPlan.SocketLoop, NegativeLookup, RememberNegative);
+                (int[] socketRing, int socketEnd) = RegistrationPinBuilder.AppendSocket(negativeSide, socketBoundary, planeNormal.Normalized, pinPlan.SocketDepth);
+
+                (int[] pegRing, int pegEnd) = peg!.Value;
+                Vector3d axis = planeNormal.Normalized;
+                double pegDiameter = 2.0 * RegistrationPinBuilder.MeasureRingRadius(positiveSide, pegRing, pinPlan.Center, axis);
+                double socketDiameter = 2.0 * RegistrationPinBuilder.MeasureRingRadius(negativeSide, socketRing, pinPlan.Center, axis);
+                double pegDepth = RegistrationPinBuilder.MeasureAxialDepth(positiveSide, pegEnd, pinPlan.Center, axis);
+                double socketDepthMeasured = RegistrationPinBuilder.MeasureAxialDepth(negativeSide, socketEnd, pinPlan.Center, axis);
+
+                pinResult = new RegistrationPinResult(
+                    PinPlaced: true,
+                    DiameterRequested: pinPlan.Options.Diameter,
+                    PegDiameterAchieved: pegDiameter,
+                    SocketDiameterAchieved: socketDiameter,
+                    ClearanceRequested: pinPlan.Options.Clearance,
+                    ClearanceAchieved: (socketDiameter - pegDiameter) / 2.0,
+                    DepthRequested: pinPlan.PegDepth,
+                    DepthAchieved: pegDepth,
+                    Center: pinPlan.Center,
+                    Axis: axis,
+                    LargestDiameterThatFits: pinPlan.LargestDiameterThatFits,
+                    Message: string.Format(
+                        System.Globalization.CultureInfo.InvariantCulture,
+                        "Registration pin: Ø{0:0.###} mm peg {1:0.###} mm long on the positive half, Ø{2:0.###} mm socket {3:0.###} mm deep on the negative half ({4:0.###} mm clearance).",
+                        pegDiameter,
+                        pegDepth,
+                        socketDiameter,
+                        socketDepthMeasured,
+                        (socketDiameter - pegDiameter) / 2.0));
             }
         }
 
@@ -169,7 +268,76 @@ public sealed class PlaneCut
             CapTrianglesAdded: capTrianglesAdded,
             TrianglesBefore: trianglesBefore,
             TrianglesAfter: positiveSide.TriangleCount + (negativeSide?.TriangleCount ?? 0),
-            MeshWasModified: true);
+            MeshWasModified: true,
+            Pin: pinResult);
+    }
+
+    /// <summary>The cross-section loops plus one more — the pin circle, which the cap triangulation's
+    /// parity nesting then treats as a hole in the cap like any other enclosed loop.</summary>
+    private static List<IReadOnlyList<int>> WithExtraLoop(List<List<int>> loops, List<int> extra)
+    {
+        var combined = new List<IReadOnlyList<int>>(loops.Count + 1);
+        foreach (List<int> loop in loops)
+        {
+            combined.Add(loop);
+        }
+
+        combined.Add(extra);
+        return combined;
+    }
+
+    /// <summary>A refusal that leaves the input mesh exactly as it was.</summary>
+    private static PlaneCutResult Unchanged(DMesh3 mesh, int trianglesBefore, RegistrationPinResult pin) =>
+        new(
+            PositiveSideMesh: new DMesh3(mesh, bCompact: false),
+            NegativeSideMesh: null,
+            CapTrianglesAdded: 0,
+            TrianglesBefore: trianglesBefore,
+            TrianglesAfter: trianglesBefore,
+            MeshWasModified: false,
+            Pin: pin);
+
+    private static RegistrationPinResult RefusePin(RegistrationPinOptions options, string message) =>
+        new(
+            PinPlaced: false,
+            DiameterRequested: options.Diameter,
+            PegDiameterAchieved: 0.0,
+            SocketDiameterAchieved: 0.0,
+            ClearanceRequested: options.Clearance,
+            ClearanceAchieved: 0.0,
+            DepthRequested: options.Depth ?? options.Diameter,
+            DepthAchieved: 0.0,
+            Center: Vector3d.Zero,
+            Axis: Vector3d.Zero,
+            LargestDiameterThatFits: 0.0,
+            Message: message);
+
+    /// <summary>
+    /// Maps a loop of split-mesh vertex ids into <paramref name="target"/>, appending any the cap did
+    /// not already need, and preserving the loop's order — the pin's cylinder is wound against it.
+    /// </summary>
+    private static int[] TranslateRing(
+        DMesh3 target,
+        DMesh3 splitMesh,
+        IReadOnlyList<int> ring,
+        Func<int, int?> lookup,
+        Action<int, int> remember)
+    {
+        var ids = new int[ring.Count];
+        for (int i = 0; i < ring.Count; i++)
+        {
+            int? mapped = lookup(ring[i]);
+            if (mapped is null)
+            {
+                int appended = target.AppendVertex(splitMesh.GetVertex(ring[i]));
+                remember(ring[i], appended);
+                mapped = appended;
+            }
+
+            ids[i] = mapped.Value;
+        }
+
+        return ids;
     }
 
     private enum TriangleClassification

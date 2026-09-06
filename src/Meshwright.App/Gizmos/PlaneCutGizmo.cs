@@ -36,6 +36,26 @@ public sealed class PlaneCutGizmo : IViewportGizmo, IDisposable
     private Vector3 _dragStartNormal;
     private GizmoModifierKeys _dragModifiers;
 
+    /// <summary>
+    /// While true, clicks and drags inside the plane square place and move the registration pin
+    /// instead of re-orienting the plane. The pin lives <i>on</i> the cut plane, so it belongs to
+    /// this gizmo rather than a second one: MainWindow holds a single gizmo slot, and a separate pin
+    /// gizmo would have to displace the plane gizmo the pin is defined relative to.
+    /// </summary>
+    private bool _pinPlacementMode;
+
+    private bool _pinPlaced;
+    private Vector3 _pinCenter;
+    private float _pinDiameter = 1.0f;
+    private bool _draggingPin;
+
+    /// <summary>Segments the pin outline is drawn with; it is a preview, not the cut geometry.</summary>
+    private const int PinCircleSegments = 48;
+
+    private uint _pinVao;
+    private uint _pinVbo;
+    private uint _pinProgram;
+
     // GL resources
     private uint _planeVao;
     private uint _planeVbo;
@@ -59,6 +79,56 @@ public sealed class PlaneCutGizmo : IViewportGizmo, IDisposable
     /// <summary>Raised whenever the plane position or normal changes as a result of dragging.</summary>
     public event EventHandler? Changed;
 
+    /// <summary>Raised whenever the registration pin is placed or moved in the viewport.</summary>
+    public event EventHandler? PinChanged;
+
+    /// <summary>
+    /// Puts the gizmo into pin-placement mode: a drag inside the plane square then moves the pin
+    /// rather than the plane.
+    /// </summary>
+    public bool PinPlacementMode
+    {
+        get => _pinPlacementMode;
+        set => _pinPlacementMode = value;
+    }
+
+    /// <summary>Where the pin sits, in world coordinates. Always on the cut plane.</summary>
+    public Vector3 PinCenter => _pinCenter;
+
+    /// <summary>True once the user has put the pin somewhere in the viewport; until then the
+    /// operation places it automatically at the widest part of the cross-section.</summary>
+    public bool PinWasPlaced => _pinPlaced;
+
+    /// <summary>
+    /// Pin diameter in mesh units, pushed in from the panel so the outline drawn in the viewport is
+    /// the size the operation will cut. A gizmo that draws its own hard-coded size describes a
+    /// feature the user did not ask for (§11, 2026-09-06).
+    /// </summary>
+    public float PinDiameter
+    {
+        get => _pinDiameter;
+        set
+        {
+            if (value > 0f && Math.Abs(value - _pinDiameter) > float.Epsilon)
+            {
+                _pinDiameter = value;
+                PinChanged?.Invoke(this, EventArgs.Empty);
+            }
+        }
+    }
+
+    /// <summary>Forgets a placed pin, so the next Apply goes back to automatic placement.</summary>
+    public void ClearPin()
+    {
+        if (!_pinPlaced)
+        {
+            return;
+        }
+
+        _pinPlaced = false;
+        PinChanged?.Invoke(this, EventArgs.Empty);
+    }
+
     public PlaneCutGizmo(Vector3 initialPosition)
     {
         _planePosition = initialPosition;
@@ -76,6 +146,12 @@ public sealed class PlaneCutGizmo : IViewportGizmo, IDisposable
 
         // Render normal arrow
         RenderNormalArrow(gl, view, projection);
+
+        // Render the registration pin outline at its true size, so what is drawn is what is cut.
+        if (_pinPlaced)
+        {
+            RenderPinCircle(gl, view, projection);
+        }
     }
 
     public bool OnPointerPressed(GizmoPointerEvent e)
@@ -106,11 +182,39 @@ public sealed class PlaneCutGizmo : IViewportGizmo, IDisposable
             return false;
         }
 
+        if (_pinPlacementMode)
+        {
+            _draggingPin = true;
+            SetPinCenter(hit);
+            return true;
+        }
+
         _isDragging = true;
         _dragStartPosition = _planePosition;
         _dragStartNormal = _planeNormal;
         _dragModifiers = e.Modifiers;
         return true;
+    }
+
+    /// <summary>Moves the pin, keeping it exactly on the cut plane.</summary>
+    private void SetPinCenter(Vector3 worldPoint)
+    {
+        _pinCenter = worldPoint - (Vector3.Dot(worldPoint - _planePosition, _planeNormal) * _planeNormal);
+        _pinPlaced = true;
+        PinChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// Drops the pin back onto the plane after the plane itself has moved or turned. Without this a
+    /// pin placed before the plane was adjusted would sit off the mating face, and the operation
+    /// would either refuse it or project it somewhere the user never pointed at.
+    /// </summary>
+    private void ReprojectPin()
+    {
+        if (_pinPlaced)
+        {
+            _pinCenter -= Vector3.Dot(_pinCenter - _planePosition, _planeNormal) * _planeNormal;
+        }
     }
 
     /// <summary>
@@ -153,6 +257,16 @@ public sealed class PlaneCutGizmo : IViewportGizmo, IDisposable
 
     public bool OnPointerMoved(GizmoPointerEvent e)
     {
+        if (_draggingPin)
+        {
+            if (IntersectPlane(_planePosition, _planeNormal, e.Ray, out Vector3 pinHit))
+            {
+                SetPinCenter(pinHit);
+            }
+
+            return true;
+        }
+
         if (!_isDragging)
         {
             return false;
@@ -167,6 +281,7 @@ public sealed class PlaneCutGizmo : IViewportGizmo, IDisposable
             float projectedDelta = Vector3.Dot(e.Ray.PointAt(t) - _dragStartPosition, _planeNormal);
             _planePosition = _dragStartPosition + _planeNormal * projectedDelta;
 
+            ReprojectPin();
             WasTouched = true;
             Changed?.Invoke(this, EventArgs.Empty);
         }
@@ -190,6 +305,7 @@ public sealed class PlaneCutGizmo : IViewportGizmo, IDisposable
                     _planeNormal = Vector3.Transform(_dragStartNormal, rotation);
                     _planeNormal = Vector3.Normalize(_planeNormal);
 
+                    ReprojectPin();
                     WasTouched = true;
                     Changed?.Invoke(this, EventArgs.Empty);
                 }
@@ -202,6 +318,7 @@ public sealed class PlaneCutGizmo : IViewportGizmo, IDisposable
     public bool OnPointerReleased(GizmoPointerEvent e)
     {
         _isDragging = false;
+        _draggingPin = false;
         return true;
     }
 
@@ -218,6 +335,53 @@ public sealed class PlaneCutGizmo : IViewportGizmo, IDisposable
     {
         BuildPlaneSquare(gl);
         BuildNormalArrow(gl);
+        BuildPinCircle(gl);
+    }
+
+    /// <summary>A unit-radius circle in the XY plane, scaled to the pin's real radius at render time.</summary>
+    private void BuildPinCircle(GlApi gl)
+    {
+        var vertices = new float[PinCircleSegments * 3];
+        for (int i = 0; i < PinCircleSegments; i++)
+        {
+            double angle = 2.0 * Math.PI * i / PinCircleSegments;
+            vertices[(i * 3) + 0] = (float)Math.Cos(angle);
+            vertices[(i * 3) + 1] = (float)Math.Sin(angle);
+            vertices[(i * 3) + 2] = 0f;
+        }
+
+        _pinVbo = gl.GenBuffer();
+        gl.BindBuffer(BufferTargetARB.ArrayBuffer, _pinVbo);
+        gl.BufferData(BufferTargetARB.ArrayBuffer, (uint)(vertices.Length * sizeof(float)), vertices, BufferUsageARB.StaticDraw);
+
+        _pinVao = gl.GenVertexArray();
+        gl.BindVertexArray(_pinVao);
+        gl.VertexAttribPointer(0, 3, VertexAttribPointerType.Float, false, 3 * sizeof(float), 0);
+        gl.EnableVertexAttribArray(0);
+
+        _pinProgram = CreateShaderProgram(gl, BasicVertexShader, BasicFragmentShader);
+    }
+
+    private void RenderPinCircle(GlApi gl, Matrix4x4 view, Matrix4x4 projection)
+    {
+        (Vector3 right, Vector3 up) = PlaneBasis(_planeNormal);
+        float radius = _pinDiameter / 2f;
+
+        Matrix4x4 model = Matrix4x4.CreateTranslation(_pinCenter);
+        model.M11 = right.X * radius; model.M12 = right.Y * radius; model.M13 = right.Z * radius;
+        model.M21 = up.X * radius; model.M22 = up.Y * radius; model.M23 = up.Z * radius;
+        model.M31 = _planeNormal.X * radius; model.M32 = _planeNormal.Y * radius; model.M33 = _planeNormal.Z * radius;
+
+        gl.UseProgram(_pinProgram);
+        SetMatrixUniform(gl, _pinProgram, "uModel", model);
+        SetMatrixUniform(gl, _pinProgram, "uView", view);
+        SetMatrixUniform(gl, _pinProgram, "uProjection", projection);
+
+        int colorLoc = gl.GetUniformLocation(_pinProgram, "uColor");
+        gl.Uniform3(colorLoc, 1.0f, 0.75f, 0.2f); // Amber, distinct from the blue plane outline
+
+        gl.BindVertexArray(_pinVao);
+        gl.DrawArrays(PrimitiveType.LineLoop, 0, PinCircleSegments);
     }
 
     private void BuildPlaneSquare(GlApi gl)
