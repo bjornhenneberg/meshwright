@@ -43,6 +43,14 @@
                   ToggleType="Radio" GroupName="DisplayMode" HotKey="Ctrl+Shift+W" />
         <MenuItem Name="XRayDisplayMenuItem" Header="_X-Ray" Click="OnDisplayModeClick" Tag="XRay"
                   ToggleType="Radio" GroupName="DisplayMode" HotKey="Ctrl+Shift+X" />
+        <Separator />
+        <!-- The bed size choices are generated in code from BuildVolume.Presets, so the menu and
+             the list of printers cannot drift apart. -->
+        <MenuItem Name="BuildPlateMenuItem" Header="_Build Plate">
+          <MenuItem Name="ShowBuildPlateMenuItem" Header="_Show Build Plate" Click="OnToggleBuildPlateClick"
+                    ToggleType="CheckBox" IsChecked="True" HotKey="Ctrl+Shift+B" />
+          <Separator />
+        </MenuItem>
       </MenuItem>
     </Menu>
 
@@ -55,6 +63,10 @@
                   ToolTip.Tip="Refit the camera on the mesh (Ctrl+0)" />
           <TextBlock Name="StatusText" VerticalAlignment="Center" Text="Loaded sample tetrahedron" />
           <TextBlock Name="UndoRedoStatusText" VerticalAlignment="Center" Foreground="Gray" />
+          <!-- Out-of-bounds warning. Hidden while the model fits: a warning that is always on
+               says as little as one that never fires. -->
+          <TextBlock Name="BuildPlateWarningText" VerticalAlignment="Center" Foreground="#FFB020"
+                     FontWeight="SemiBold" IsVisible="False" TextWrapping="NoWrap" />
         </StackPanel>
         <!-- Busy indicator for the in-flight operation (§6.3, backlog item 13). Hidden while
              MeshDocument.IsBusy is false. The progress bar is indeterminate unless

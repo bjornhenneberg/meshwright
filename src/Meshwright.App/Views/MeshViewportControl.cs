@@ -6,6 +6,7 @@ using Avalonia.Input;
 using Avalonia.OpenGL;
 using Avalonia.OpenGL.Controls;
 using Meshwright.Geometry.Diagnostics;
+using Meshwright.Geometry.Printing;
 using Meshwright.Rendering.Camera;
 using Meshwright.Rendering.Gizmos;
 using Meshwright.Rendering.GL;
@@ -27,11 +28,14 @@ public sealed class MeshViewportControl : OpenGlControlBase
 
     private Silk.NET.OpenGL.GL? _gl;
     private MeshRenderer? _renderer;
+    private BuildPlateRenderer? _buildPlateRenderer;
     private g3.DMesh3? _pendingMesh;
     private g3.DMesh3? _mesh;
     private MeshDiagnosticsReport? _report;
     private bool _highlightsDirty;
     private MeshDisplayMode _displayMode = MeshDisplayMode.Shaded;
+    private BuildVolume? _buildVolume = BuildVolume.Default;
+    private bool _modelFitsBuildVolume = true;
 
     private bool _isOrbiting;
     private bool _isPanning;
@@ -68,6 +72,38 @@ public sealed class MeshViewportControl : OpenGlControlBase
         set
         {
             _displayMode = value;
+            RequestNextFrameRendering();
+        }
+    }
+
+    /// <summary>
+    /// The printer bed drawn on the Z=0 plane, or null to hide the build plate. Held here rather
+    /// than only on <see cref="BuildPlateRenderer"/> for the same reason as
+    /// <see cref="DisplayMode"/>: the renderer does not exist until the GL context is initialised,
+    /// and the menu can be used before the first frame.
+    /// </summary>
+    public BuildVolume? BuildVolume
+    {
+        get => _buildVolume;
+        set
+        {
+            _buildVolume = value;
+            RequestNextFrameRendering();
+        }
+    }
+
+    /// <summary>
+    /// Whether the loaded model is inside the build volume. Drives the bed outline colour; the
+    /// words of the warning are the window's business. Set by whoever owns the document, so the
+    /// verdict on screen and the verdict in the status bar come from one evaluation rather than
+    /// two that can disagree.
+    /// </summary>
+    public bool ModelFitsBuildVolume
+    {
+        get => _modelFitsBuildVolume;
+        set
+        {
+            _modelFitsBuildVolume = value;
             RequestNextFrameRendering();
         }
     }
@@ -150,6 +186,8 @@ public sealed class MeshViewportControl : OpenGlControlBase
         _gl = Silk.NET.OpenGL.GL.GetApi(gl.GetProcAddress);
         _renderer = new MeshRenderer(_gl);
         _renderer.Initialize();
+        _buildPlateRenderer = new BuildPlateRenderer(_gl);
+        _buildPlateRenderer.Initialize();
     }
 
     protected override void OnOpenGlRender(GlInterface gl, int fb)
@@ -191,6 +229,19 @@ public sealed class MeshViewportControl : OpenGlControlBase
         float aspect = pixelHeight == 0 ? 1f : (float)pixelWidth / pixelHeight;
         var view = _camera.GetViewMatrix();
         var projection = _camera.GetProjectionMatrix(aspect);
+
+        // The build plate goes first, with the depth test and depth writes both on: it is opaque
+        // world geometry at Z=0, not an overlay, so the model occludes it where the model is in
+        // front and it occludes whatever has sunk below the bed. Drawing it after the mesh would
+        // need the depth test off (the gizmo pass's arrangement) and would paint grid lines
+        // straight across the model.
+        if (_buildPlateRenderer is not null && _buildVolume is { } volume)
+        {
+            _buildPlateRenderer.SetBuildVolume(volume, ModelFootprintMm());
+            _buildPlateRenderer.ModelFits = _modelFitsBuildVolume;
+            _buildPlateRenderer.Render(view, projection);
+        }
+
         _renderer.DisplayMode = _displayMode;
         _renderer.Render(view, projection, System.Numerics.Matrix4x4.Identity);
 
@@ -205,6 +256,24 @@ public sealed class MeshViewportControl : OpenGlControlBase
             _gizmo.Render(_gl, view, projection);
             _gl.Enable(EnableCap.DepthTest);
         }
+    }
+
+    /// <summary>
+    /// The loaded model's larger horizontal extent, which sets the build plate's minor grid
+    /// spacing (see <see cref="BuildPlateGrid"/>). Zero when nothing is loaded, which asks for the
+    /// major grid alone.
+    /// </summary>
+    private double ModelFootprintMm()
+    {
+        if (_mesh is null || _mesh.TriangleCount == 0)
+        {
+            return 0;
+        }
+
+        // g3's AxisAlignedBox3d names its extents Width/Height/Depth for X/Y/Z, so the
+        // horizontal footprint is Width and *Height* - Depth is the vertical extent.
+        g3.AxisAlignedBox3d bounds = _mesh.CachedBounds;
+        return Math.Max(bounds.Width, bounds.Height);
     }
 
     private void UploadCurrentMesh(g3.DMesh3 mesh)
@@ -232,6 +301,8 @@ public sealed class MeshViewportControl : OpenGlControlBase
 
         _renderer?.Dispose();
         _renderer = null;
+        _buildPlateRenderer?.Dispose();
+        _buildPlateRenderer = null;
         _gl = null;
     }
 

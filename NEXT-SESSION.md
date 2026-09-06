@@ -8,7 +8,8 @@ cross-platform desktop tool for repairing meshes for 3D printing (C# /
 milestone batch, §11 is a dated decision log (read the last ~15 rows — they are
 the most useful pages in the repo), and "Immediate next steps" at the end is
 the backlog. Items 1–21 and 25 are done; 22, 24, 26 and 27 are open, and 23 is
-part-done — its first slice (camera and display modes) landed 2026-09-06.
+part-done — its first two slices (camera and display modes; build plate) landed
+2026-09-06.
 
 ## How to work
 
@@ -49,9 +50,9 @@ wrong**. §11 is largely a catalogue of it. Treat a success message — includin
 your own — as a claim to check.
 
 1. Build and run `dotnet test tests/Meshwright.Tests -c Release`. Baseline is
-   **681 passing, 0 skipped**. Never accept a newly skipped test without a
+   **722 passing, 0 skipped**. Never accept a newly skipped test without a
    stated reason.
-2. The GPU suite is `tests/Meshwright.Tests.Gpu` (15 tests, ~0.5 s). **Always
+2. The GPU suite is `tests/Meshwright.Tests.Gpu` (22 tests, ~0.5 s). **Always
    run it under `timeout`** — it used to hang past ten minutes, and a hang
    orphans a test host that outlives the session. Five had accumulated on this
    machine once, one for 22 hours.
@@ -152,7 +153,7 @@ drain-hole gizmo placed every hole at a hard-coded 2 mm behind a green suite.
 
 ## State
 
-`main` is clean and pushed. **681 tests passing, 0 skipped**; GPU suite **15**
+`main` is clean and pushed. **722 tests passing, 0 skipped**; GPU suite **22**
 passing. **CI green on Linux, Windows and macOS** on the current commit.
 
 - `gh` is authenticated and git has a credential helper, so you can push. The
@@ -195,13 +196,38 @@ next slices inherit:
   unprojected ray's origin is far back. Anything reasoning about distance along
   a pick ray should not assume the origin is near the model.
 
+The **build plate slice is done** (2026-09-06, branch
+`feat/viewport-build-plate`, report in
+`reports/M4/20260906T230000Z-viewport-build-plate/report.md`): a grid on the Z=0
+plane sized to one of five printer presets in View → Build Plate
+(`Ctrl+Shift+B` hides it), and a status-bar warning naming every side the model
+overhangs and by how much, with the bed outline turning amber to match. Things
+the next slices inherit:
+
+- **The plate never scales to the model** — the bed is drawn at true size and the
+  *spacing* adapts in two tiers (major from the bed, minor from the model's
+  footprint). Anything else that has to be readable at both the 2 mm sponge and
+  the 120 mm tower should follow the same shape rather than resizing itself.
+- **The viewport now has three render passes**: build plate (depth test and
+  depth writes on, before the mesh), mesh, then gizmo (depth test off). A fourth
+  has to pick its place in that order deliberately.
+- **A dim UI element needs a contrast floor.** The minor grid shipped at a colour
+  that resolved to the background within one 8-bit step — drawn, tested, and
+  invisible. If you write a pixel test for visibility, measure *contrast*: the
+  first version counted pixels that were "not the clear colour" and passed at the
+  broken value.
+- **Avalonia's `HotKey` activation does not update a menu item's `IsChecked`.**
+  This made `Ctrl+Shift+B` a silent no-op, and had already left `Ctrl+Shift+O`
+  switching the projection while the menu kept its dot on Perspective. All View
+  menu handlers now derive their state and `RefreshViewMenuChecks` writes the
+  check marks back. Tests that raise `Click` directly cannot see this class of
+  bug — drive `KeyPressQwerty`.
+
 Remaining, in order:
 
-1. **Build plate grid with configurable printer size, and the out-of-bounds
-   warning.**
-2. **Cross-section preview slider.** (Note item 26: cutting a model to try it
+1. **Cross-section preview slider.** (Note item 26: cutting a model to try it
    will show 1,808 issues on a clean sponge, and that is not your bug.)
-3. **Import conveniences**: mm/inch unit detection and scaling, drag-and-drop,
+2. **Import conveniences**: mm/inch unit detection and scaling, drag-and-drop,
    recent files. **Recent files needs settings persistence, which does not exist
    anywhere in the codebase yet** — skipped for exactly that reason on
    2026-09-04, now a v1.0 dependency. Decided 2026-09-06: JSON in the platform
