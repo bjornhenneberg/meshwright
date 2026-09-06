@@ -67,16 +67,12 @@ Two techniques that worked when guessing did not, both worth reusing:
 
 ## State
 
-`main` is clean and pushed. **CI is green on Linux, Windows and macOS** — all
-520 tests on each, with Manifold built from source in-job on Windows/macOS.
-Verified this session: 520 passing / 0 skipped, and the **GPU suite 8 passing
-in 265 ms** with no orphaned hosts left behind. **Always run the GPU suite
+`main` is clean and pushed. **562 tests passing, 0 skipped** (baseline was 520;
++24 drain hole, +18 panel fixes), and the **GPU suite 8 passing in 474 ms**.
+Both verified by the dispatcher, not just reported. **Always run the GPU suite
 under `timeout`.**
 
-Last session ended on a **session rate limit**. Two fix agents were dispatched
-and both died at the API before touching a file — the tree was left clean, and
-the worktree one was auto-removed. Nothing is half-applied; the findings below
-are all still open.
+CI has not run since the merge — check it before building on this.
 
 - `gh` is authenticated and git has a credential helper, so you can push. The
   token has `workflow` scope.
@@ -86,72 +82,67 @@ are all still open.
 
 ## What last session did
 
-A UX pass on the real GUI (backlog item 1), the additive `docs/usage.html`
-pass (item 2), and the Meshmixer-alternative research (item 5) all ran and
-landed. The two follow-up *fix* dispatches did not.
+A UX pass on the real GUI found twelve defects; ten are now fixed, in two
+parallel dispatches, plus the additive `docs/usage.html` pass and the
+Meshmixer research. Backlog items 19, 20 and 21 are closed; §11 gained eleven
+rows. `reports/M4/20260905T221759Z-ux-audit/` has the 112 screenshots.
 
-- **`docs/usage.html`** gained six rough-edges entries and lost a stale one
-  that had gone wrong the moment M4-3 landed. Every claim was re-checked in
-  source before landing; one bullet the agent wrote was corrected because it
-  contradicted `NonManifoldDetector`, which groups edges by position.
-- **`reports/research/meshmixer-alternatives.md`** exists, with a caveat worth
-  reading: Reddit was unreachable to the agent's tooling and Autodesk's forum
-  403s, so the brief — "read a week of *Meshmixer alternative* threads" — was
-  substantially not met. ~18 pages, 8 domains, no hobbyist voices in their own
-  words. **Treat item 5 as partially done.** Its one substantive finding is
-  real and independently checked: §3 names "adding registration pins" as a
-  target-user workflow while §5.2 defers pins to v1.x, and plane-cut splitting
-  is already v1.0. Whether to promote a minimal peg-and-socket pair into §5.1
-  is a scope call for the user; proposed wording is in the report.
-- **`reports/M4/20260905T221759Z-ux-audit/`** — 112 screenshots and a report.
-  Twelve confirmed defects. Five §11 rows and backlog items 19–24 were landed
-  centrally from it.
+The one finding worth carrying forward as a lesson: **two agents hit the same
+wall independently**, one drilling a drain hole and one opening an uncapped
+cut, and that is what exposed `DMesh3.Copy` never advancing `Timestamp` —
+which silently staled `CachedIsClosed` and made *any* newly opened geometry
+invisible to hole detection across nine call sites. Neither would have found
+it alone; each would have written a local workaround. Fixed centrally in the
+vendored file, deviation recorded in `VENDOR.md`, and the drain-hole
+workaround then removed to prove the central fix carries its 64 tests.
+
+**Item 5 (Meshmixer research) is only partially done.** Reddit was unreachable
+to the agent's tooling and Autodesk's forum 403s, so "read a week of threads"
+was not met — ~18 pages, no hobbyist voices in their own words. Treat its
+conclusions as directional. See `reports/research/meshmixer-alternatives.md`.
+
+## Two decisions waiting on the user
+
+Neither is an agent's to make; both change what v1.0 contains.
+
+1. **Item 23, the Viewport / UX gap.** Build the missing block for 1.0, or
+   move it to §5.2?
+2. **Registration pins.** §3 names "adding registration pins" as a target-user
+   workflow while §5.2 defers pins to v1.x, and plane-cut splitting is already
+   v1.0. Promote a minimal peg-and-socket pair into §5.1? Proposed wording is
+   in the research report.
 
 ## Backlog
 
-Items 19–24 in §11's "Immediate next steps" are all new, all confirmed, and
-none are started. Best first:
-
-**19. Drain Holes is destructive and reports success.** The worst thing in the
-app right now — it deletes every triangle within the radius and adds nothing,
-so a Ø0.5 mm request took a whole 2 × 2 mm face and left the model open, while
-reporting the diameter it had been handed. Needs a real drilling
-implementation, not a patched message. **Opus, in a worktree.** The invariants
-that catch it: surface area removed ≈ πr², and vertex count must *increase*
-(the old code left it unchanged, proof nothing was constructed).
-
-**20 + 21. The inert-control and false-reporting cluster.** Plane Cut's "Add
-Cap" checkbox (and `PlaneCut.Cut` has no uncapped path to reach at all), the
-Transform panel printing `bounds.Extents` — half the box size — in the panel
-used for scaling to a print bed, Hollow's gizmo status lying from startup,
-Auto Repair's double-counted flip total, Decimate's unit label, stale panel
-result lines, and "Drop to Z=0" printing the other button's name. **Sonnet**;
-one agent can take the lot, but keep it out of the drain-hole files if 19 is
-running concurrently. Full detail per defect, with file and line, is in the
-audit report.
-
 **22. Decimation introduces the invalid geometry it says it declined to
-create** — 67 self-intersections from a clean mesh. Real geometry work: the
-local validity test each collapse passes has to be checked against whole-mesh
-invariants afterwards. **Opus.**
-
-**23. Most of §5.1's Viewport / UX block does not exist.** Orthographic, view
-presets, build plate grid, out-of-bounds warning, wireframe, x-ray,
-cross-section slider, unit handling, drag-and-drop, recent files — absent from
-the code, not merely unwired. This is the largest remaining v1.0 gap and it
-needs **a scope decision from the user before any dispatch**: build for 1.0,
-or move to §5.2.
+create** — 67 self-intersections from a clean mesh, while the summary claims
+further collapses would have created invalid geometry. The local validity test
+each collapse passes has to be checked against whole-mesh invariants
+afterwards. **Opus.** Best remaining item.
 
 **24. Hole filling and hole detection disagree about import seams.**
-`BoundaryHoleDetector` excludes seams by position; `HoleFillRepair` finds
-loops by vertex index and does not, so Inspect can report zero holes on a file
-whose Auto Repair run adds geometry across a seam. Small, sharp, and exactly
-the shape this project keeps getting bitten by. **Sonnet.**
+`BoundaryHoleDetector` excludes seams via `PositionTopology.SeamEdges`;
+`HoleFillRepair` finds loops with `MeshBoundaryLoops`, which is vertex-index
+based, so Inspect can report zero holes on a file whose Auto Repair adds
+geometry across a seam. Note this is a *different* bug from the `DMesh3.Copy`
+one that was just fixed, though both made openings behave oddly. **Sonnet.**
+
+**Two verification gaps left by last session's fixes**, worth closing cheaply
+before building on them:
+- The drain-hole **refusal path** (a hole too big for the surface) has two
+  tests but no on-screen evidence — synthetic clicks landed in the other
+  agent's window mid-batch.
+- **Never run two GUI-driving agents at once again.** XTest pointer events go
+  to whichever window has focus, and `pkill -f "Meshwright[.]App"` is not
+  scoped to your own process — each agent killed the other's window at least
+  once. Serialise GUI work, or give one agent the display and the other
+  headless tasks.
+
+**23** needs the scope decision above before any dispatch.
 
 **Packaging follow-ups** stay deferred: §9 still reads "Linux + Windows first;
-macOS once there is revenue", so notarisation is deferred by the spec's own
-terms. An MSI is buildable on the `windows-latest` runner but unverifiable
-from this host, and there is no tagged release yet.
+macOS once there is revenue". An MSI is buildable on the `windows-latest`
+runner but unverifiable from this host, and there is no tagged release yet.
 
 Push freely; the user has given standing authorisation. Ask before starting
 anything not on this list.
