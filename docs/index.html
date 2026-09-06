@@ -396,6 +396,46 @@
     </figure>
   </section>
 
+  <section>
+    <h2>Opening a file</h2>
+    <p class="section-lede">
+      An STL carries no units. A model drawn in inches and saved as STL loads
+      25.4&times; too small, and there is nothing in the file that says so.
+    </p>
+    <p style="color:var(--text-muted); font-size:0.9rem; margin:-12px 0 24px;">
+      Meshwright notices when a model is suspiciously small and asks. It never
+      rescales anything on its own: quietly multiplying a model by 25.4 would
+      look identical on screen and be discovered at the printer. The bar names
+      both readings and the rule behind the question, doing nothing is the
+      default, and accepting is undoable like every other change.
+    </p>
+    <figure class="shot" style="margin-top:0;">
+      <img src="images/unit-offer.png" width="1280" height="852"
+           alt="The Meshwright window with a Menger sponge loaded and a bar above the viewport reading
+                'This model is 2 mm across at its widest, under 12 mm, so it may have been exported in
+                inches. Read as inches it would be 50.8 mm.', with buttons 'Scale x25.4 to mm' and
+                'Keep as-is'. The diagnostics panel still reports bounds of 2 x 2 x 2.">
+      <figcaption>
+        The offer, with the model untouched behind it &mdash; the diagnostics
+        panel still reads <code>Bounds: 2 x 2 x 2</code>.
+      </figcaption>
+    </figure>
+    <p style="color:var(--text-muted); font-size:0.9rem;">
+      Files you have opened before are in <strong>File &rarr; Open Recent</strong>,
+      and they are still there next launch &mdash; along with your printer bed and
+      the window's size and place, kept in
+      <code>~/.config/meshwright/settings.json</code>.
+    </p>
+    <figure class="shot" style="margin-top:0;">
+      <img src="images/recent-files.png" width="660" height="230"
+           alt="The File menu open on Open Recent, listing Menger_sponge_sample.stl and
+                broken-cube.stl above a Clear Recent Files entry.">
+      <figcaption>
+        The recent-files list on a fresh launch, most recent first.
+      </figcaption>
+    </figure>
+  </section>
+
   <section id="status">
     <h2>Where it stands</h2>
     <p class="section-lede">
@@ -405,8 +445,8 @@
     </p>
     <ul class="status-list">
       <li><span class="dot dot-progress"></span><div><span class="status-label">No release yet.</span> <span class="status-desc">No tagged version and no packaged download — building from source is the only way to run it. Development happens on Linux; Windows and macOS builds pass CI but nobody has launched a packaged one.</span></div></li>
-      <li><span class="dot dot-progress"></span><div><span class="status-label">Nothing is remembered between launches.</span> <span class="status-desc">There is no settings file yet, so the build plate resets each time and the File menu has no recent-files list.</span></div></li>
-      <li><span class="dot dot-progress"></span><div><span class="status-label">Import is literal.</span> <span class="status-desc">No unit detection — a model authored in inches loads 25.4&times; undersized with no prompt — no drag-and-drop, and STL and OBJ only.</span></div></li>
+      <li><span class="dot dot-progress"></span><div><span class="status-label">Drag-and-drop does not work on Linux.</span> <span class="status-desc">Avalonia's X11 backend has no drag-and-drop support at all, so a file dropped from a file manager never reaches the window. The handling is written and should work on Windows and macOS, but nobody has launched it there. Use <code>File &rarr; Open</code>, <code>File &rarr; Open Recent</code>, or the command line.</span></div></li>
+      <li><span class="dot dot-progress"></span><div><span class="status-label">STL and OBJ only.</span> <span class="status-desc">3MF and PLY are not implemented.</span></div></li>
       <li><span class="dot dot-todo"></span><div><span class="status-label">Still to come.</span> <span class="status-desc">A capped cross-section face, a headless batch mode, and a signed release.</span></div></li>
     </ul>
     <p style="margin-top:20px; color:var(--text-muted); font-size:0.9rem;">

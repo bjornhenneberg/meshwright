@@ -37,9 +37,17 @@ right listing every problem found](docs/images/overview.png)
 - **See inside it** — a cross-section slider that opens the model along X, Y or
   Z without cutting anything, so you can check a hollow's wall thickness or find
   the shell hiding in the middle of a part.
+- **Get back to your work** — a recent-files list in the File menu, and a
+  printer bed, window size and build-plate setting that are still there next
+  launch.
 
 Every spatial parameter is set with a gizmo in the viewport, with text boxes as
 the precision fallback. Everything is undoable. STL and OBJ in and out.
+
+An STL carries no units, so a model that was drawn in inches loads 25.4x too
+small. Meshwright notices when a model is suspiciously small and **says so** —
+one line naming both readings, and a button — rather than quietly rescaling it
+behind your back.
 
 The [usage guide](https://bjornhenneberg.github.io/meshwright/usage.html) walks
 through the whole workflow with screenshots.
@@ -51,12 +59,12 @@ that runs on Linux, Windows and macOS. What is **not** there yet:
 
 - **No release.** No tagged version, no packaged download, no installer;
   building from source is the only way to run it.
-- **Nothing is remembered between launches** — there is no settings file, so the
-  build plate resets to a 220 mm bed each time and the File menu has no
-  recent-files list.
-- **Import is literal.** No unit detection (a model authored in inches loads
-  25.4x undersized with no prompt), no drag-and-drop, and only STL and OBJ —
-  3MF and PLY are not implemented.
+- **Drag-and-drop does not work on Linux.** Not for want of trying: Avalonia's
+  X11 backend has no drag-and-drop support at all, so no file dropped from a
+  file manager reaches the window. The handling is written and should work on
+  Windows and macOS, but nobody has launched it there. On Linux, use
+  `File → Open`, `File → Open Recent`, or pass the path on the command line.
+- **Only STL and OBJ.** 3MF and PLY are not implemented.
 - **The cross-section does not cap the face it opens**, so a solid part reads as
   an open shell, and it only cuts along X, Y or Z. Plane Cut gives you the real
   capped face when you want it.

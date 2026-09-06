@@ -18,9 +18,21 @@ public sealed class UndoStack
     public bool CanRedo => _redo.Count > 0;
 
     /// <summary>Records a snapshot of <paramref name="meshBeforeApply"/> and clears the redo stack.</summary>
-    public void RecordBeforeApply(DMesh3 meshBeforeApply)
+    public void RecordBeforeApply(DMesh3 meshBeforeApply) => Commit(Capture(meshBeforeApply));
+
+    /// <summary>
+    /// Copies <paramref name="mesh"/> as an apply would need to, <em>without</em> putting it in the
+    /// history. Operations mutate in place, so the copy has to be taken before the operation runs —
+    /// but whether it becomes an undo step is only known after, when the operation says whether it
+    /// changed anything. Pair with <see cref="Commit"/>; a snapshot that is never committed simply
+    /// goes away, leaving both stacks exactly as they were.
+    /// </summary>
+    public DMesh3 Capture(DMesh3 mesh) => new(mesh, bCompact: false);
+
+    /// <summary>Makes a snapshot from <see cref="Capture"/> the new undo step and clears redo.</summary>
+    public void Commit(DMesh3 snapshot)
     {
-        _undo.Push(new DMesh3(meshBeforeApply, bCompact: false));
+        _undo.Push(snapshot);
         _redo.Clear();
     }
 

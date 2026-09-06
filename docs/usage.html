@@ -248,6 +248,58 @@
       would otherwise be reported as having no problems.
     </p>
 
+    <p>
+      Files you have opened before are under <strong>File &rarr; Open Recent</strong>,
+      ten of them, most recent first. The list survives a restart, along with your
+      printer bed, whether the build plate is drawn, and the window's size and
+      position &mdash; all kept in <code>~/.config/meshwright/settings.json</code>
+      (<code>%APPDATA%\meshwright\settings.json</code> on Windows). It is plain
+      JSON and safe to edit or delete; a file Meshwright cannot read is reported on
+      the status line rather than silently replaced.
+    </p>
+    <p>
+      <strong>Dragging a file onto the window works on Windows and macOS, but not
+      on Linux.</strong> That is a gap in Avalonia's X11 backend, which has no
+      drag-and-drop support at all, rather than something Meshwright can switch
+      on; see <a href="#known">known rough edges</a>.
+    </p>
+
+    <h3>Millimetres or inches</h3>
+    <p>
+      An STL carries no units, and neither does an OBJ. A model drawn in inches
+      is saved as bare numbers, so it loads 25.4&times; too small, and nothing in
+      the file says which was meant.
+    </p>
+    <p>
+      When a model turns out to be under 12 mm across at its widest &mdash; and
+      would be a sensible size read as inches &mdash; Meshwright says so, in one
+      line above the viewport naming both readings, with a
+      <strong>Scale &times;25.4 to mm</strong> button beside it.
+      <strong>Nothing is rescaled until you press it.</strong> The guess can be
+      wrong (some parts really are 4 mm across), and a model quietly multiplied by
+      25.4 would look identical on screen &mdash; the camera frames whatever it is
+      given &mdash; and only be discovered at the printer. Accepting is an ordinary
+      undoable step, so <code>Ctrl+Z</code> puts it back.
+    </p>
+    <figure>
+      <img src="images/unit-offer.png" width="1280" height="852"
+           alt="The Meshwright window with a Menger sponge loaded and a bar above the viewport reading
+                'This model is 2 mm across at its widest, under 12 mm, so it may have been exported in
+                inches. Read as inches it would be 50.8 mm.', with buttons 'Scale x25.4 to mm' and
+                'Keep as-is'. The diagnostics panel still reports bounds of 2 x 2 x 2.">
+      <figcaption>
+        The question, with the model untouched behind it: the diagnostics panel
+        still reads <code>Bounds: 2 x 2 x 2</code>. Press
+        <strong>Keep as-is</strong> and it stays that way.
+      </figcaption>
+    </figure>
+    <p>
+      The scale is applied about the origin, not about the model's centre:
+      reinterpreting a unit changes what every number in the file meant, including
+      how far the model sits from the origin. If you never want to be asked, set
+      <code>"offerUnitScaling": false</code> in the settings file.
+    </p>
+
     <h3>Moving around the viewport</h3>
     <table class="keys">
       <tr><th>Input</th><th>Does</th></tr>
@@ -659,23 +711,21 @@
         secondary mesh cannot be positioned; Repair's parameters are scalars.
       </li>
       <li>
-        <strong>Several Import conveniences the spec describes don't exist
-        yet.</strong> There is no unit detection or mm/inch scaling on import —
-        every file is read at face value, so an STL modelled in inches loads 25.4x
-        undersized with no prompt to fix it. There is no drag-and-drop onto the
-        window, and no recent-files list in the File menu, which currently holds
-        only Open, Export and Exit. Check your model's scale after opening it, and
-        reopen files through <strong>File → Open</strong> each time.
+        <strong>Dragging a file onto the window does nothing on Linux.</strong>
+        Avalonia's X11 backend has no drag-and-drop implementation in either
+        direction &mdash; the window is never even advertised to X11 as a drop
+        target &mdash; so a file dragged from a file manager is refused before
+        Meshwright sees it. The handling is written and should work on Windows and
+        macOS, but no packaged build has been launched on either. On Linux use
+        <strong>File &rarr; Open</strong>, <strong>File &rarr; Open Recent</strong>,
+        or pass the path on the command line.
       </li>
       <li>
         <strong>The build plate is a list of five printers, not your
         printer.</strong> The bed is picked from presets in <strong>View &rarr;
-        Build Plate</strong>; there is no free-form custom size, because
-        remembering one needs a settings file that does not exist yet — the
-        same gap that leaves the File menu without a recent-files list — so a
-        bed that is not on the list has to be approximated by the nearest one.
-        The choice is forgotten on exit, too: every launch starts on the Ender 3
-        bed with the plate shown.
+        Build Plate</strong>; there is no free-form custom size yet, so a bed that
+        is not on the list has to be approximated by the nearest one. The choice
+        you make is remembered between launches.
       </li>
       <li>
         <strong>The cross-section does not cap the face it opens, and only cuts

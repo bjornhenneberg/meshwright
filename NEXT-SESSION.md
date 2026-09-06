@@ -7,12 +7,14 @@ cross-platform desktop tool for repairing meshes for 3D printing (C# /
 **Read `SPECIFICATION.md` first.** §5.1 is v1.0 scope, §7 narrates each
 milestone batch, §11 is a dated decision log (read the last ~15 rows — they are
 the most useful pages in the repo), and "Immediate next steps" at the end is
-the backlog. Items 1–21 and 25 are done; 22, 24, 26 and 27 are open, and 23 is
-part-done — its first three slices (camera and display modes; build plate;
-cross-section slider) landed 2026-09-06, and the docs for all three are written.
-**Start with item 23's last slice, the import conveniences** (mm/inch detection,
-drag-and-drop, recent files — which needs the settings file). Item 28 is new and
-came out of the cross-section slice.
+the backlog. **Item 23 is done** — all four slices of the Viewport/UX block
+landed 2026-09-06, with the docs and the site updated in the same pass. Items
+1–21, 23, 25 and 27 are done; **22, 24, 26, 28 and 29 are open**. Item 29 is new
+and came out of the import slice: drag-and-drop cannot work on Linux because
+Avalonia's X11 backend has no drag-and-drop implementation at all.
+
+**Nothing is queued.** Pick from the backlog — 24 is the smallest and sharpest,
+22 is the most real geometry, 26 is the one a user is most likely to hit.
 
 ## How to work
 
@@ -156,11 +158,11 @@ drain-hole gizmo placed every hole at a hard-coded 2 mm behind a green suite.
 
 ## State
 
-`main` carries the cross-section slice. **742 tests passing, 0 skipped**; GPU
-suite **28** passing, both re-run on the merge commit.
+`main` carries the import-conveniences slice. **809 tests passing, 0 skipped**;
+GPU suite **28** passing, both re-run on the merge commit.
 
 `README.md`, `docs/index.html` and `docs/usage.html` are current as of the
-cross-section slice. `README.md` was rewritten on 2026-09-06: it had become an
+import-conveniences slice. `README.md` was rewritten on 2026-09-06: it had become an
 index into `SPECIFICATION.md` (milestone codes as the status, "see §8" for the
 licence, `reports/M4/` for the platform split), and now answers what a stranger
 opens a repo to find out. **Keep it that way** — when you finish a slice, update
@@ -181,13 +183,13 @@ slice's own report into `docs/images/` rather than re-shot.
 
 Both scope questions were decided by the user on 2026-09-06: **build the
 Viewport/UX block for v1.0**, and **promote registration pins into v1.0**. §5.1
-and §11 are updated. Pins are **done** (item 25, see
-`reports/M4/20260906T163000Z-registration-pins/report.md` — note that report has
-no screenshots at all, which AGENTS.md says it should; if you are in the app with
-a pinned split on screen, capture one and add it); the Viewport/UX block is two
-slices in.
+and §11 are updated. Both are now **done** — pins as item 25 (see
+`reports/M4/20260906T163000Z-registration-pins/report.md`, which still has no
+screenshots at all, contrary to AGENTS.md; if you are in the app with a pinned
+split on screen, capture one and add it), and the Viewport/UX block as item 23,
+in four slices.
 
-**23. Finish §5.1's Viewport / UX block — DO THIS FIRST.** One slice per branch.
+**23. ~~Finish §5.1's Viewport / UX block~~ — done 2026-09-06**, all four slices.
 
 The **camera and display modes slice is done** (2026-09-06, branch
 `feat/viewport-camera-modes`, report in
@@ -255,15 +257,33 @@ Side. Things the next slices inherit:
   an empty viewport. Found by opening the app after the suite was green — the
   third time in three viewport slices that the defect was only visible on screen.
 
-Remaining:
+The **import conveniences slice is done** (2026-09-06, branch
+`feat/import-conveniences`, report in
+`reports/M4/20260906T2359Z-import-conveniences/report.md`), and with it item 23.
+Things the next slices inherit:
 
-1. **Import conveniences**: mm/inch unit detection and scaling, drag-and-drop,
-   recent files. **Recent files needs settings persistence, which does not exist
-   anywhere in the codebase yet** — skipped for exactly that reason on
-   2026-09-04, now a v1.0 dependency. Decided 2026-09-06: JSON in the platform
-   config directory (`~/.config/meshwright/settings.json`) via
-   `System.Text.Json`, no dependency and no database; bed size, unit preference
-   and window state will share it.
+- **`settings.json` exists.** `~/.config/meshwright/settings.json`
+  (`%APPDATA%\meshwright\` on Windows), plain `System.Text.Json`, one
+  `AppSettings` type. Anything that should outlive a session adds a property and
+  is written by whoever changes it; every property has a default and nothing in
+  `SettingsStore` throws, so a new one costs a line. **`MESHWRIGHT_SETTINGS_FILE`
+  overrides the path**, and the unit suite sets it from a module initializer —
+  without that, hundreds of tests that build a `MainWindow` would read and
+  rewrite the settings of whoever is running them.
+- **Avalonia's X11 backend has no drag-and-drop, in either direction.** Measured
+  three ways (§11) after a real GTK drag onto the running app did nothing. Any
+  future in-app drag — reordering a list, dragging a mesh onto the Boolean
+  panel's second slot — will not work on Linux either. Item 29 sketches the fix.
+- **A refusal is now free** (item 27, done). An operation returning
+  `Changed: false` costs the user nothing: no undo entry, no cleared redo, no
+  gizmo rebuild, no lost placement. New operations should refuse that way rather
+  than throwing.
+- `IDataObject` and `DragEventArgs.Data` are **obsolete** in Avalonia 11.3.20 —
+  use `IDataTransfer`/`DataTransferItem`. `IStorageFile` cannot be implemented
+  by application code, so a test that needs one reaches Avalonia's internal
+  `BclStorageFile` by reflection.
+- **The drain-hole refusal path now has on-screen evidence** (the standing
+  verification gap, closed): see the report's §5.
 
 **22. Decimation introduces the invalid geometry it says it declined to
 create.** Reducing the clean Menger sponge to 734 triangles produced 67
@@ -286,14 +306,15 @@ each half measured on its own is closed, single-shell and issue-free. Either
 separate the halves or make a split produce two documents. Found while
 verifying pins (2026-09-06); not caused by them.
 
-**27. A refused operation still counts as a change.** `MeshDocument.ApplyAsync`
-calls `RefreshReport` unconditionally, so an operation returning
-`Changed: false` still pushes an undo entry and makes MainWindow rebuild every
-gizmo — a user whose pin will not fit loses the pin they had positioned.
+**29. Drag-and-drop cannot work on Linux.** Avalonia's X11 backend has no
+drag-and-drop implementation, so a file dropped from a file manager never
+reaches the window — the window is not even advertised to X11 as a drop target.
+The handling is written and is correct for Windows and macOS. A Linux fix means
+our own XDND receiver (an `InputOnly` child window carrying `XdndAware`, on our
+own display connection, handling `XdndEnter`/`Position`/`Drop` and
+`XConvertSelection` for `text/uri-list`) — platform work with real risk to the
+viewport's input path, so its own slice. Watch upstream first.
 
-**A verification gap left behind** (still open): the drain-hole **refusal path** (a hole too
-big for the surface) has two tests but no on-screen evidence. Cheap to close
-next time the app is open.
 
 **An unexplained flake**: one full unit run during the camera slice reported a
 single failure and the name was lost to a grep filter; five consecutive clean

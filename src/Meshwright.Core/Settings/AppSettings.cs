@@ -131,6 +131,7 @@ public sealed record WindowPlacement(
     /// no record. The bounds are deliberately loose: this is a sanity floor, not a claim about
     /// which monitors exist.
     /// </summary>
+    [JsonIgnore]
     public bool IsUsable =>
         Width >= 640 && Height >= 480 &&
         Width <= 20000 && Height <= 20000 &&
