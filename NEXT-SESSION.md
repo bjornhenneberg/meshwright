@@ -9,7 +9,8 @@ milestone batch, §11 is a dated decision log (read the last ~15 rows — they a
 the most useful pages in the repo), and "Immediate next steps" at the end is
 the backlog. Items 1–21 and 25 are done; 22, 24, 26 and 27 are open, and 23 is
 part-done — its first two slices (camera and display modes; build plate) landed
-2026-09-06.
+2026-09-06, and the docs for both are written. **Start with item 23's next
+slice, the cross-section preview slider.**
 
 ## How to work
 
@@ -153,8 +154,20 @@ drain-hole gizmo placed every hole at a hard-coded 2 mm behind a green suite.
 
 ## State
 
-`main` is clean and pushed. **722 tests passing, 0 skipped**; GPU suite **22**
-passing. **CI green on Linux, Windows and macOS** on the current commit.
+`main` is clean and pushed, at `13c03a2`. **722 tests passing, 0 skipped**; GPU
+suite **22** passing. **CI green on Linux, Windows and macOS** on the current
+commit, and Pages has deployed it.
+
+The last session touched **documentation only** — no source file changed, so
+those test numbers are inherited from the build plate slice rather than re-run.
+`docs/usage.html` now covers the build plate and registration pins, and
+`README.md` was rewritten: it had become an index into `SPECIFICATION.md`
+(milestone codes as the status, "see §8" for the licence, `reports/M4/` for the
+platform split), and now answers what a stranger opens a repo to find out. **Keep
+it that way** — when you finish a slice, update the README and the site in the
+same language a user would use, and mention the spec only under Contributing.
+Two build-plate screenshots were copied from the slice's report into
+`docs/images/`; do the same rather than re-shooting the app for the site.
 
 - `gh` is authenticated and git has a credential helper, so you can push. The
   token has `workflow` scope for `.github/workflows/` changes.
@@ -170,8 +183,10 @@ passing. **CI green on Linux, Windows and macOS** on the current commit.
 Both scope questions were decided by the user on 2026-09-06: **build the
 Viewport/UX block for v1.0**, and **promote registration pins into v1.0**. §5.1
 and §11 are updated. Pins are **done** (item 25, see
-`reports/M4/20260906T163000Z-registration-pins/report.md`); the Viewport/UX
-block is not started.
+`reports/M4/20260906T163000Z-registration-pins/report.md` — note that report has
+no screenshots at all, which AGENTS.md says it should; if you are in the app with
+a pinned split on screen, capture one and add it); the Viewport/UX block is two
+slices in.
 
 **23. Finish §5.1's Viewport / UX block — DO THIS FIRST.** One slice per branch.
 
