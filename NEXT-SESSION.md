@@ -152,8 +152,19 @@ Both scope questions were decided by the user on 2026-09-06: **build the
 Viewport/UX block for v1.0**, and **promote registration pins into v1.0**. §5.1
 and §11 are updated. Neither is started.
 
-**23. Build §5.1's Viewport / UX block.** The largest remaining v1.0 gap and a
-multi-batch job. Nothing of it exists in the code — orthographic projection,
+**25. Registration pins on cut faces — DO THIS FIRST.** A peg-and-socket pair
+on a plane cut's mating faces: one shape, configurable diameter and clearance.
+It jumps ahead of item 23 by decision (§11, 2026-09-06): it is the only feature
+in the research pass backed by a user describing the exact workflow unprompted,
+and it is self-contained geometry work on a plane cut that already exists.
+**Generate the geometry directly, not by handing two meshes to a boolean** —
+the complaint that motivated the promotion was a 20-minute boolean union on a
+hollow cube, so a slow implementation misses the point of the feature. Per the
+gizmo-first direction, pin placement wants a viewport interaction, not a
+textbox.
+
+**23. Build §5.1's Viewport / UX block**, after pins. The largest remaining
+v1.0 gap and a multi-batch job. Nothing of it exists in the code — orthographic projection,
 standard view presets, the build plate grid with configurable printer size and
 its out-of-bounds warning, wireframe and x-ray display modes, the cross-section
 preview slider, mm/inch unit handling, drag-and-drop, recent files. Suggested
@@ -162,14 +173,10 @@ in the app), then the build plate and out-of-bounds warning, then the
 cross-section slider, then the import conveniences. **Recent files needs
 settings persistence, which does not exist anywhere in the codebase yet** — it
 was skipped for exactly that reason on 2026-09-04, and is now a v1.0
-dependency. Do one slice per branch.
-
-**25. Registration pins on cut faces.** A peg-and-socket pair on a plane cut's
-mating faces: one shape, configurable diameter and clearance. **Generate the
-geometry directly, not by handing two meshes to a boolean** — the user
-complaint that motivated the promotion was a 20-minute boolean union on a
-hollow cube, so a slow implementation misses the point. Per the gizmo-first
-direction, pin placement wants a viewport interaction, not a textbox.
+dependency. Decided 2026-09-06: JSON in the platform config directory
+(`~/.config/meshwright/settings.json`) via `System.Text.Json`, no dependency
+and no database; bed size, unit preference and window state will share it. Do
+one slice per branch.
 
 **22. Decimation introduces the invalid geometry it says it declined to
 create.** Reducing the clean Menger sponge to 734 triangles produced 67
@@ -208,12 +215,20 @@ abandoned Meshmixer from a Wayback Machine snapshot and thanking each other for
 the link, years on, despite a publicised security flaw. Windows has 3D Builder
 absorbing the simple cases; macOS has nothing.
 
-## Waiting on the user
+## Settled, so you don't reopen them
 
-One open question, raised by the Reddit research rather than by the code:
-**does §9's "macOS once there is revenue" still hold?** See above. Don't act on
-it unilaterally — it changes release scope and costs money (notarisation is
-~$99/year).
+All decided by the user on 2026-09-06 (§11 carries the reasoning):
+
+- **macOS signing/notarisation stays deferred**, but the trigger is now the
+  first tagged release rather than "once there is revenue". The Reddit evidence
+  argues the other way; this is a deliberate not-yet. Keep shipping unsigned
+  `.app` zips with the Gatekeeper workaround documented.
+- **Settings are JSON in the platform config directory.** Not a database, not a
+  settings library.
+- **Pins before the viewport block**, and the viewport block starts with the
+  camera and display modes.
+
+Nothing is currently waiting on the user.
 
 Push freely; the user has given standing authorisation. Ask before starting
 anything not on this list.
