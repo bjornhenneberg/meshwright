@@ -16,7 +16,9 @@ using Meshwright.Core.Operations;
 using Meshwright.Geometry.Diagnostics;
 using Meshwright.IO;
 using Meshwright.IO.Stl;
+using Meshwright.Rendering.Camera;
 using Meshwright.Rendering.Gizmos;
+using Meshwright.Rendering.GL;
 
 namespace Meshwright.App;
 
@@ -284,6 +286,43 @@ public partial class MainWindow : Window
     }
 
     private void OnResetViewClick(object? sender, RoutedEventArgs e) => Viewport.FrameMesh();
+
+    /// <summary>
+    /// View menu -> Front/Back/Left/Right/Top/Bottom/Isometric. The <c>Tag</c> carries the
+    /// <see cref="StandardView"/> name, so adding a preset is one XAML line and cannot drift from
+    /// a parallel switch statement here.
+    /// </summary>
+    private void OnStandardViewClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is MenuItem { Tag: string tag } && Enum.TryParse(tag, out StandardView view))
+        {
+            Viewport.SetStandardView(view);
+            StatusText.Text = $"{view} view";
+        }
+    }
+
+    private void OnProjectionModeClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is MenuItem { Tag: string tag } && Enum.TryParse(tag, out ProjectionMode mode))
+        {
+            Viewport.ProjectionMode = mode;
+            StatusText.Text = mode == ProjectionMode.Orthographic ? "Orthographic projection" : "Perspective projection";
+        }
+    }
+
+    private void OnDisplayModeClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is MenuItem { Tag: string tag } && Enum.TryParse(tag, out MeshDisplayMode mode))
+        {
+            Viewport.DisplayMode = mode;
+            StatusText.Text = mode switch
+            {
+                MeshDisplayMode.Wireframe => "Wireframe display",
+                MeshDisplayMode.XRay => "X-ray display",
+                _ => "Shaded display",
+            };
+        }
+    }
 
     private async void OnExportFileClick(object? sender, RoutedEventArgs e)
     {

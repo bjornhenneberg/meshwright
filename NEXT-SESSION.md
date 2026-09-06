@@ -7,7 +7,8 @@ cross-platform desktop tool for repairing meshes for 3D printing (C# /
 **Read `SPECIFICATION.md` first.** §5.1 is v1.0 scope, §7 narrates each
 milestone batch, §11 is a dated decision log (read the last ~15 rows — they are
 the most useful pages in the repo), and "Immediate next steps" at the end is
-the backlog. Items 1–21 and 25 are done; 22, 23, 24, 26 and 27 are open.
+the backlog. Items 1–21 and 25 are done; 22, 24, 26 and 27 are open, and 23 is
+part-done — its first slice (camera and display modes) landed 2026-09-06.
 
 ## How to work
 
@@ -48,9 +49,9 @@ wrong**. §11 is largely a catalogue of it. Treat a success message — includin
 your own — as a claim to check.
 
 1. Build and run `dotnet test tests/Meshwright.Tests -c Release`. Baseline is
-   **581 passing, 0 skipped**. Never accept a newly skipped test without a
+   **681 passing, 0 skipped**. Never accept a newly skipped test without a
    stated reason.
-2. The GPU suite is `tests/Meshwright.Tests.Gpu` (8 tests, ~0.5 s). **Always
+2. The GPU suite is `tests/Meshwright.Tests.Gpu` (15 tests, ~0.5 s). **Always
    run it under `timeout`** — it used to hang past ten minutes, and a hang
    orphans a test host that outlives the session. Five had accumulated on this
    machine once, one for 22 hours.
@@ -142,7 +143,7 @@ drain-hole gizmo placed every hole at a hard-coded 2 mm behind a green suite.
 
 ## State
 
-`main` is clean and pushed. **581 tests passing, 0 skipped**; GPU suite 8
+`main` is clean and pushed. **681 tests passing, 0 skipped**; GPU suite **15**
 passing. **CI green on Linux, Windows and macOS** on the current commit.
 
 - `gh` is authenticated and git has a credential helper, so you can push. The
@@ -162,20 +163,42 @@ and §11 are updated. Pins are **done** (item 25, see
 `reports/M4/20260906T163000Z-registration-pins/report.md`); the Viewport/UX
 block is not started.
 
-**23. Build §5.1's Viewport / UX block — DO THIS FIRST.** The largest remaining
-v1.0 gap and a multi-batch job. Nothing of it exists in the code — orthographic projection,
-standard view presets, the build plate grid with configurable printer size and
-its out-of-bounds warning, wireframe and x-ray display modes, the cross-section
-preview slider, mm/inch unit handling, drag-and-drop, recent files. Suggested
-order: the camera and display modes first (one subsystem, immediately visible
-in the app), then the build plate and out-of-bounds warning, then the
-cross-section slider, then the import conveniences. **Recent files needs
-settings persistence, which does not exist anywhere in the codebase yet** — it
-was skipped for exactly that reason on 2026-09-04, and is now a v1.0
-dependency. Decided 2026-09-06: JSON in the platform config directory
-(`~/.config/meshwright/settings.json`) via `System.Text.Json`, no dependency
-and no database; bed size, unit preference and window state will share it. Do
-one slice per branch.
+**23. Finish §5.1's Viewport / UX block — DO THIS FIRST.** One slice per branch.
+
+The **camera and display modes slice is done** (2026-09-06, branch
+`feat/viewport-camera-modes`, report in
+`reports/M4/20260906T210000Z-viewport-camera-modes/report.md`): orthographic
+projection, seven view presets on `Ctrl+1`–`Ctrl+7`, wireframe and x-ray, all in
+the View menu and all verified in the running app. Three things from it that the
+next slices inherit:
+
+- The light is now a **headlight** derived from the view matrix. It was fixed in
+  world space, and the moment presets existed, Front/Left/Bottom rendered the
+  model as a black silhouette. If you add geometry with its own shader (a build
+  plate grid, say), decide deliberately how it is lit rather than copying the
+  old constant.
+- `OrbitCamera.ProjectionMode` changes the matrix that `GizmoScale`,
+  `ViewportRaycaster` and every gizmo's pick path resolve against. The
+  orthographic pick contract is covered by
+  `tests/Meshwright.Tests/Camera/OrthographicPickingTests.cs` — extend it rather
+  than assuming a new interaction carries over.
+- The orthographic near plane is **behind the eye** (`-FarPlane`), so an
+  unprojected ray's origin is far back. Anything reasoning about distance along
+  a pick ray should not assume the origin is near the model.
+
+Remaining, in order:
+
+1. **Build plate grid with configurable printer size, and the out-of-bounds
+   warning.**
+2. **Cross-section preview slider.** (Note item 26: cutting a model to try it
+   will show 1,808 issues on a clean sponge, and that is not your bug.)
+3. **Import conveniences**: mm/inch unit detection and scaling, drag-and-drop,
+   recent files. **Recent files needs settings persistence, which does not exist
+   anywhere in the codebase yet** — skipped for exactly that reason on
+   2026-09-04, now a v1.0 dependency. Decided 2026-09-06: JSON in the platform
+   config directory (`~/.config/meshwright/settings.json`) via
+   `System.Text.Json`, no dependency and no database; bed size, unit preference
+   and window state will share it.
 
 **22. Decimation introduces the invalid geometry it says it declined to
 create.** Reducing the clean Menger sponge to 734 triangles produced 67
@@ -206,6 +229,11 @@ gizmo — a user whose pin will not fit loses the pin they had positioned.
 **A verification gap left behind**: the drain-hole **refusal path** (a hole too
 big for the surface) has two tests but no on-screen evidence. Cheap to close
 next time the app is open.
+
+**An unexplained flake**: one full unit run during the camera slice reported a
+single failure and the name was lost to a grep filter; five consecutive clean
+runs since, and no reproduction. If you see it, capture the whole output rather
+than grepping it away as I did.
 
 ## Researching on the web
 

@@ -31,6 +31,7 @@ public sealed class MeshViewportControl : OpenGlControlBase
     private g3.DMesh3? _mesh;
     private MeshDiagnosticsReport? _report;
     private bool _highlightsDirty;
+    private MeshDisplayMode _displayMode = MeshDisplayMode.Shaded;
 
     private bool _isOrbiting;
     private bool _isPanning;
@@ -41,6 +42,35 @@ public sealed class MeshViewportControl : OpenGlControlBase
     /// <summary>The camera driving this viewport, exposed for testing (asserting on Reset View's
     /// effect requires reading actual camera pose, not just observing that FrameMesh ran).</summary>
     public OrbitCamera Camera => _camera;
+
+    /// <summary>
+    /// Perspective or orthographic projection. Stored on the camera, which both the render path
+    /// and the pick path read, so a click lands where it looks in either mode.
+    /// </summary>
+    public ProjectionMode ProjectionMode
+    {
+        get => _camera.ProjectionMode;
+        set
+        {
+            _camera.ProjectionMode = value;
+            RequestNextFrameRendering();
+        }
+    }
+
+    /// <summary>
+    /// Shaded, wireframe or x-ray. Held here rather than only on <see cref="MeshRenderer"/>
+    /// because the renderer does not exist until the GL context is initialised, and the menu can
+    /// be used before the first frame; the value is pushed to the renderer on every render.
+    /// </summary>
+    public MeshDisplayMode DisplayMode
+    {
+        get => _displayMode;
+        set
+        {
+            _displayMode = value;
+            RequestNextFrameRendering();
+        }
+    }
 
     public g3.DMesh3? Mesh
     {
@@ -61,6 +91,13 @@ public sealed class MeshViewportControl : OpenGlControlBase
     /// <summary>Frames the camera on the current mesh, so it fills the viewport at a default
     /// orientation. Used when a file is opened and by Reset View, which is the way back when an
     /// orbit or zoom has taken the mesh off screen.</summary>
+    /// <summary>Points the camera at a <see cref="StandardView"/>, keeping the current framing.</summary>
+    public void SetStandardView(StandardView view)
+    {
+        _camera.SetStandardView(view);
+        RequestNextFrameRendering();
+    }
+
     public void FrameMesh()
     {
         if (_mesh is null)
@@ -154,6 +191,7 @@ public sealed class MeshViewportControl : OpenGlControlBase
         float aspect = pixelHeight == 0 ? 1f : (float)pixelWidth / pixelHeight;
         var view = _camera.GetViewMatrix();
         var projection = _camera.GetProjectionMatrix(aspect);
+        _renderer.DisplayMode = _displayMode;
         _renderer.Render(view, projection, System.Numerics.Matrix4x4.Identity);
 
         // Render active gizmo (if any) on top of the mesh — literally on top, with the depth test
