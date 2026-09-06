@@ -195,6 +195,7 @@
     .feature-grid { grid-template-columns: 1fr; }
     h1 { font-size: 2rem; }
   }
+  .feature.wide { grid-column: 1 / -1; }
   .feature {
     background: var(--bg-raised);
     border: 1px solid var(--border);
@@ -361,13 +362,26 @@
       </div>
       <div class="feature">
         <h3>Edit</h3>
-        <p>Plane cut, boolean union/difference/intersection, transforms, hollowing to a wall thickness, and drain-hole placement — spatial parameters set with a 3D gizmo in the viewport rather than typed as coordinates.</p>
+        <p>Plane cut with generated registration pins so a split model reassembles aligned, boolean union/difference/intersection, transforms, hollowing to a wall thickness, and drain-hole placement — spatial parameters set with a 3D gizmo in the viewport rather than typed as coordinates.</p>
       </div>
       <div class="feature">
         <h3>Simplify</h3>
         <p>Quadric edge-collapse decimation targeting a triangle count or percentage, with a live before/after count.</p>
       </div>
+      <div class="feature wide">
+        <h3>See it the way you print it</h3>
+        <p>A build plate sized to your printer, with the status bar naming any side the model overhangs and by how much. Orthographic or perspective projection, seven view presets on <code>Ctrl+1</code>–<code>Ctrl+7</code>, and wireframe and x-ray display modes for looking at tessellation and at what is inside the model.</p>
+      </div>
     </div>
+    <figure class="shot">
+      <img src="images/build-plate.png" width="1740" height="1032"
+           alt="An Eiffel Tower model standing on a 220 x 220 mm build plate grid in the Meshwright
+                viewport, seen from an isometric angle.">
+      <figcaption>
+        The same model on a 220 mm Ender 3 bed. The grid is drawn at the printer's
+        true size and never scales to the model, so it stays a measuring stick.
+      </figcaption>
+    </figure>
   </section>
 
   <section id="status">
@@ -382,7 +396,7 @@
       <li><span class="dot dot-done"></span><div><span class="status-label">M1 — Inspect.</span> <span class="status-desc">All v1.0 defect detectors, diagnostics UI, GPU-verified error highlighting.</span></div></li>
       <li><span class="dot dot-done"></span><div><span class="status-label">M2 — Repair.</span> <span class="status-desc">Undo stack, all repair operations, Auto Repair pipeline, STL/OBJ export.</span></div></li>
       <li><span class="dot dot-done"></span><div><span class="status-label">M3 — Edit.</span> <span class="status-desc">Plane cut, booleans (via Manifold), transforms, hollow, drain holes, decimation.</span></div></li>
-      <li><span class="dot dot-progress"></span><div><span class="status-label">M4 — Polish and release.</span> <span class="status-desc">Gizmo-first UI wiring, a real-world test corpus, Linux CI + packaging done; Windows/macOS packaging and a public 1.0 release are still ahead. The <a href="usage.html#known">usage guide</a> lists what is still rough.</span></div></li>
+      <li><span class="dot dot-progress"></span><div><span class="status-label">M4 — Polish and release.</span> <span class="status-desc">Gizmo-first UI wiring, registration pins, a real-world test corpus, and CI on all three platforms are done; the viewport work is most of the way through (camera and display modes, build plate — the cross-section slider is left), and a public 1.0 release is still ahead. The <a href="usage.html#known">usage guide</a> lists what is still rough.</span></div></li>
     </ul>
   </section>
 

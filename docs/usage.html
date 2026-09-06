@@ -258,6 +258,7 @@
       <tr><td><code>Ctrl+1</code> &hellip; <code>Ctrl+7</code></td><td>Front, back, left, right, top, bottom, isometric view</td></tr>
       <tr><td><code>Ctrl+Shift+P</code> / <code>Ctrl+Shift+O</code></td><td>Perspective / orthographic projection</td></tr>
       <tr><td><code>Ctrl+Shift+S</code> / <code>Ctrl+Shift+W</code> / <code>Ctrl+Shift+X</code></td><td>Shaded / wireframe / x-ray display</td></tr>
+      <tr><td><code>Ctrl+Shift+B</code></td><td>Show or hide the build plate</td></tr>
       <tr><td><code>Ctrl+Z</code> / <code>Ctrl+Y</code></td><td>Undo / redo the last operation</td></tr>
     </table>
     <p>
@@ -278,6 +279,51 @@
       part's far wall, or a stray floating fragment inside the model becomes
       visible. The red/yellow error highlight stays on in every display mode.
     </p>
+
+    <h3>The build plate</h3>
+    <p>
+      The model stands on a grid at Z=0 sized to a real printer bed, so scale is
+      something you can see rather than something you infer from the bounds
+      readout. Pick the bed under <strong>View &rarr; Build Plate</strong>: Prusa
+      MINI, Ender 3 (the default), Prusa MK4, Bambu X1C, or a 350&nbsp;mm
+      large-format. The bed is centred on the origin in X and Y and rises from
+      Z=0, which is the same Z=0 that <strong>Align to Bed</strong> drops a model
+      onto.
+    </p>
+
+    <figure>
+      <img src="images/build-plate.png" width="1740" height="1032"
+           alt="An Eiffel Tower model standing on a 220 x 220 mm build plate grid in the Meshwright
+                viewport, seen from an isometric angle.">
+      <figcaption>
+        A 54.7 &times; 54.7 &times; 120.9&nbsp;mm model on the default 220&nbsp;mm
+        Ender 3 bed. The grid is drawn at the bed's true size and never scales to
+        the model, so it stays a measuring stick; the bed outline is drawn
+        brighter than the grid lines.
+      </figcaption>
+    </figure>
+
+    <p>
+      When any part of the model falls outside that volume, the bed outline turns
+      amber and the status bar names each side it overhangs and by how much. When
+      the model fits, it says nothing at all &mdash; a warning that is always on
+      is worth as little as one that never fires. Note that a model modelled about
+      the origin often loads <em>below</em> the bed and is flagged for it; that is
+      what <strong>Transform &rarr; Align to Bed</strong> is for.
+    </p>
+
+    <figure>
+      <img src="images/build-plate-warning.png" width="1740" height="1032"
+           alt="Top view of a model whose footprint straddles the right-hand edge of the build
+                plate, the bed outline drawn in amber and the status bar reading &quot;Outside the
+                build volume: 17.33 mm past the right edge.&quot;">
+      <figcaption>
+        The same model moved 100&nbsp;mm in X, seen from the top in orthographic:
+        the outline turns amber and the status bar quantifies the overhang &mdash;
+        <em>17.33&nbsp;mm past the right edge</em> &mdash; rather than just
+        reporting that something is wrong.
+      </figcaption>
+    </figure>
   </section>
 
   <section id="inspect">
@@ -417,9 +463,41 @@
       </figcaption>
     </figure>
 
+    <h3>Registration pins</h3>
+    <p>
+      Cutting a model in half to fit the printer leaves you gluing two flat faces
+      together by eye. Tick <strong>Registration Pin</strong> in the Plane Cut
+      panel and a peg-and-socket pair is generated on the mating faces instead:
+      the positive half grows a peg out of its cap, the negative half gets the
+      matching bore. The halves then locate themselves when you put them back
+      together. It applies to <strong>Split</strong> with a cap &mdash; the other
+      modes have no mating face &mdash; and it is generated geometry, not a
+      boolean, so a pinned cut costs milliseconds more than an unpinned one even
+      on a six-figure triangle count.
+    </p>
+    <ul>
+      <li><strong>Diameter</strong> (default 4&nbsp;mm) is the peg's printed size.</li>
+      <li><strong>Clearance</strong> (default 0.2&nbsp;mm) is added to the socket alone, radially and in depth, so the peg prints at the diameter you asked for and the hole is the one that grows. The faces meet flush rather than the peg bottoming out.</li>
+      <li><strong>Depth</strong> defaults to one diameter if you leave it blank.</li>
+    </ul>
+    <p>
+      Position is automatic by default, at the widest part of the cut face
+      &mdash; the point furthest from any edge of the cross-section, which is not
+      the same as its centre on a cut that comes out as many disjoint islands.
+      Press <strong>Place Pin Via Gizmo</strong> and click on the cut plane in the
+      viewport to put it somewhere specific.
+    </p>
+    <p>
+      If the pin will not fit &mdash; the cross-section is too thin, or the socket
+      would bore out through the model's own wall &mdash; the cut is
+      <em>refused</em> with the mesh untouched, and the message names the largest
+      diameter that would fit. Nothing is half-applied.
+    </p>
+
+
     <h3>Transform, Hollow, Drain Holes, Boolean</h3>
     <ul>
-      <li><strong>Transform</strong> — move, rotate, scale and mirror, with a viewport gizmo, plus an <strong>Align to Bed</strong> button that drops the model onto Z=0.</li>
+      <li><strong>Transform</strong> — move, rotate, scale and mirror, with a viewport gizmo, plus <strong>Align to Bed</strong> and <strong>Drop to Z=0</strong> buttons that put the model's lowest point on the build plate. The two do the same thing today: neither rotates a face flat-down first, so a model that arrives tilted lands on the bed still tilted.</li>
       <li><strong>Hollow</strong> — shells the model out to a given wall thickness in millimetres, to save material. Wall thickness can be set by dragging a handle in the viewport or typed numerically.</li>
       <li><strong>Drain Holes</strong> — places holes so resin or powder can escape from a hollowed model. Click the model in the viewport to position one, set the diameter and any countersink, then Apply. The opening is cut to the diameter you asked for and measured back off the mesh, so the reported figure can disagree with the request; a hole too big for the surface under it is refused outright and names the largest that fits.</li>
       <li><strong>Boolean</strong> — union, difference and intersection against a second mesh you load from disk with the panel's own <strong>Load Secondary Mesh…</strong> button. The operation buttons stay disabled, with a status line explaining why, until a secondary mesh is loaded.</li>
@@ -515,9 +593,9 @@
       </li>
       <li>
         <strong>Not every spatial parameter has a gizmo yet.</strong> Plane cut,
-        transform, drain-hole placement and hollow wall thickness have gizmos.
-        Decimate has no spatial parameter; Boolean's secondary mesh cannot be
-        positioned; Repair's parameters are scalars.
+        registration-pin placement, transform, drain-hole placement and hollow
+        wall thickness have gizmos. Decimate has no spatial parameter; Boolean's
+        secondary mesh cannot be positioned; Repair's parameters are scalars.
       </li>
       <li>
         <strong>Several Import conveniences the spec describes don't exist
@@ -529,12 +607,16 @@
         reopen files through <strong>File → Open</strong> each time.
       </li>
       <li>
-        <strong>The viewport has no build plate.</strong> There is no build-plate
-        grid, no configurable printer size, and therefore no warning when part of
-        a model falls outside your printer's bed. There is no cross-section
-        preview slider either. Judge scale and fit against your own printer's
-        dimensions before slicing. The camera and display modes the feature list
-        promises <em>do</em> exist as of this version — see below.
+        <strong>The build plate is a list of five printers, not your
+        printer.</strong> The bed is picked from presets in <strong>View &rarr;
+        Build Plate</strong>; there is no free-form custom size, because
+        remembering one needs a settings file that does not exist yet — the
+        same gap that leaves the File menu without a recent-files list — so a
+        bed that is not on the list has to be approximated by the nearest one.
+        The choice is forgotten on exit, too: every launch starts on the Ender 3
+        bed with the plate shown. There is no cross-section
+        preview slider either — that is the remaining piece of the viewport
+        work.
       </li>
       <li>
         <strong>OBJ import does not weld coincident vertices, and nothing tells
