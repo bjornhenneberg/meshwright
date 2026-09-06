@@ -60,9 +60,12 @@ public class ViewportHarnessTests
             // 0.05 px at the loose end and 0.22 px at the tight end, and on 2026-09-06 the tight
             // end failed on macOS at 0.00056 against a 0.0005 limit - float rounding differing
             // between architectures on a bound that had been within 1% of failing on Linux too.
-            float worldPerPixel = GizmoScale.WorldPerViewportHeight(world, harness.View, harness.Projection) / harness.PixelSize.Y;
+            // The pixels are *logical* ones: a click is aimed in logical pixels, and the same
+            // world-space rounding error counts double when RenderScaling is 2, which is a
+            // property of the display and not of the unprojection under test.
+            float worldPerPixel = GizmoScale.WorldPerViewportHeight(world, harness.View, harness.Projection) / harness.LogicalSize.Y;
             Assert.True(perpendicular < worldPerPixel * 0.5f,
-                $"Ray through the projected pixel missed its own world point by {perpendicular / worldPerPixel} px "
+                $"Ray through the projected pixel missed its own world point by {perpendicular / worldPerPixel} logical px "
                 + $"(radius={radius}, scaling={scaling})");
         }
     }

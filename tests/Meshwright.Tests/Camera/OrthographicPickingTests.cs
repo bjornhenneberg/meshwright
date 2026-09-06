@@ -63,13 +63,13 @@ public class OrthographicPickingTests
                 float along = Vector3.Dot(world - ray.Origin, ray.Direction);
                 float missDistance = Vector3.Distance(ray.PointAt(along), world);
 
-                // Measured in pixels, for the reason given in ViewportHarnessTests: picking cares
+                // Measured in logical pixels, for the reason given in ViewportHarnessTests: picking cares
                 // how far off the click lands on screen, and a bound tied to the model radius is
                 // arbitrarily tighter on small models - which is how the perspective version of
                 // this assertion came to fail on macOS float rounding alone.
-                float worldPerPixel = GizmoScale.WorldPerViewportHeight(world, harness.View, harness.Projection) / harness.PixelSize.Y;
+                float worldPerPixel = GizmoScale.WorldPerViewportHeight(world, harness.View, harness.Projection) / harness.LogicalSize.Y;
                 Assert.True(missDistance < worldPerPixel * 0.5f,
-                    $"Orthographic ray through pixel {pixel} missed {world} by {missDistance / worldPerPixel} px "
+                    $"Orthographic ray through pixel {pixel} missed {world} by {missDistance / worldPerPixel} logical px "
                     + $"(radius={radius}, scaling={scaling}).");
             }
         }
