@@ -7,7 +7,7 @@ cross-platform desktop tool for repairing meshes for 3D printing (C# /
 **Read `SPECIFICATION.md` first.** §5.1 is v1.0 scope, §7 narrates each
 milestone batch, §11 is a dated decision log (read the last ~15 rows — they are
 the most useful pages in the repo), and "Immediate next steps" at the end is
-the backlog. Items 1–21 are done; 22, 23 and 24 are open.
+the backlog. Items 1–21 and 25 are done; 22, 23, 24, 26 and 27 are open.
 
 ## How to work
 
@@ -48,7 +48,7 @@ wrong**. §11 is largely a catalogue of it. Treat a success message — includin
 your own — as a claim to check.
 
 1. Build and run `dotnet test tests/Meshwright.Tests -c Release`. Baseline is
-   **562 passing, 0 skipped**. Never accept a newly skipped test without a
+   **581 passing, 0 skipped**. Never accept a newly skipped test without a
    stated reason.
 2. The GPU suite is `tests/Meshwright.Tests.Gpu` (8 tests, ~0.5 s). **Always
    run it under `timeout`** — it used to hang past ten minutes, and a hang
@@ -89,7 +89,11 @@ batches short.
   a `nohup ... &` inside a foreground Bash call dies with the shell:
   `DISPLAY=:0 dotnet run --project src/Meshwright.App -c Release --no-build -- model.stl`
 - **`pkill -f "Meshwright.App"` kills the calling shell too**, because the
-  shell's own command line contains the pattern. Use `pkill -f "Meshwright[.]App"`.
+  shell's own command line contains the pattern. `pkill -f "Meshwright[.]App"`
+  is only half the fix — it still matches if the *same command* also mentions a
+  real path like `src/Meshwright.App` (chaining a build after the pkill kills
+  the shell before the build runs). Put the pkill in a command of its own and
+  break the pattern too: `pkill -f 'Meshwr[i]ght\.App'`.
 - Available: `gnome-screenshot`, `wmctrl`, `xwd`, Python + PIL. No `xdotool`,
   no ImageMagick, no `xvfb-run`.
 - Synthetic input: ctypes against `libXtst.so.6` — `XTestFakeMotionEvent` lives
@@ -121,9 +125,13 @@ Meshes to drive it with:
 on everything if possible, no one will use a textbox control."* For any spatial
 parameter the viewport gizmo is the primary interaction and textboxes are a
 precision fallback; once a gizmo has been touched, its values win outright on
-Apply. Plane Cut, Transform, Drain Hole and Hollow all have gizmos. Boolean is
-the notable gap — its secondary mesh is used at its own file coordinates with
-no way to reposition it.
+Apply. Plane Cut, Transform, Drain Hole and Hollow all have gizmos, and the plane cut
+gizmo also carries the registration pin. Boolean is the notable gap — its
+secondary mesh is used at its own file coordinates with no way to reposition it.
+
+Gizmos are now rendered with the depth test **disabled**. It was enabled, so any
+gizmo inside the solid — which the plane cut gizmo always is, being anchored at
+the mesh centre — drew nothing at all.
 
 MainWindow holds exactly **one** gizmo slot, so a new gizmo must go through
 `ActivateGizmoOwner`, never by assigning `Viewport.Gizmo` directly. Wire panel
@@ -134,7 +142,7 @@ drain-hole gizmo placed every hole at a hard-coded 2 mm behind a green suite.
 
 ## State
 
-`main` is clean and pushed. **562 tests passing, 0 skipped**; GPU suite 8
+`main` is clean and pushed. **581 tests passing, 0 skipped**; GPU suite 8
 passing. **CI green on Linux, Windows and macOS** on the current commit.
 
 - `gh` is authenticated and git has a credential helper, so you can push. The
@@ -150,20 +158,11 @@ passing. **CI green on Linux, Windows and macOS** on the current commit.
 
 Both scope questions were decided by the user on 2026-09-06: **build the
 Viewport/UX block for v1.0**, and **promote registration pins into v1.0**. §5.1
-and §11 are updated. Neither is started.
+and §11 are updated. Pins are **done** (item 25, see
+`reports/M4/20260906T163000Z-registration-pins/report.md`); the Viewport/UX
+block is not started.
 
-**25. Registration pins on cut faces — DO THIS FIRST.** A peg-and-socket pair
-on a plane cut's mating faces: one shape, configurable diameter and clearance.
-It jumps ahead of item 23 by decision (§11, 2026-09-06): it is the only feature
-in the research pass backed by a user describing the exact workflow unprompted,
-and it is self-contained geometry work on a plane cut that already exists.
-**Generate the geometry directly, not by handing two meshes to a boolean** —
-the complaint that motivated the promotion was a 20-minute boolean union on a
-hollow cube, so a slow implementation misses the point of the feature. Per the
-gizmo-first direction, pin placement wants a viewport interaction, not a
-textbox.
-
-**23. Build §5.1's Viewport / UX block**, after pins. The largest remaining
+**23. Build §5.1's Viewport / UX block — DO THIS FIRST.** The largest remaining
 v1.0 gap and a multi-batch job. Nothing of it exists in the code — orthographic projection,
 standard view presets, the build plate grid with configurable printer size and
 its out-of-bounds warning, wireframe and x-ray display modes, the cross-section
@@ -192,6 +191,17 @@ based and has no such exclusion. Inspect can report zero holes on a file whose
 Auto Repair then adds geometry across a seam. Small and sharp. A *different*
 bug from the `DMesh3.Copy` one fixed on 2026-09-06 — don't assume that covered
 it.
+
+**26. A split leaves both halves in one mesh with coincident cut faces.**
+Inspect reports 1,808 issues after splitting the clean Menger sponge, while
+each half measured on its own is closed, single-shell and issue-free. Either
+separate the halves or make a split produce two documents. Found while
+verifying pins (2026-09-06); not caused by them.
+
+**27. A refused operation still counts as a change.** `MeshDocument.ApplyAsync`
+calls `RefreshReport` unconditionally, so an operation returning
+`Changed: false` still pushes an undo entry and makes MainWindow rebuild every
+gizmo — a user whose pin will not fit loses the pin they had positioned.
 
 **A verification gap left behind**: the drain-hole **refusal path** (a hole too
 big for the surface) has two tests but no on-screen evidence. Cheap to close
@@ -225,8 +235,8 @@ All decided by the user on 2026-09-06 (§11 carries the reasoning):
   `.app` zips with the Gatekeeper workaround documented.
 - **Settings are JSON in the platform config directory.** Not a database, not a
   settings library.
-- **Pins before the viewport block**, and the viewport block starts with the
-  camera and display modes.
+- **Pins before the viewport block** — pins are now done, so the viewport block
+  is next, starting with the camera and display modes.
 
 Nothing is currently waiting on the user.
 
