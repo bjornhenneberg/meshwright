@@ -6,15 +6,18 @@ on:
   pull_request:
     branches: [main]
 
-# Linux (build-and-test) is verified: it has actually run on this repo's
-# GitHub Actions. build-and-test-windows and build-and-test-macos below are
-# UNVERIFIED — written and reviewed on a Linux dev host with no access to a
-# Windows or macOS machine to run them against; see reports/M4 for exactly
-# what was and wasn't exercised before these jobs were added, in particular
-# around the Manifold native library (built from source per-platform as a
-# job step — win-x64/osx-* prebuilt binaries don't exist yet, unlike
-# linux-x64's, which is committed to git). Their first real run is whatever
-# push/PR triggers them first.
+# All three jobs are verified: each has really run on this repo's GitHub
+# Actions and passed the full suite. Windows and macOS were written blind on
+# a Linux dev host and were marked UNVERIFIED here until 2026-09-06, when
+# they went green; taking four rounds to get there is recorded in §11 and
+# reports/M4. The Manifold native library is built from source per-platform
+# as a job step on Windows/macOS — only linux-x64 has a prebuilt binary
+# committed to git.
+#
+# Note the triggers below: CI runs on pushes to main and on PRs targeting
+# main, and on nothing else. Work on a feature branch and push it as often
+# as you like without spending a CI run; you pay for exactly one when the
+# branch merges to main.
 jobs:
   build-and-test:
     runs-on: ubuntu-24.04
