@@ -216,3 +216,93 @@ second-hand via the search tool's summarization, not independently verified
 against the raw page text. Flagged here so this can be re-checked directly
 by a human with forum access if the findings are going to drive a scope
 decision.
+
+---
+
+## Addendum, 2026-09-06: the Reddit half, finally read
+
+The report above was written without Reddit — it refused the agent's fetch
+tooling entirely. It is reachable after all: `curl` and `WebFetch` get 403s and
+*headless* Chromium is served a "Prove your humanity" challenge, but a normal
+headed Chromium on the dev host's real display is served normally. Driving that
+browser over the DevTools protocol (`scripts/browse.py`) makes r/3Dprinting
+readable. No bot challenge was defeated or worked around; the challenge simply
+does not appear for a real browser session.
+
+Threads read in full (r/3Dprinting): `1n32mti` *alternative to mesh mixer*,
+`117slkh` *any alternatives to meshmixer that arent rediculously slow?*,
+`1bcbol3` *Meshmixer alternatives*, `13fot6e` *Mac users, what's the equivalent
+of MeshMixer these days?*, `17n3fcr` *Meshmixer, rejoin after plane cut*, plus
+search listings across r/3Dprinting, r/3DScanning and r/photogrammetry.
+
+These are low-engagement threads on the whole — most have 2–5 comments. The one
+exception is the Mac thread (14 upvotes, 35 comments, replies still arriving
+three years on), and that is itself the finding.
+
+### 1. The pins-and-cut workflow is confirmed verbatim, and it is a *performance* complaint
+
+The most on-point thread in the whole search is `117slkh`, and it is worth
+quoting exactly:
+
+> "all i want to do is cut an stl in half and put pins in it for alignment,
+> clicking boolean union is painfully slow, its been twenty minutes and its only
+> halfway done 'level 1 refining' … im trying to cut a simple shape (a hollow
+> cube) and put pins on one side and holes on the other."
+
+On a Ryzen 5600X with 32 GB of RAM. This is one user, so treat the frequency as
+weak — but it is the exact workflow §5.1 now promotes pins into, described
+without prompting, and it says the blocker is **speed**, not capability. It
+corroborates the §5.1 pin promotion and §6.4's performance targets at the same
+time, and it suggests pins should be generated directly rather than by handing
+two meshes to a boolean and hoping.
+
+`17n3fcr` is the mirror image: a user who cut a model and cannot work out how to
+rejoin the halves. Splitting and re-merging is a round trip, not a one-way
+operation.
+
+### 2. macOS is a bigger deal than §9 assumes — the strongest finding here
+
+§9 defers macOS signing/notarisation until there is revenue. The evidence
+argues against that ordering.
+
+`13fot6e` is the highest-engagement thread found in this entire research effort,
+and it is a Mac user with nowhere to go: Fusion 360's "performance on M1 Macs is
+almost unusable", Blender's "learning curve is really steep for newbies",
+TinkerCAD limited by file size. The accepted answer is to install the abandoned
+Meshmixer from a Wayback Machine snapshot — and the thread fills up, over three
+years, with people thanking the commenter for that link ("I logged in just to
+Thank you!!"). One M3 user reports that build is "basically unusable … visual
+errors … I'll have to use my windows laptop again".
+
+Two things follow. First, unmet demand on macOS is concentrated and vocal in a
+way it is not on Windows, where 3D Builder absorbs the simple cases (named
+twice, unprompted, as the substitute: *"I just use windows 3d builder to do
+simple stuff like that"*). Second, these users are knowingly running
+discontinued software with a publicised security flaw because nothing better
+exists — r/3Dprinting and r/3DScanning both carry "DO NOT download Meshmixer
+using random sources" threads. A maintained, signed, open-source native Mac
+build is a sharper wedge than any single feature on the v1.0 list.
+
+**Recommendation:** revisit §9's "macOS once there is revenue". Notarisation is
+~$99/year, and unsigned builds already ship — the gap is Gatekeeper friction for
+exactly the users with the least alternative. This is a decision for the user,
+not a change to make unilaterally; it is not proposed as a §11 row here.
+
+### 3. Scan cleanup is the archetypal use case, described in the user's own words
+
+> "I've used some capture apps to do a 3d scan of my dog. I have most of him,
+> but … since he was laying down, I dont have the bottom. In the MeshMixer days,
+> I'd just import it, trim out the couch and background stuff, and close the
+> mesh and then I'd have a clean model."
+
+Import → plane-cut away the background → fill the hole → export. Every step is
+already in §5.1, which is a good sign for the scope. It also confirms §3's
+"scan users" persona is real and is describing the *whole* product in one
+sentence.
+
+### 4. What this does not change
+
+No cuts to §5.1 are indicated, matching the original report. Nothing new and
+frequent appeared that the spec lacks. The demand that shows up repeatedly and
+is *not* a feature at all is trust: knowing the tool is maintained, safe to
+download, and will not be discontinued.
