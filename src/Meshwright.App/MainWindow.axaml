@@ -21,6 +21,28 @@
       </MenuItem>
       <MenuItem Header="_View">
         <MenuItem Name="ResetViewMenuItem" Header="_Reset View" Click="OnResetViewClick" HotKey="Ctrl+D0" />
+        <Separator />
+        <!-- Standard views. HotKey wants the digit key's enum name ("D1"), not the literal digit:
+             "Ctrl+1" parses to Key.None and binds the shortcut to nothing at all (§11). -->
+        <MenuItem Name="FrontViewMenuItem" Header="_Front" Click="OnStandardViewClick" Tag="Front" HotKey="Ctrl+D1" />
+        <MenuItem Name="BackViewMenuItem" Header="_Back" Click="OnStandardViewClick" Tag="Back" HotKey="Ctrl+D2" />
+        <MenuItem Name="LeftViewMenuItem" Header="_Left" Click="OnStandardViewClick" Tag="Left" HotKey="Ctrl+D3" />
+        <MenuItem Name="RightViewMenuItem" Header="Ri_ght" Click="OnStandardViewClick" Tag="Right" HotKey="Ctrl+D4" />
+        <MenuItem Name="TopViewMenuItem" Header="_Top" Click="OnStandardViewClick" Tag="Top" HotKey="Ctrl+D5" />
+        <MenuItem Name="BottomViewMenuItem" Header="B_ottom" Click="OnStandardViewClick" Tag="Bottom" HotKey="Ctrl+D6" />
+        <MenuItem Name="IsometricViewMenuItem" Header="_Isometric" Click="OnStandardViewClick" Tag="Isometric" HotKey="Ctrl+D7" />
+        <Separator />
+        <MenuItem Name="PerspectiveMenuItem" Header="_Perspective" Click="OnProjectionModeClick" Tag="Perspective"
+                  ToggleType="Radio" GroupName="Projection" IsChecked="True" HotKey="Ctrl+Shift+P" />
+        <MenuItem Name="OrthographicMenuItem" Header="_Orthographic" Click="OnProjectionModeClick" Tag="Orthographic"
+                  ToggleType="Radio" GroupName="Projection" HotKey="Ctrl+Shift+O" />
+        <Separator />
+        <MenuItem Name="ShadedDisplayMenuItem" Header="_Shaded" Click="OnDisplayModeClick" Tag="Shaded"
+                  ToggleType="Radio" GroupName="DisplayMode" IsChecked="True" HotKey="Ctrl+Shift+S" />
+        <MenuItem Name="WireframeDisplayMenuItem" Header="_Wireframe" Click="OnDisplayModeClick" Tag="Wireframe"
+                  ToggleType="Radio" GroupName="DisplayMode" HotKey="Ctrl+Shift+W" />
+        <MenuItem Name="XRayDisplayMenuItem" Header="_X-Ray" Click="OnDisplayModeClick" Tag="XRay"
+                  ToggleType="Radio" GroupName="DisplayMode" HotKey="Ctrl+Shift+X" />
       </MenuItem>
     </Menu>
 

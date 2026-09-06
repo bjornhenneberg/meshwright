@@ -45,13 +45,19 @@ public sealed class MeshRenderer : IDisposable
         uniform vec3 uBaseColor;
         uniform vec3 uHighlightColor;
 
+        // Display mode (see MeshDisplayMode): uAlpha < 1 makes the surface see-through for x-ray,
+        // and uUnlit = 1 drops the diffuse term so wireframe lines read as lines rather than as
+        // strands shaded by the normal of whichever triangle they happen to bound.
+        uniform float uAlpha;
+        uniform float uUnlit;
+
         void main()
         {
             vec3 normal = normalize(vNormal);
             float diffuse = max(dot(normal, normalize(-uLightDirection)), 0.0);
             vec3 baseColor = mix(uBaseColor, uHighlightColor, vHighlight);
-            vec3 color = baseColor * (0.2 + 0.8 * diffuse);
-            FragColor = vec4(color, 1.0);
+            vec3 color = mix(baseColor * (0.2 + 0.8 * diffuse), baseColor, uUnlit);
+            FragColor = vec4(color, uAlpha);
         }
         """;
 
@@ -98,11 +104,30 @@ public sealed class MeshRenderer : IDisposable
 
     private bool _disposed;
 
+    /// <summary>
+    /// World-space direction the light travels, used when <see cref="UseHeadlight"/> is false.
+    /// </summary>
     public Vector3 LightDirection { get; set; } = Vector3.Normalize(new Vector3(-0.5f, -1f, -0.3f));
+
+    /// <summary>
+    /// Light with the camera rather than from a fixed world direction. A world-fixed light makes
+    /// the view presets unusable: with the light coming from -Y, the Front, Left and Bottom views
+    /// look straight at the model's unlit side and render it near-black at the ambient floor. A
+    /// headlight is what CAD and slicer viewers use for exactly this reason - every view is lit,
+    /// and the key is offset off-axis so the shading still describes the shape instead of
+    /// flattening it.
+    /// </summary>
+    public bool UseHeadlight { get; set; } = true;
     public Vector3 BaseColor { get; set; } = new(0.7f, 0.7f, 0.75f);
     public Vector3 HighlightColor { get; set; } = new(0.95f, 0.15f, 0.1f);
     public Vector3 EdgeHighlightColor { get; set; } = new(1f, 0.85f, 0.1f);
     public float EdgeHighlightLineWidth { get; set; } = 3f;
+
+    /// <summary>How the surface is drawn: shaded, wireframe or x-ray. See <see cref="MeshDisplayMode"/>.</summary>
+    public MeshDisplayMode DisplayMode { get; set; } = MeshDisplayMode.Shaded;
+
+    /// <summary>Surface opacity used by <see cref="MeshDisplayMode.XRay"/>.</summary>
+    public float XRayAlpha { get; set; } = 0.35f;
 
     public MeshRenderer(Silk.NET.OpenGL.GL gl)
     {
@@ -253,8 +278,9 @@ public sealed class MeshRenderer : IDisposable
         SetMatrixUniform(_program, "uView", view);
         SetMatrixUniform(_program, "uProjection", projection);
 
+        Vector3 lightDirection = UseHeadlight ? HeadlightDirection(view) : LightDirection;
         int lightLocation = _gl.GetUniformLocation(_program, "uLightDirection");
-        _gl.Uniform3(lightLocation, LightDirection.X, LightDirection.Y, LightDirection.Z);
+        _gl.Uniform3(lightLocation, lightDirection.X, lightDirection.Y, lightDirection.Z);
 
         int colorLocation = _gl.GetUniformLocation(_program, "uBaseColor");
         _gl.Uniform3(colorLocation, BaseColor.X, BaseColor.Y, BaseColor.Z);
@@ -262,9 +288,16 @@ public sealed class MeshRenderer : IDisposable
         int highlightColorLocation = _gl.GetUniformLocation(_program, "uHighlightColor");
         _gl.Uniform3(highlightColorLocation, HighlightColor.X, HighlightColor.Y, HighlightColor.Z);
 
+        _gl.Uniform1(_gl.GetUniformLocation(_program, "uAlpha"), DisplayMode == MeshDisplayMode.XRay ? XRayAlpha : 1f);
+        _gl.Uniform1(_gl.GetUniformLocation(_program, "uUnlit"), DisplayMode == MeshDisplayMode.Wireframe ? 1f : 0f);
+
+        ApplyDisplayModeState();
+
         _gl.BindVertexArray(_vao);
         _gl.DrawArrays(PrimitiveType.Triangles, 0, (uint)_vertexCount);
         _gl.BindVertexArray(0);
+
+        RestoreDefaultState();
 
         if (_edgeVertexCount > 0)
         {
@@ -281,6 +314,57 @@ public sealed class MeshRenderer : IDisposable
             _gl.DrawArrays(PrimitiveType.Lines, 0, (uint)_edgeVertexCount);
             _gl.BindVertexArray(0);
         }
+    }
+
+    /// <summary>
+    /// The world-space light direction for a key light sitting just over the viewer's left
+    /// shoulder, derived from the camera's own axes so it follows every orbit and every preset.
+    /// </summary>
+    private static Vector3 HeadlightDirection(Matrix4x4 view)
+    {
+        // CreateLookAt's row-vector result holds the camera basis in its columns: right in the
+        // first, up in the second, and *backward* (the camera looks down -z) in the third.
+        var right = new Vector3(view.M11, view.M21, view.M31);
+        var up = new Vector3(view.M12, view.M22, view.M32);
+        var forward = -new Vector3(view.M13, view.M23, view.M33);
+
+        Vector3 direction = forward + (0.35f * right) - (0.5f * up);
+        return direction.LengthSquared() < 1e-12f ? forward : Vector3.Normalize(direction);
+    }
+
+    /// <summary>
+    /// Sets the GL state the current <see cref="DisplayMode"/> needs for the surface pass.
+    /// Always paired with <see cref="RestoreDefaultState"/>: the caller's context is shared with
+    /// the gizmo pass and with Avalonia itself, and leaving polygon mode or blending switched on
+    /// is exactly how gizmos once became invisible (§11, 2026-09-06).
+    /// </summary>
+    private void ApplyDisplayModeState()
+    {
+        switch (DisplayMode)
+        {
+            case MeshDisplayMode.Wireframe:
+                _gl.PolygonMode(TriangleFace.FrontAndBack, PolygonMode.Line);
+                _gl.LineWidth(1f);
+                break;
+
+            case MeshDisplayMode.XRay:
+                // Depth writes off, not the depth test: the surface must not occlude the geometry
+                // behind it (that is the whole point), but it must still be occluded by anything
+                // already in the depth buffer.
+                _gl.Enable(EnableCap.Blend);
+                _gl.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
+                _gl.DepthMask(false);
+                break;
+        }
+    }
+
+    /// <summary>Returns the state touched by <see cref="ApplyDisplayModeState"/> to the viewport's
+    /// baseline: filled polygons, no blending, depth writes on.</summary>
+    private void RestoreDefaultState()
+    {
+        _gl.PolygonMode(TriangleFace.FrontAndBack, PolygonMode.Fill);
+        _gl.Disable(EnableCap.Blend);
+        _gl.DepthMask(true);
     }
 
     private unsafe void SetMatrixUniform(uint program, string name, Matrix4x4 matrix)

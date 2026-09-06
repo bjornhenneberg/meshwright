@@ -255,10 +255,28 @@
       <tr><td>Middle- or right-drag</td><td>Pan</td></tr>
       <tr><td>Scroll wheel</td><td>Zoom</td></tr>
       <tr><td><code>Ctrl+0</code>, or <strong>Reset View</strong></td><td>Refit the camera on the mesh</td></tr>
+      <tr><td><code>Ctrl+1</code> &hellip; <code>Ctrl+7</code></td><td>Front, back, left, right, top, bottom, isometric view</td></tr>
+      <tr><td><code>Ctrl+Shift+P</code> / <code>Ctrl+Shift+O</code></td><td>Perspective / orthographic projection</td></tr>
+      <tr><td><code>Ctrl+Shift+S</code> / <code>Ctrl+Shift+W</code> / <code>Ctrl+Shift+X</code></td><td>Shaded / wireframe / x-ray display</td></tr>
       <tr><td><code>Ctrl+Z</code> / <code>Ctrl+Y</code></td><td>Undo / redo the last operation</td></tr>
     </table>
     <p>
       Reset View is the way back if an orbit or zoom loses the model off screen.
+      All of these also sit in the <strong>View</strong> menu.
+    </p>
+    <p>
+      A view preset changes only which way the camera points; it keeps whatever
+      you had framed, so asking for the top view while zoomed in on a detail
+      shows that detail from above rather than refitting the whole model.
+      <strong>Orthographic</strong> drops the perspective divide, so equal-sized
+      features measure the same on screen wherever they sit in depth — that is
+      the projection to judge alignment and squareness in, and a front or top
+      view in it reads as an engineering elevation. <strong>Wireframe</strong>
+      draws triangle edges with no fill, which is how to see tessellation density
+      and what a decimation actually did. <strong>X-ray</strong> makes the
+      surface translucent with depth writes off, so an internal shell, a hollowed
+      part's far wall, or a stray floating fragment inside the model becomes
+      visible. The red/yellow error highlight stays on in every display mode.
     </p>
   </section>
 
@@ -511,14 +529,12 @@
         reopen files through <strong>File → Open</strong> each time.
       </li>
       <li>
-        <strong>The viewport is plainer than the feature list suggests.</strong>
-        The camera is perspective-only — there is no orthographic mode — and the
-        View menu has nothing but Reset View, so there are no front/top/side/iso
-        presets. There is no build-plate grid, no configurable printer size, and
-        therefore no warning when part of a model falls outside your printer's
-        bed. Of the four promised display modes, only shaded and the red/yellow
-        error highlight exist; there is no wireframe or x-ray toggle. Judge scale
-        and fit against your own printer's dimensions before slicing.
+        <strong>The viewport has no build plate.</strong> There is no build-plate
+        grid, no configurable printer size, and therefore no warning when part of
+        a model falls outside your printer's bed. There is no cross-section
+        preview slider either. Judge scale and fit against your own printer's
+        dimensions before slicing. The camera and display modes the feature list
+        promises <em>do</em> exist as of this version — see below.
       </li>
       <li>
         <strong>OBJ import does not weld coincident vertices, and nothing tells

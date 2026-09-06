@@ -124,10 +124,10 @@ The smallest set that makes someone uninstall Meshmixer.
   live before/after triangle count
 
 **Viewport / UX**
-- Orbit / pan / zoom, orthographic and perspective, standard view presets
-- Shaded, wireframe, x-ray and error-highlight display modes
+- ~~Orbit / pan / zoom, orthographic and perspective, standard view presets~~ ✅
+- ~~Shaded, wireframe, x-ray and error-highlight display modes~~ ✅
 - Build plate grid with configurable printer size, out-of-bounds warning
-- Undo/redo across all operations
+- ~~Undo/redo across all operations~~ ✅
 - Cross-section preview slider
 
 ### 5.2 v1.x — Follow-up
@@ -692,6 +692,10 @@ source, and matches how this audience already buys tools.
 | 2026-09-06 | Automatic pin placement is the cross-section's **pole of inaccessibility** — the point furthest from any of its edges — found by subdividing whichever cell could still beat the best answer so far. Not the centroid: a cut through a level-2 Menger sponge is sixteen disjoint squares at the centre plane, and their collective centroid is in fresh air. The largest inscribed circle is defined for a cross-section of any shape and is the placement that leaves the most wall around the bore, which is the thing that matters. Inside-ness uses the same even-odd parity rule as the cap, so a pin can never be placed in a region the cap left open |
 | 2026-09-06 | **Clearance is applied to the socket alone**, radially and axially: the peg comes out at exactly the requested diameter so the printed part measures what was asked for, and the hole it drops into is the one that grows. The socket is also cut one clearance *deeper* than the peg is long, so the two mating faces meet flush instead of the peg's end bottoming out first — a pin that only works in one direction is half a feature, and the workflow is a round trip (split, print, reassemble). Both figures on `RegistrationPinResult` are read back off the finished meshes rather than restated from the request, per the `DrainHoleResult.DiameterAchieved` rule above |
 | 2026-09-06 | A pin that does not fit **refuses the whole cut**, not just the pin. Three ways it can fail, each with the mesh returned untouched: the cross-section cannot host the bore with a wall left around it (the message names the largest diameter that can, and a test retries that diameter and requires it to succeed); the socket would bore out through the model's own wall below the cut, which the cross-section cannot see because a part can neck in below the plane; and Keep/Discard mode or an uncapped cut, which have no mating face at all. Refusing only the pin and splitting anyway would hand back two halves that silently do not align — the §4 failure that §11's drain-hole and decimation rows exist to record |
+| 2026-09-06 | Orthographic projection shares the orbit camera's Target/Distance/Yaw/Pitch and sizes its view volume as `2 · Distance · tan(fov/2)`, the height the perspective frustum already has at the target plane. Toggling the mode therefore leaves whatever the user has centred exactly the size and position it was — a display choice, not a reframing — and the mouse wheel keeps zooming, which it would not if the frustum height ignored Distance. The near plane is placed *behind* the eye (at `-FarPlane`) rather than at `NearPlane`: an orthographic volume has no eye point to be in front of, and zooming in walks the camera toward the target while the view height shrinks, so a near plane at the eye would slice the model in half on the way past. Depth stays linear across that span, so the cost is precision measured in millionths of the model. The tests measure the defining property rather than the flag — two equal segments at different depths projecting to equal screen length, with the perspective case asserted to differ as the control — because a mode enum can be right while the matrix is not |
+| 2026-09-06 | View presets write **every** component of the camera's orientation and none of its framing. Yaw and Pitch are both set (the `Frame()` bug of 2026-09-05, which reset Target and Distance but not orientation, was the same defect one field over), while Target and Distance are left alone, so asking for the top view while zoomed in on a detail shows that detail from above instead of refitting the model. Top and Bottom set Pitch to exactly ±90°, which `Orbit`'s clamp deliberately never reaches: there the view direction *is* the world Z axis, so a +Z up vector gives a degenerate all-NaN look-at — the classic "top view looking down -Z with up = +Z" that draws nothing while every flag says Top. `OrbitCamera` therefore chooses the up vector as the limit of +Z as pitch approaches the pole, which keeps the on-screen orientation continuous with an orbit arriving there and gives the top view +Y up and +X right. The tests assert what each preset *shows* — the view direction and which world axes come out right and up on screen — not which enum was passed. Isometric is defined as the orientation `Frame()` restores, and `Frame()`'s default elevation moved from 30° to the true isometric asin(1/√3) = 35.26° so that Isometric and Reset View cannot differ by a few degrees no user could name |
+| 2026-09-06 | Wireframe and x-ray are GL state around the existing surface pass — polygon mode Line and an unlit uniform for one, alpha blending with **depth writes off but the depth test on** for the other — and every mode restores filled polygons, no blending and depth writes before returning. The context is shared with the gizmo pass and with Avalonia; leaving polygon mode on Line is precisely how the gizmo became invisible in the depth-test row below, so a GPU test asserts the state after each mode's render, not just its pixels. The pixel tests state the property rather than "the frame changed": wireframe must cover less than half the pixels shaded does (the fill is gone), and x-ray must reveal a triangle sealed inside a cube that shaded rendering is separately asserted to hide — a control without which the x-ray half would prove nothing |
+| 2026-09-06 | The light follows the camera. It was fixed in world space at (-0.5, -1, -0.3), which nothing had noticed while the only way to move was orbiting; the moment view presets existed, Front, Left and Bottom stared straight at the model's unlit side and drew it at the 0.2 ambient floor — a black silhouette on a dark background, half the new feature unusable. Found by looking at the running app on the Eiffel tower sample, not by any test: the suite had no notion of brightness. `MeshRenderer` now derives a key light from the view matrix, over the viewer's left shoulder so the shading still describes shape instead of flattening it, and a GPU test renders all seven presets and fails if any is at the ambient floor (it fails on the old world-fixed light, which is what makes it a guard rather than a decoration) |
 | 2026-09-06 | Gizmos were being **depth-tested against the mesh**, so a gizmo inside the solid drew nothing. `MeshViewportControl` said "render active gizmo on top of the mesh" while leaving `DepthTest` enabled; the plane cut gizmo is anchored at the mesh centre and sized to a tenth of the viewport, so on any closed model it was drawn entirely inside the surface and no plane square, normal arrow or pin circle appeared at all. Found the only way it could be — by placing a pin in the running app and seeing nothing happen while the panel correctly reported "Pin placed at (0.03, 0.24, 0), Ø0.4 mm". The depth test is now disabled around the gizmo render and restored after, which is what the comment always claimed |
 
 ## 12. Development environment
@@ -841,18 +845,20 @@ M0.
     says further collapses "would have created invalid geometry". The local
     validity test each collapse passes has to be checked against whole-mesh
     invariants afterwards.
-23. **Build §5.1's Viewport / UX block** — orthographic projection, view
-    presets, the build plate grid and out-of-bounds warning, wireframe and x-ray
-    modes, the cross-section slider, unit handling, drag-and-drop and recent
-    files. All absent from the code today (§11, 2026-09-06). **Scope decided
-    2026-09-06: these ship in v1.0 rather than moving to §5.2.** The largest
-    remaining v1.0 gap, and a multi-batch build — suggested order is the camera
-    and display modes first (one subsystem, immediately visible), then the build
-    plate and out-of-bounds warning, then the cross-section slider, then the
-    import conveniences. **Scheduled after item 25** (pins), per the same
-    decision. Recent files needs settings persistence, which nothing in the
-    codebase provides yet — decided 2026-09-06 as JSON in the platform config
-    directory.
+23. **Build §5.1's Viewport / UX block.** **Scope decided 2026-09-06: these
+    ship in v1.0 rather than moving to §5.2.** A multi-batch build, one slice per
+    branch.
+    - ~~**Camera and display modes**~~ — done 2026-09-06. Orthographic
+      projection, seven view presets (`Ctrl+1`–`Ctrl+7`), and the wireframe and
+      x-ray display modes, all in the View menu and all reachable by shortcut.
+      See the §11 rows for that date.
+    - **Build plate grid with configurable printer size, and the out-of-bounds
+      warning** — next.
+    - **Cross-section preview slider.**
+    - **Import conveniences**: mm/inch unit detection and scaling,
+      drag-and-drop, recent files. Recent files needs settings persistence,
+      which nothing in the codebase provides yet — decided 2026-09-06 as JSON in
+      the platform config directory.
 25. ~~**Registration pins on cut faces**~~ — done. A peg-and-socket pair on a
     plane cut's mating faces, generated directly: the pin circle joins the cut
     cross-section as one more loop, so the existing parity-nested capping code
