@@ -13,35 +13,39 @@ public class AppSettingsTests
     {
         var settings = new AppSettings();
 
-        settings.RememberRecentFile("/tmp/first.stl");
-        settings.RememberRecentFile("/tmp/second.stl");
+        settings.RememberRecentFile(Rooted("first.stl"));
+        settings.RememberRecentFile(Rooted("second.stl"));
 
-        Assert.Equal(new[] { "/tmp/second.stl", "/tmp/first.stl" }, settings.RecentFiles);
+        Assert.Equal(new[] { Rooted("second.stl"), Rooted("first.stl") }, settings.RecentFiles);
     }
 
     [Fact]
     public void ReopeningAFile_PromotesItRatherThanListingItTwice()
     {
         var settings = new AppSettings();
-        settings.RememberRecentFile("/tmp/a.stl");
-        settings.RememberRecentFile("/tmp/b.stl");
+        settings.RememberRecentFile(Rooted("a.stl"));
+        settings.RememberRecentFile(Rooted("b.stl"));
 
-        settings.RememberRecentFile("/tmp/a.stl");
+        settings.RememberRecentFile(Rooted("a.stl"));
 
-        Assert.Equal(new[] { "/tmp/a.stl", "/tmp/b.stl" }, settings.RecentFiles);
+        Assert.Equal(new[] { Rooted("a.stl"), Rooted("b.stl") }, settings.RecentFiles);
     }
 
     [Fact]
     public void TwoSpellingsOfOnePath_AreOneEntry()
     {
-        // "/tmp/x/../a.stl" and "/tmp/a.stl" are the same file, and a list that shows both is a
-        // list that has stopped being a list of files.
+        // "…/x/../a.stl" and "…/a.stl" are the same file, and a list that shows both is a list
+        // that has stopped being a list of files.
         var settings = new AppSettings();
 
-        settings.RememberRecentFile("/tmp/a.stl");
-        settings.RememberRecentFile("/tmp/x/../a.stl");
+        settings.RememberRecentFile(Rooted("a.stl"));
+
+        // Deliberately NOT put through Rooted, which would normalise it here and leave the test
+        // asserting nothing: the round trip through "x/.." is the thing being tested.
+        settings.RememberRecentFile(Path.Combine(Path.GetTempPath(), "meshwright-recent", "x", "..", "a.stl"));
 
         Assert.Single(settings.RecentFiles);
+        Assert.Equal(Rooted("a.stl"), settings.RecentFiles[0]);
     }
 
     [Fact]
@@ -64,24 +68,24 @@ public class AppSettingsTests
 
         foreach (int i in Enumerable.Range(0, AppSettings.MaxRecentFiles + 5))
         {
-            settings.RememberRecentFile($"/tmp/model{i}.stl");
+            settings.RememberRecentFile(Rooted($"model{i}.stl"));
         }
 
         Assert.Equal(AppSettings.MaxRecentFiles, settings.RecentFiles.Count);
-        Assert.Equal("/tmp/model14.stl", settings.RecentFiles[0]);
-        Assert.DoesNotContain("/tmp/model0.stl", settings.RecentFiles);
+        Assert.Equal(Rooted("model14.stl"), settings.RecentFiles[0]);
+        Assert.DoesNotContain(Rooted("model0.stl"), settings.RecentFiles);
     }
 
     [Fact]
     public void ForgettingAFile_RemovesIt()
     {
         var settings = new AppSettings();
-        settings.RememberRecentFile("/tmp/a.stl");
-        settings.RememberRecentFile("/tmp/b.stl");
+        settings.RememberRecentFile(Rooted("a.stl"));
+        settings.RememberRecentFile(Rooted("b.stl"));
 
-        settings.ForgetRecentFile("/tmp/a.stl");
+        settings.ForgetRecentFile(Rooted("a.stl"));
 
-        Assert.Equal(new[] { "/tmp/b.stl" }, settings.RecentFiles);
+        Assert.Equal(new[] { Rooted("b.stl") }, settings.RecentFiles);
     }
 
     [Fact]
@@ -93,6 +97,15 @@ public class AppSettingsTests
 
         Assert.Empty(settings.RecentFiles);
     }
+
+    /// <summary>
+    /// A rooted path in the shape the running platform uses, and the shape
+    /// <see cref="AppSettings.RememberRecentFile"/> stores. Hard-coded "/tmp/a.stl" literals here
+    /// passed on Linux and failed four ways on Windows CI, where <see cref="Path.GetFullPath(string)"/>
+    /// turns them into "C:\tmp\a.stl" — the list was right and the expectations were not.
+    /// </summary>
+    private static string Rooted(string name) =>
+        Path.GetFullPath(Path.Combine(Path.GetTempPath(), "meshwright-recent", name));
 
     [Theory]
     [InlineData(0, 0, 1400, 768, true)]
