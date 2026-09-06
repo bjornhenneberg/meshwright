@@ -685,6 +685,10 @@ source, and matches how this audience already buys tools.
 | 2026-09-06 | §5.1's Viewport / UX block is **built for v1.0, not deferred** — orthographic projection, standard view presets, the build plate grid with configurable printer size and its out-of-bounds warning, wireframe and x-ray display modes, the cross-section preview slider, mm/inch unit handling, drag-and-drop and a recent-files list. The alternative was moving them to §5.2, which would have made §5.1 describe a viewport nobody had written; the honest options were build them or stop claiming them, and the decision is to build. Recent files needs settings persistence, which does not exist in the codebase yet and is now a v1.0 dependency rather than a reason to skip the feature (it was skipped on exactly that ground on 2026-09-04) |
 | 2026-09-06 | Reddit is reachable and is now part of the research toolkit. It refuses `curl` and `WebFetch` with 403s and serves *headless* Chromium a "Prove your humanity" challenge, but a normal headed Chromium on the dev host's real display is served normally; `scripts/browse.py` drives that browser over the DevTools protocol. No challenge is defeated or circumvented — it does not appear for a real browser session, and if it ever does, the instruction is to stop and tell the user. This closed the gap that made backlog item 5 only partially answerable, and the first pass immediately produced the verbatim evidence behind the pin promotion above |
 
+| 2026-09-06 | §9's macOS deferral holds, but with a trigger instead of a vague "later": signing and notarisation are decided **at the first tagged release**, not whenever revenue appears. The Reddit research argued the other way — macOS is where demand is most concentrated and least served — so this is a deliberate "not yet", not an oversight. Unsigned `.app` zips keep shipping with the Gatekeeper workaround documented in `docs/usage.html` until then |
+| 2026-09-06 | Settings persist as JSON in the platform config directory (`~/.config/meshwright/settings.json` on Linux and its Windows/macOS equivalents) via `System.Text.Json`, no dependency and no database. Recent files was skipped on 2026-09-04 because no persistence existed; it is now a v1.0 item, so the subsystem has to exist, and printer bed size, unit preference and window state will land in the same file. Plain and inspectable is the point — a tool whose pitch includes "no account, no cloud, no telemetry" should keep its settings somewhere the user can read and delete |
+| 2026-09-06 | Registration pins (item 25) are built **before** the Viewport/UX block, jumping the queue on the strength of the evidence: they are the only feature in the whole research pass backed by a user describing the exact workflow unprompted, and they are self-contained geometry work on a plane cut that already exists. The viewport block then starts with the camera and display modes — orthographic, view presets, wireframe, x-ray — as one coherent subsystem, and the build plate, out-of-bounds warning, cross-section slider and import conveniences follow it |
+
 ## 12. Development environment
 
 Development host: Linux Mint 22.3 (Ubuntu 24.04 "noble" base), x86-64.
@@ -840,13 +844,16 @@ M0.
     remaining v1.0 gap, and a multi-batch build — suggested order is the camera
     and display modes first (one subsystem, immediately visible), then the build
     plate and out-of-bounds warning, then the cross-section slider, then the
-    import conveniences. Recent files needs settings persistence, which nothing
-    in the codebase provides yet.
+    import conveniences. **Scheduled after item 25** (pins), per the same
+    decision. Recent files needs settings persistence, which nothing in the
+    codebase provides yet — decided 2026-09-06 as JSON in the platform config
+    directory.
 25. **Registration pins on cut faces**, promoted into §5.1 on 2026-09-06: a
     peg-and-socket pair on a plane cut's mating faces, one shape, diameter and
     clearance. Generate the geometry directly rather than via a boolean — the
     user complaint that motivated this was a 20-minute boolean union on a hollow
-    cube, so a slow implementation misses the point of the feature.
+    cube, so a slow implementation misses the point of the feature. **Next up:
+    this is scheduled ahead of item 23.**
 24. **Hole filling and hole detection disagree about import seams** — see §11,
     2026-09-06. `BoundaryHoleDetector` excludes seams by position;
     `HoleFillRepair` finds loops by vertex index and does not.
