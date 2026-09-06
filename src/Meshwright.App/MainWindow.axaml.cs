@@ -14,6 +14,7 @@ using Meshwright.App.Views.Edit;
 using Meshwright.Core;
 using Meshwright.Core.Operations;
 using Meshwright.Geometry.Diagnostics;
+using Meshwright.Geometry.Printing;
 using Meshwright.IO;
 using Meshwright.IO.Stl;
 using Meshwright.Rendering.Camera;
@@ -27,6 +28,16 @@ public partial class MainWindow : Window
     private const string SampleMeshResourceName = "Meshwright.App.Assets.SampleMesh.stl";
 
     private readonly MeshDocument _document = new();
+
+    /// <summary>
+    /// The printer bed the viewport draws and the out-of-bounds warning measures against. Held
+    /// in-session only: it belongs in <c>settings.json</c> alongside the unit preference and the
+    /// recent-files list (§11, 2026-09-06), and that file is built with recent files rather than
+    /// as a side quest here.
+    /// </summary>
+    private BuildVolume _buildVolume = BuildVolume.Default;
+
+    private bool _showBuildPlate = true;
 
     // Gizmos for interactive operations
     private DrainHoleGizmo? _drainHoleGizmo;
@@ -43,6 +54,7 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         InitializeEditPanels();
+        InitializeBuildPlateMenu();
 
         // Every mesh change refreshes the UI from one place. The Edit panels apply their
         // operations straight to the document, so without this they'd change the mesh with
@@ -63,6 +75,7 @@ public partial class MainWindow : Window
         _document.Progress += (_, progress) => ShowOperationProgress(progress);
 
         LoadSampleMesh();
+        RefreshBuildPlate();
     }
 
     /// <summary>Current text of the undo/redo status indicator, exposed for testing.</summary>
@@ -307,6 +320,7 @@ public partial class MainWindow : Window
         {
             Viewport.ProjectionMode = mode;
             StatusText.Text = mode == ProjectionMode.Orthographic ? "Orthographic projection" : "Perspective projection";
+            RefreshViewMenuChecks();
         }
     }
 
@@ -321,8 +335,113 @@ public partial class MainWindow : Window
                 MeshDisplayMode.XRay => "X-ray display",
                 _ => "Shaded display",
             };
+            RefreshViewMenuChecks();
         }
     }
+
+    /// <summary>
+    /// Fills the View -> Build Plate submenu from <see cref="BuildVolume.Presets"/>. Generated
+    /// rather than written out in XAML so a printer added to the list appears in the menu without
+    /// a second edit that could disagree with it.
+    /// </summary>
+    private void InitializeBuildPlateMenu()
+    {
+        foreach (BuildVolume volume in BuildVolume.Presets)
+        {
+            var item = new MenuItem
+            {
+                Header = volume.Name,
+                Tag = volume,
+                ToggleType = MenuItemToggleType.Radio,
+                GroupName = "BuildVolume",
+                IsChecked = volume == _buildVolume,
+            };
+            item.Click += OnBuildVolumeClick;
+            BuildPlateMenuItem.Items.Add(item);
+        }
+    }
+
+    private void OnBuildVolumeClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is MenuItem { Tag: BuildVolume volume })
+        {
+            _buildVolume = volume;
+            RefreshBuildPlate();
+            RefreshViewMenuChecks();
+            StatusText.Text = $"Build plate: {volume.Name}";
+        }
+    }
+
+    private void OnToggleBuildPlateClick(object? sender, RoutedEventArgs e)
+    {
+        // Flips the flag rather than reading the menu item's own IsChecked, because that value is
+        // not trustworthy here: Avalonia toggles it when the item is clicked but not when the item
+        // is activated by its HotKey, so a handler that reads it makes the shortcut a silent no-op
+        // (found by pressing Ctrl+Shift+B in the running app and watching nothing happen).
+        // RefreshViewMenuChecks then writes the check mark back from the real state, which keeps
+        // both entry points consistent.
+        _showBuildPlate = !_showBuildPlate;
+        RefreshBuildPlate();
+        RefreshViewMenuChecks();
+        StatusText.Text = _showBuildPlate ? "Build plate shown" : "Build plate hidden";
+    }
+
+    /// <summary>
+    /// Writes every View menu check mark from the state it claims to describe.
+    ///
+    /// <para>
+    /// Avalonia updates a <see cref="MenuItemToggleType"/> item's <c>IsChecked</c> when the item is
+    /// clicked, but not when it is activated by its <c>HotKey</c>. Before this existed,
+    /// <c>Ctrl+Shift+O</c> really did switch the viewport to orthographic while the menu went on
+    /// showing the dot next to Perspective - a control describing a state the app was not in,
+    /// which is the failure §11 (2026-09-06) records three of. The check marks are therefore
+    /// derived, never assumed.
+    /// </para>
+    /// </summary>
+    private void RefreshViewMenuChecks()
+    {
+        PerspectiveMenuItem.IsChecked = Viewport.ProjectionMode == ProjectionMode.Perspective;
+        OrthographicMenuItem.IsChecked = Viewport.ProjectionMode == ProjectionMode.Orthographic;
+
+        ShadedDisplayMenuItem.IsChecked = Viewport.DisplayMode == MeshDisplayMode.Shaded;
+        WireframeDisplayMenuItem.IsChecked = Viewport.DisplayMode == MeshDisplayMode.Wireframe;
+        XRayDisplayMenuItem.IsChecked = Viewport.DisplayMode == MeshDisplayMode.XRay;
+
+        ShowBuildPlateMenuItem.IsChecked = _showBuildPlate;
+        foreach (MenuItem item in BuildPlateMenuItem.Items.OfType<MenuItem>())
+        {
+            if (item.Tag is BuildVolume volume)
+            {
+                item.IsChecked = volume == _buildVolume;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Pushes the selected bed to the viewport and evaluates the current mesh against it. One
+    /// evaluation feeds both the warning text and the bed outline colour, so the two cannot
+    /// disagree about whether the model fits.
+    /// </summary>
+    private void RefreshBuildPlate()
+    {
+        BuildPlateFitResult fit = BuildPlateFit.Evaluate(_document.Mesh, _buildVolume);
+
+        Viewport.BuildVolume = _showBuildPlate ? _buildVolume : null;
+        Viewport.ModelFitsBuildVolume = fit.Fits;
+
+        BuildPlateWarningText.Text = fit.Message ?? string.Empty;
+
+        // Hidden when the model fits, and also when the plate itself is hidden: warning about a
+        // bed the user has switched off would be warning about something not on screen.
+        BuildPlateWarningText.IsVisible = _showBuildPlate && !fit.Fits;
+    }
+
+    /// <summary>The bed the out-of-bounds warning is measured against, exposed for testing.</summary>
+    public BuildVolume SelectedBuildVolume => _buildVolume;
+
+    /// <summary>The visible out-of-bounds warning text, or null when none is shown. Exposed for
+    /// testing: the assertion that matters is that it is <em>absent</em> for a model that fits.</summary>
+    public string? BuildPlateWarning => BuildPlateWarningText.IsVisible ? BuildPlateWarningText.Text : null;
 
     private async void OnExportFileClick(object? sender, RoutedEventArgs e)
     {
@@ -513,6 +632,10 @@ public partial class MainWindow : Window
 
         UpdateDiagnosticsPanel(report);
         RefreshUndoRedoState();
+
+        // The model may have moved or grown: re-test it against the bed. Every operation, undo
+        // and redo comes through here, so no edit can leave a stale verdict on screen.
+        RefreshBuildPlate();
     }
 
     /// <summary>Sets the status line to "&lt;what just happened&gt; (N triangles) — N issues found".</summary>

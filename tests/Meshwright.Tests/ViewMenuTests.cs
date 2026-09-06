@@ -169,6 +169,25 @@ public class ViewMenuTests
         Assert.True(((MenuItem)GetField(window, "ShadedDisplayMenuItem")!).IsChecked);
     }
 
+    [AvaloniaTheory]
+    [InlineData(PhysicalKey.O, "OrthographicMenuItem", "PerspectiveMenuItem")]
+    [InlineData(PhysicalKey.W, "WireframeDisplayMenuItem", "ShadedDisplayMenuItem")]
+    [InlineData(PhysicalKey.X, "XRayDisplayMenuItem", "ShadedDisplayMenuItem")]
+    public void AShortcutMovesTheCheckMark_NotJustTheViewport(PhysicalKey key, string nowChecked, string nowUnchecked)
+    {
+        // Avalonia updates a toggle item's IsChecked when it is clicked but not when it is
+        // activated by its HotKey. Ctrl+Shift+O therefore switched the viewport to orthographic
+        // while the menu went on showing the dot next to Perspective - a control describing a
+        // state the app is not in. Found in the running app, not by the suite (2026-09-06).
+        var window = new MainWindow();
+        window.Show();
+
+        window.KeyPressQwerty(key, RawInputModifiers.Control | RawInputModifiers.Shift);
+
+        Assert.True(((MenuItem)GetField(window, nowChecked)!).IsChecked, $"{nowChecked} is the live state but is not checked.");
+        Assert.False(((MenuItem)GetField(window, nowUnchecked)!).IsChecked, $"{nowUnchecked} is checked while {nowChecked} is the live state.");
+    }
+
     [AvaloniaFact]
     public void EveryViewMenuHotKey_IsUniqueAcrossTheWholeMenu()
     {
