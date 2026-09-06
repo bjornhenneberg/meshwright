@@ -395,19 +395,23 @@
   </section>
 
   <section id="status">
-    <h2>Status</h2>
+    <h2>Where it stands</h2>
     <p class="section-lede">
-      Four of five milestones are done. The
-      <a href="https://github.com/bjornhenneberg/meshwright/blob/main/SPECIFICATION.md">specification</a>
-      has the full roadmap and decision log.
+      Inspect, repair, edit and simplify all work, and are covered by a test
+      suite that runs on Linux, Windows and macOS. These are the gaps worth
+      knowing about before you rely on it.
     </p>
     <ul class="status-list">
-      <li><span class="dot dot-done"></span><div><span class="status-label">M0 — Skeleton.</span> <span class="status-desc">Solution scaffolding, STL import, Avalonia + Silk.NET viewport.</span></div></li>
-      <li><span class="dot dot-done"></span><div><span class="status-label">M1 — Inspect.</span> <span class="status-desc">All v1.0 defect detectors, diagnostics UI, GPU-verified error highlighting.</span></div></li>
-      <li><span class="dot dot-done"></span><div><span class="status-label">M2 — Repair.</span> <span class="status-desc">Undo stack, all repair operations, Auto Repair pipeline, STL/OBJ export.</span></div></li>
-      <li><span class="dot dot-done"></span><div><span class="status-label">M3 — Edit.</span> <span class="status-desc">Plane cut, booleans (via Manifold), transforms, hollow, drain holes, decimation.</span></div></li>
-      <li><span class="dot dot-progress"></span><div><span class="status-label">M4 — Polish and release.</span> <span class="status-desc">Gizmo-first UI, registration pins, a real-world test corpus, CI on Linux, Windows and macOS. Viewport work is nearly through — camera, display modes and build plate in, cross-section slider left. No 1.0 release yet; the <a href="usage.html#known">usage guide</a> lists what is still rough.</span></div></li>
+      <li><span class="dot dot-progress"></span><div><span class="status-label">No release yet.</span> <span class="status-desc">No tagged version and no packaged download — building from source is the only way to run it. Development happens on Linux; Windows and macOS builds pass CI but nobody has launched a packaged one.</span></div></li>
+      <li><span class="dot dot-progress"></span><div><span class="status-label">Nothing is remembered between launches.</span> <span class="status-desc">There is no settings file yet, so the build plate resets each time and the File menu has no recent-files list.</span></div></li>
+      <li><span class="dot dot-progress"></span><div><span class="status-label">Import is literal.</span> <span class="status-desc">No unit detection — a model authored in inches loads 25.4&times; undersized with no prompt — no drag-and-drop, and STL and OBJ only.</span></div></li>
+      <li><span class="dot dot-todo"></span><div><span class="status-label">Still to come.</span> <span class="status-desc">A cross-section preview, a headless batch mode, and a signed release.</span></div></li>
     </ul>
+    <p style="margin-top:20px; color:var(--text-muted); font-size:0.9rem;">
+      The usage guide's <a href="usage.html#known">known rough edges</a> is the
+      longer, franker list — including the places where an operation can
+      surprise you.
+    </p>
   </section>
 
   <section id="get-started">
@@ -443,7 +447,7 @@ dotnet run --project src/Meshwright.App</code></pre>
 <footer>
   <div class="wrap">
     <a href="https://github.com/bjornhenneberg/meshwright">Source on GitHub</a> ·
-    <a href="https://github.com/bjornhenneberg/meshwright/blob/main/SPECIFICATION.md">Full specification</a>
+    <a href="https://github.com/bjornhenneberg/meshwright/blob/main/SPECIFICATION.md">Design notes and decision log</a>
   </div>
 </footer>
 
