@@ -8,7 +8,12 @@ namespace Meshwright.Geometry.Diagnostics;
 /// </summary>
 public sealed class DuplicateVertexDetector : IMeshDetector
 {
-    private const double Epsilon = 1e-9;
+    /// <summary>
+    /// The per-axis distance within which two distinct vertex ids count as the same location.
+    /// Public so an operation that must avoid *creating* a duplicate tests the same condition the
+    /// detector will use to report one.
+    /// </summary>
+    public const double Epsilon = 1e-9;
 
     public string Category => "DuplicateVertex";
 
@@ -94,7 +99,8 @@ public sealed class DuplicateVertexDetector : IMeshDetector
         return group;
     }
 
-    private static bool IsCoincident(Vector3d a, Vector3d b)
+    /// <summary>True when two positions are the same location as far as this detector is concerned.</summary>
+    public static bool IsCoincident(Vector3d a, Vector3d b)
     {
         return Math.Abs(a.x - b.x) <= Epsilon
             && Math.Abs(a.y - b.y) <= Epsilon

@@ -64,3 +64,24 @@ back the second time, silently, on any mesh whose closedness had already been qu
 (which `MeshDocument.Load` always does, via diagnostics). Found via `PlaneCutKeepSideOperation`
 et al., which use `mesh.Copy(result)` to install a plane cut's result — an uncapped cut's
 genuinely open output was reporting zero boundary loops.
+
+---
+
+Hook deviation from upstream (2026-09-07), in `mesh/Reducer.cs`: `CollapseEdge` now consults a new
+`protected virtual bool CollapseIsGloballyValid(int keepVid, int removeVid, ref Vector3d newPos, int
+t0, int t1)` immediately before performing the collapse, and reports a refusal as the new
+`ProcessResult.Ignored_CreatesInvalidGeometry`. The base implementation returns `true`, so an
+unmodified `Reducer` behaves exactly as upstream does.
+
+Upstream's collapse tests are all local — `collapse_creates_flip_or_invalid` walks the edge's
+one-ring for a normal flip and a link-condition violation — and several of the defects Meshwright's
+detectors report are not one-ring properties at all: a collapse can push one thin wall through
+another, or land the kept vertex exactly on top of a distant one. Decimating the clean Menger sponge
+sample therefore produced self-intersections, degenerate slivers, duplicate vertex locations and
+position-level non-manifold edges, while `DecimateOperation` reported that further collapses "would
+have created invalid geometry" (SPECIFICATION.md §11, item 22).
+
+The hook is a deviation rather than a subclass because the decision point is in the middle of
+`CollapseEdge`, after `iKeep`/`iCollapse` and the final collapse position are resolved; overriding
+`CollapseEdge` wholesale would mean copying eighty lines of upstream logic to add one condition.
+`Meshwright.Geometry.Edit.ValidatingReducer` is the only implementor.

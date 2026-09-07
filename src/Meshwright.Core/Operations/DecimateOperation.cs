@@ -1,6 +1,7 @@
 using System;
 using System.Globalization;
 using g3;
+using Meshwright.Geometry.Edit;
 
 namespace Meshwright.Core.Operations;
 
@@ -97,7 +98,11 @@ public sealed class DecimateOperation : MeshOperationBase
                 Summary: $"Mesh already at or below the target of {target} triangles ({before} triangles).");
         }
 
-        var reducer = new Reducer(mesh);
+        // ValidatingReducer, not the bare Reducer: the reducer's own tests are local to the edge
+        // being collapsed and cannot see one wall of a thin model being pushed through another, so
+        // a bare reduction of a clean mesh produced self-intersections while this operation
+        // reported that it had declined the collapses that would create invalid geometry.
+        var reducer = new ValidatingReducer(mesh);
         reducer.ReduceToTriangleCount(target);
 
         int after = mesh.TriangleCount;
