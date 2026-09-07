@@ -7,14 +7,13 @@ cross-platform desktop tool for repairing meshes for 3D printing (C# /
 **Read `SPECIFICATION.md` first.** §5.1 is v1.0 scope, §7 narrates each
 milestone batch, §11 is a dated decision log (read the last ~15 rows — they are
 the most useful pages in the repo), and "Immediate next steps" at the end is
-the backlog. **Item 23 is done** — all four slices of the Viewport/UX block
-landed 2026-09-06, with the docs and the site updated in the same pass. Items
-1–21, 23, 25 and 27 are done; **22, 24, 26, 28 and 29 are open**. Item 29 is new
-and came out of the import slice: drag-and-drop cannot work on Linux because
-Avalonia's X11 backend has no drag-and-drop implementation at all.
+the backlog. Items 1–21, 23, 25, 26 and 27 are done; **22, 24, 28 and 29 are
+open**. **Item 26 landed 2026-09-07** (`fix/split-separate-halves`, report in
+`reports/M4/20260907T000000Z-split-separate-halves/report.md`), with the docs
+and the site updated in the same pass.
 
 **Nothing is queued.** Pick from the backlog — 24 is the smallest and sharpest,
-22 is the most real geometry, 26 is the one a user is most likely to hit.
+22 is the most real geometry.
 
 ## How to work
 
@@ -55,7 +54,7 @@ wrong**. §11 is largely a catalogue of it. Treat a success message — includin
 your own — as a claim to check.
 
 1. Build and run `dotnet test tests/Meshwright.Tests -c Release`. Baseline is
-   **742 passing, 0 skipped**. Never accept a newly skipped test without a
+   **824 passing, 0 skipped**. Never accept a newly skipped test without a
    stated reason.
 2. The GPU suite is `tests/Meshwright.Tests.Gpu` (28 tests, ~0.5 s). **Always
    run it under `timeout`** — it used to hang past ten minutes, and a hang
@@ -126,6 +125,17 @@ batches short.
 - The sidebar tab strip reflows as tabs are added, shifting every control below
   it — locate buttons from a fresh screenshot rather than reusing coordinates
   across builds.
+- A **ComboBox popup is its own X window**, so `gnome-screenshot -w` on the app
+  window does not show it — capture the whole screen (`gnome-screenshot -f`) and
+  work in screen coordinates for that one click.
+- Keyboard: `XTestFakeKeyEvent` with keycodes from
+  `XKeysymToKeycode(XStringToKeysym(name))`. The modifier's keysym name is
+  **`Control_L`**, not `ctrl` — an invalid name resolves to keycode 0 and the
+  chord silently becomes a bare keypress, so `Ctrl+Z` typed a literal `z` into
+  whatever had focus and the undo I thought I had done had not happened.
+- To capture a **before** screenshot of a defect you have just fixed, build the
+  pre-fix commit in a throwaway `git worktree` and run that. It costs one build
+  and gives a real before/after pair.
 
 Meshes to drive it with:
 - `samples/broken-cube.stl` — 14 triangles, one of every defect.
@@ -158,8 +168,8 @@ drain-hole gizmo placed every hole at a hard-coded 2 mm behind a green suite.
 
 ## State
 
-`main` carries the import-conveniences slice. **809 tests passing, 0 skipped**;
-GPU suite **28** passing, both re-run on the merge commit.
+`main` carries the split-separation slice (item 26). **824 tests passing, 0
+skipped**; GPU suite **28** passing, both re-run on the merge commit.
 
 **That merge went red on Windows CI** and needed a follow-up
 (`fix/settings-tests-windows-paths`). Four `AppSettingsTests` asserted on
@@ -174,7 +184,7 @@ asserting against `Path.GetFullPath(input)` rather than a literal is usually the
 whole fix. Do not merge and walk away — wait for the run.
 
 `README.md`, `docs/index.html` and `docs/usage.html` are current as of the
-import-conveniences slice. `README.md` was rewritten on 2026-09-06: it had become an
+split-separation slice. `README.md` was rewritten on 2026-09-06: it had become an
 index into `SPECIFICATION.md` (milestone codes as the status, "see §8" for the
 licence, `reports/M4/` for the platform split), and now answers what a stranger
 opens a repo to find out. **Keep it that way** — when you finish a slice, update
@@ -195,11 +205,10 @@ slice's own report into `docs/images/` rather than re-shot.
 
 Both scope questions were decided by the user on 2026-09-06: **build the
 Viewport/UX block for v1.0**, and **promote registration pins into v1.0**. §5.1
-and §11 are updated. Both are now **done** — pins as item 25 (see
-`reports/M4/20260906T163000Z-registration-pins/report.md`, which still has no
-screenshots at all, contrary to AGENTS.md; if you are in the app with a pinned
-split on screen, capture one and add it), and the Viewport/UX block as item 23,
-in four slices.
+and §11 are updated. Both are **done** — pins as item 25
+(`reports/M4/20260906T163000Z-registration-pins/report.md`, which now has its
+screenshots, captured during the item 26 slice), and the Viewport/UX block as
+item 23, in four slices.
 
 **23. ~~Finish §5.1's Viewport / UX block~~ — done 2026-09-06**, all four slices.
 
@@ -297,6 +306,38 @@ Things the next slices inherit:
 - **The drain-hole refusal path now has on-screen evidence** (the standing
   verification gap, closed): see the report's §5.
 
+**26. ~~A split leaves both halves in one mesh with coincident cut faces.~~ —
+done 2026-09-07.** The halves are moved apart along the cut normal before being
+merged, by the peg protrusion plus `max(1 mm, 5% of the extent along the
+normal)`. Report:
+`reports/M4/20260907T000000Z-split-separate-halves/report.md`. Things the next
+slices inherit:
+
+- **Two documents was considered and rejected**, deliberately: it changes the
+  single-document model (`MeshDocument`, the one undo stack, the one viewport
+  upload, the Boolean panel's secondary mesh, Export) and has no undo semantics.
+  The file-per-part gap that left is closed by **File → Export Parts**, which
+  writes `<base>-part1.stl`, `-part2.stl`, largest first, via the new
+  `MeshShells.Separate`. If a future slice wants multiple documents, it is a
+  milestone, not a corner of something else.
+- **`MeshDiagnosticsReport` now distinguishes defects from notes.** `Defects` /
+  `DefectCount` are everything at Warning or above; `Info` findings describe the
+  model rather than fault it. The status line and the viewport's red highlight
+  both read `Defects`. **Anything new that surfaces "issues" to a user should
+  read `DefectCount`, not `Issues.Count`** — the first version of this fix left
+  the status line saying "0 issues found" while the viewport painted half the
+  model red, because those two disagreed about what an issue was.
+- **A disconnected shell at or above 1% of total volume is a `SeparatePart`, not
+  debris.** Same threshold `SmallShellRemovalRepair` defaults to, on purpose:
+  what Auto Repair may delete and what Inspect calls debris must not drift.
+- The separation is a **pure translation along the cut normal**, and the test
+  that pins it re-mates the halves and requires the original bounding box back to
+  nine decimal places. That is what keeps registration pins meaningful, and it is
+  the assertion to preserve if the gap rule ever changes.
+- The pre-fix build was rebuilt in a throwaway `git worktree` to capture the
+  "before" screenshot. Cheap, and worth doing whenever a fix's evidence is a
+  before/after pair.
+
 **22. Decimation introduces the invalid geometry it says it declined to
 create.** Reducing the clean Menger sponge to 734 triangles produced 67
 self-intersections while the panel said further collapses "would have created
@@ -311,12 +352,6 @@ based and has no such exclusion. Inspect can report zero holes on a file whose
 Auto Repair then adds geometry across a seam. Small and sharp. A *different*
 bug from the `DMesh3.Copy` one fixed on 2026-09-06 — don't assume that covered
 it.
-
-**26. A split leaves both halves in one mesh with coincident cut faces.**
-Inspect reports 1,808 issues after splitting the clean Menger sponge, while
-each half measured on its own is closed, single-shell and issue-free. Either
-separate the halves or make a split produce two documents. Found while
-verifying pins (2026-09-06); not caused by them.
 
 **29. Drag-and-drop cannot work on Linux.** Avalonia's X11 backend has no
 drag-and-drop implementation, so a file dropped from a file manager never

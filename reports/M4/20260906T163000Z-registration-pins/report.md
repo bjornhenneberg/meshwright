@@ -99,6 +99,19 @@ Verified live on `Menger_sponge_sample.stl` (2 mm cube, 2,112 triangles):
   Registration pin: Ø0.1 mm peg 0.1 mm long on the positive half, Ø0.12 mm socket
   0.11 mm deep on the negative half (0.01 mm clearance)."*
 
+### Screenshots
+
+This report shipped with no screenshots at all, contrary to `AGENTS.md`. These
+were captured on 2026-09-07 while verifying backlog item 26 — the same feature,
+with the halves now moved apart, which is what makes the peg and socket visible
+at all. The pin is Ø0.1 mm with 0.005 mm clearance on the 2 mm sponge.
+
+![A pinned split of the Menger sponge, seen from just below the gap between the halves. The peg hangs from the underside of the upper half; the socket bore is the dark circle directly beneath it on the top face of the lower half. The two sit on one axis, which is the whole claim the feature makes: the halves locate each other when they go back together.](pinned-split-peg-and-socket.png)
+
+![The same pinned split, whole window. Diagnostics: 2,820 triangles, 2 shells, volume 4.389, bounds 2 x 2 x 3.1 — the model's 2 mm plus the 1 mm separation plus the 0.1 mm peg. Status line: 0 issues found.](pinned-split-whole-window.png)
+
+![The panel's own account: "Split into two shells with 260 cap triangles (2112 -> 2820 triangles, 1410 on the negative side). Halves moved 1.1 mm apart along the cut normal so they do not touch. Registration pin: Ø0.1 mm peg 0.1 mm long on the positive half, Ø0.11 mm socket 0.105 mm deep on the negative half (0.005 mm clearance)." Every figure is measured off the finished mesh, not restated from the request.](pinned-split-result-message.png)
+
 ## Fixed on the way
 
 Gizmos were depth-tested against the mesh, so a gizmo *inside* the solid drew
@@ -114,6 +127,7 @@ Two new backlog items (26 and 27), both pre-existing and neither caused by pins:
 
 - A split leaves both halves in one mesh with coincident cut faces, so Inspect
   reports 1,808 issues on a clean sponge that measures issue-free one half at a
-  time.
+  time. *(Fixed 2026-09-07 —
+  `reports/M4/20260907T000000Z-split-separate-halves/report.md`.)*
 - A refused operation still raises `Changed`, so it pushes an undo entry and
   resets every gizmo — a user whose pin will not fit loses the pin they placed.

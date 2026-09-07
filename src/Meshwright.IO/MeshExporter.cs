@@ -1,4 +1,5 @@
 using g3;
+using Meshwright.Geometry.Edit;
 using Meshwright.IO.Stl;
 using Meshwright.IO.Wavefront;
 
@@ -47,6 +48,39 @@ public static class MeshExporter
                         ? $"'{path}' has no file extension, so Meshwright cannot tell which format to export."
                         : $"Meshwright cannot export '{other}' files. Supported formats: {string.Join(", ", SupportedExtensions)}.");
         }
+    }
+
+    /// <summary>
+    /// Writes one file per connected shell — one file per printable part — beside
+    /// <paramref name="basePath"/>, named after it with a <c>-part1</c>, <c>-part2</c>… suffix, and
+    /// returns the paths written in the order the parts were numbered (largest part first, see
+    /// <see cref="MeshShells.Separate"/>).
+    ///
+    /// <para>
+    /// A split model is one document holding two solids, and a printer needs them as two objects.
+    /// Handing a slicer the single file works — every slicer can split a multi-body STL — but it
+    /// makes the user do a step this app already has the answer to, and OBJ has no notion of the
+    /// separation at all. The format comes from <paramref name="basePath"/>'s extension, exactly as
+    /// for <see cref="ExportFile"/>.
+    /// </para>
+    /// </summary>
+    public static IReadOnlyList<string> ExportParts(string basePath, DMesh3 mesh)
+    {
+        IReadOnlyList<DMesh3> parts = MeshShells.Separate(mesh);
+
+        string directory = Path.GetDirectoryName(Path.GetFullPath(basePath)) ?? string.Empty;
+        string stem = Path.GetFileNameWithoutExtension(basePath);
+        string extension = Path.GetExtension(basePath);
+
+        var written = new List<string>(parts.Count);
+        for (int i = 0; i < parts.Count; i++)
+        {
+            string path = Path.Combine(directory, $"{stem}-part{i + 1}{extension}");
+            ExportFile(path, parts[i]);
+            written.Add(path);
+        }
+
+        return written;
     }
 
     /// <summary>

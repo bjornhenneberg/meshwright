@@ -6,7 +6,12 @@ using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Meshwright.App;
 using Meshwright.App.Views;
+using g3;
+using Meshwright.Core;
+using Meshwright.Core.Operations;
+using Meshwright.IO;
 using Meshwright.IO.Stl;
+using Meshwright.Tests.Edit;
 using Xunit;
 
 namespace Meshwright.Tests;
@@ -232,6 +237,66 @@ public class MainWindowTests
         {
             File.Delete(path);
         }
+    }
+
+    /// <summary>
+    /// Export Parts is the other half of the split fix (backlog item 26): the split leaves two
+    /// solids in one document, and this writes them as the two files a printer actually needs.
+    /// </summary>
+    [AvaloniaFact]
+    public void ExportPartsForTesting_WritesOneFilePerPartOfASplitModel()
+    {
+        var window = new MainWindow();
+        string directory = Path.Combine(Path.GetTempPath(), $"meshwright-parts-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        string source = Path.Combine(directory, "sponge.stl");
+
+        try
+        {
+            var document = new MeshDocument();
+            document.Load(MengerSponge.BuildLevel2());
+            document.Apply(new PlaneCutSplitOperation(Vector3d.Zero, Vector3d.AxisZ));
+            MeshExporter.ExportFile(source, document.Mesh!);
+
+            window.LoadFileForTesting(source);
+            Assert.Equal(2, window.CurrentReport!.Statistics.ShellCount);
+
+            IReadOnlyList<string> written = window.ExportPartsForTesting(Path.Combine(directory, "half.stl"));
+
+            Assert.Equal(2, written.Count);
+            foreach (string path in written)
+            {
+                Assert.True(File.Exists(path));
+                DMesh3 part = StlReader.ReadFile(path);
+                var partDocument = new MeshDocument();
+                partDocument.Load(part);
+                Assert.Equal(1, partDocument.Report!.Statistics.ShellCount);
+                Assert.Equal(0, partDocument.Report.DefectCount);
+            }
+
+            Assert.Contains("Exported 2 parts", window.StatusMessage);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    /// <summary>
+    /// A single-part model has nothing to split, and asking for a filename first and then writing
+    /// one misleadingly-named "-part1" file would be worse than saying so.
+    /// </summary>
+    [AvaloniaFact]
+    public void ExportParts_OnASinglePartModel_SaysSoInsteadOfWritingAFile()
+    {
+        var window = new MainWindow();
+        var menuItem = (MenuItem)GetField(window, "ExportPartsMenuItem")!;
+
+        Assert.Equal(1, window.CurrentReport!.Statistics.ShellCount);
+
+        menuItem.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(MenuItem.ClickEvent));
+
+        Assert.Contains("single part", window.StatusMessage);
     }
 
     [AvaloniaFact]

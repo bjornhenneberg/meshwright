@@ -11,7 +11,7 @@ truth), M4-7 (non-manifold import fix), M4-3 (CI + packaging,
 all three platforms), M4-4
 (docs/release), M4-8 (make the app do what it says) and M4-9 (correctness
 gaps closed) are complete; see the M4 entry in
-§11 and §7. As of 2026-09-06 the unit suite is 809 passing, 0 skipped, and the GPU
+§11 and §7. As of 2026-09-07 the unit suite is 824 passing, 0 skipped, and the GPU
 suite is 28 passing (always run under `timeout` — see §11).
 
 **Caveat on "complete":** M4-8 found that M2's repair operations and M3's
@@ -721,6 +721,12 @@ source, and matches how this audience already buys tools.
 | 2026-09-06 | **Drag-and-drop is attached to the `Window`, never to `MeshViewportControl`.** On Linux the GL surface does not reliably take part in Avalonia's input routing — which is why `ViewportInputOverlay` exists to forward pointer events at all — so a drop target on the viewport control would be attached to the one control that never sees the event. The tests raise the real routed `DragDrop` events on that overlay and expect the window's handler to see them; moving the four `AddHandler` calls to `Viewport` makes eight of them fail, which is how the placement was checked rather than assumed |
 | 2026-09-06 | **Avalonia's X11 backend has no drag-and-drop implementation, in either direction**, so no file dropped from another application can reach the app on Linux. Measured, not inferred: the running window carries no `XdndAware` property at all while every GTK, Electron and Firefox window on the same display does; setting `XdndAware` by hand still produced nothing (a real GTK drag reached `drag-begin` then `drag-end` with `drag-data-get` never firing, i.e. the target never accepted); and the platform drag-drop types exist in `Avalonia.Win32`, `Avalonia.Native` and `Avalonia.Headless` but not in `Avalonia.X11`, which contains no XDND atoms of any kind. The handling is kept — it is correct for Windows and macOS, and the routing is right everywhere — and the README, the site and the usage guide all say plainly that Linux users should use File → Open, Open Recent, or the command line. Writing our own XDND receiver is item 29 |
 | 2026-09-06 | **A refused operation is not a change** (item 27). `MeshDocument` used to `RefreshReport` unconditionally, so an operation returning `Changed: false` — every refusal path — pushed an undo step for a no-op, cleared the redo stack, and made the window rebuild every gizmo and empty its gizmo slot, so a user whose pin would not fit lost the pin they had positioned. The undo snapshot is now *captured* before the operation, since operations mutate in place, and only *committed* if the operation says it changed something. Suppressing the refresh deliberately does not suppress the explanation: the result is returned either way and the panel shows it, with a test to keep it that way |
+| 2026-09-07 | **A split moves the halves apart, rather than producing two documents** (item 26). Both fixes item 26 offered were available; they are different products, not two spellings of one. Two documents changes the app's single-document model — `MeshDocument`, the one undo stack, the one viewport upload, the Boolean panel's from-a-file secondary mesh and Export all assume exactly one mesh — and it has no undo semantics, since undoing "produced a second document" is not a mesh edit. Separating the halves keeps all of that and is undoable, and its one real weakness, that the user is left with one file holding two solids, is closed in the same slice by **Export Parts**. The separation is a **pure translation along the cut normal**, which is what keeps registration pins meaningful: translating the negative half back by the gap reproduces the original bounding box to nine decimal places, so the halves still mate |
+| 2026-09-07 | The gap is **peg protrusion + max(1 mm, 5% of the model's extent along the cut normal)**. The millimetre is a floor rather than the whole rule because a millimetre is half the 2 mm Menger sponge and invisible beside the 120 mm Eiffel tower; the 5% makes the gap read the same at both. The floor is a millimetre because a slicer only treats two solids as two objects if a nozzle can pass between them and 0.8 mm is the widest nozzle in common use. The peg term is the one a fix would most easily miss: a registration peg stands proud of its mating face and is still inside its socket until the halves are pulled apart by at least its own length, so a gap chosen without it leaves the halves interpenetrating — the exact defect being fixed, visible only when a pin is asked for. The test asserts the gap is **strictly greater** than the peg protrusion measured off the finished mesh, not that a pinned split "works" |
+| 2026-09-07 | **Half a model is not debris, and a note is not a defect.** `DisconnectedShellDetector` reported every non-largest shell as a "Stray disconnected shell" at Warning severity, so a deliberately split model arrived with 50% of its volume described as something to clean up. A shell at or above **1% of total volume** — the same threshold `SmallShellRemovalRepair` defaults to, so what Auto Repair is willing to delete and what Inspect is willing to call debris cannot drift apart — is now a `SeparatePart` at `Info` severity. `MeshDiagnosticsReport` grew `Defects`/`DefectCount` for everything at Warning or above, and the status line counts those: a split model reads "0 issues found" with "No issues found. 1 separate part." beside it, which is the whole of what is true about it |
+| 2026-09-07 | The viewport highlights **defects**, not findings. With the count fixed, the status line said "0 issues found" while `MeshViewportControl` painted the entire lower half in the defect colour, because it flagged every issue's triangles and the `SeparatePart` note covers half the mesh — the picture contradicting the words beside it. Found by running the app after the suite was green, the fourth time in five slices that the only evidence was on screen. The collection is now a `Highlights(report)` static that a unit test can call without a GL context, asserted empty on a split model and non-empty on `BrokenSample.stl` as the control |
+| 2026-09-07 | **Export Parts writes one file per shell**, `<base>-part1.stl`, `-part2.stl`, largest part first, and refuses on a single-part model rather than writing one misleadingly-named file. It is what makes separating the halves a complete answer instead of handing the user one file to take apart somewhere else: every slicer can split a multi-body STL, but that is a step this app already has the answer to, and OBJ carries no notion of the separation at all. The decomposition is `MeshShells.Separate`, shared with the tests that measure each half on its own, so the export and the assertions cannot disagree about what a part is |
+| 2026-09-07 | The invariant for a split is measured on **each half individually**, never on the issue count. "Fewer issues than before" and `TriangleCount > 0` both pass for a fix that quietly drops one half — the failure this log records for the plane cut twice already — so the tests decompose the result and require of each half that it is closed, one shell and defect-free, that the two volumes sum to the original to six decimal places, and that each is 40–60% of it. The merged mesh is separately asserted to carry no `SelfIntersection`, `NonManifoldEdge` or `DuplicateVertex`, naming the three categories the 1,808 were made of |
 
 ## 12. Development environment
 
@@ -914,17 +920,20 @@ M0.
     2026-09-06. `BoundaryHoleDetector` excludes seams by position;
     `HoleFillRepair` finds loops by vertex index and does not.
 
-26. **A split leaves both halves in one mesh with coincident cut faces.**
-    `PlaneCutSplitOperation` appends the negative half into the same `DMesh3` as
-    the positive one, and the two caps occupy exactly the same plane and area, so
-    every cap triangle overlaps its opposite number. Splitting the clean Menger
-    sponge sample in the running app reports **1,808 issues** where the two halves
-    measured separately have none at all — each is closed, single-shell and
-    issue-free (verified 2026-09-06 while building item 25; pins add geometry to
-    both caps and take it to 2,072, but they are not the cause and the pinned
-    halves are individually just as clean). Either the halves should be separated
-    before being merged, or a split should produce two documents rather than one
-    mesh. Found while verifying pins, not caused by them.
+26. ~~**A split leaves both halves in one mesh with coincident cut faces.**~~ —
+    done 2026-09-07, see
+    `reports/M4/20260907T000000Z-split-separate-halves/report.md`. The halves are
+    moved apart along the cut normal before being merged, by the peg protrusion
+    plus `max(1 mm, 5% of the extent along the normal)`; the 1,808 issues on the
+    Menger sponge sample are 0, and each half is closed, single-shell and
+    defect-free with the two volumes summing to the original. Two documents was
+    considered and rejected as a change to the single-document model with no undo
+    semantics; the file-per-part gap it would have closed is closed instead by
+    **File → Export Parts**. Two things came out from under it: Inspect called the
+    second half a "stray disconnected shell" at Warning severity (it is now a
+    `SeparatePart` at Info, and the status line counts defects), and the viewport
+    painted that half in the defect colour while the status line said 0 issues.
+    See §11.
 
 28. **The cross-section preview does not cap the face it opens.** A solid part
     opened by the slider reads as an open shell, because the preview hides

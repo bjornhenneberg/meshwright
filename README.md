@@ -26,7 +26,8 @@ right listing every problem found](docs/images/overview.png)
   (flat, planar or surface-following), normal unification, small-shell removal,
   self-intersection resolution, and voxel remesh as a last resort.
 - **Edit** — plane cut, booleans (union, difference, intersection), transforms,
-  hollowing to a wall thickness, and drain holes. A cut can generate
+  hollowing to a wall thickness, and drain holes. Splitting a model leaves two
+  separate solids you can export as two files, and a cut can generate
   registration pins, so a model split to fit the bed goes back together aligned.
 - **Simplify** — quadric edge-collapse decimation to a triangle count or a
   percentage, which says when it cannot reach the target instead of reporting a
@@ -42,7 +43,8 @@ right listing every problem found](docs/images/overview.png)
   launch.
 
 Every spatial parameter is set with a gizmo in the viewport, with text boxes as
-the precision fallback. Everything is undoable. STL and OBJ in and out.
+the precision fallback. Everything is undoable. STL and OBJ in and out, one file
+for the model or one file per part.
 
 An STL carries no units, so a model that was drawn in inches loads 25.4x too
 small. Meshwright notices when a model is suspiciously small and **says so** —
