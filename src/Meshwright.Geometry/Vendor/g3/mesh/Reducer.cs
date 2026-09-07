@@ -521,8 +521,28 @@ namespace g3
 			Ignored_Constrained = 4,
 			Ignored_CreatesFlip = 5,
 			Failed_OpNotSuccessful = 6,
-			Failed_NotAnEdge = 7
+			Failed_NotAnEdge = 7,
+
+            // Meshwright deviation from upstream (see VENDOR.md): the result of a subclass
+            // vetoing a collapse through CollapseIsGloballyValid.
+            Ignored_CreatesInvalidGeometry = 8
 		};
+
+        /// <summary>
+        /// Meshwright deviation from upstream (see VENDOR.md). Last veto before the collapse is
+        /// performed, for checks that cannot be decided from the edge's own one-ring.
+        /// <paramref name="keepVid"/> keeps the mesh's identity and moves to
+        /// <paramref name="newPos"/>; <paramref name="removeVid"/> is merged into it, and the two
+        /// triangles <paramref name="t0"/>/<paramref name="t1"/> (the latter
+        /// <see cref="DMesh3.InvalidID"/> on a boundary edge) disappear. The mesh is still in its
+        /// pre-collapse state when this is called, so an implementation must evaluate the
+        /// hypothetical post-collapse geometry itself. Upstream has no such hook and always
+        /// collapses here; returning true reproduces that behaviour exactly.
+        /// </summary>
+        protected virtual bool CollapseIsGloballyValid(int keepVid, int removeVid, ref Vector3d newPos, int t0, int t1)
+        {
+            return true;
+        }
 
 		protected virtual ProcessResult CollapseEdge(int edgeID, Vector3d vNewPos, out int collapseToV) 
 		{
@@ -600,6 +620,13 @@ namespace g3
 				retVal = ProcessResult.Ignored_CreatesFlip;
 				goto skip_to_end;
 			}
+
+            // Meshwright deviation from upstream (see VENDOR.md): a subclass gets the last word,
+            // for invariants the one-ring checks above cannot see.
+            if (CollapseIsGloballyValid(iKeep, iCollapse, ref vNewPos, t0, t1) == false) {
+                retVal = ProcessResult.Ignored_CreatesInvalidGeometry;
+                goto skip_to_end;
+            }
 
             // lots of cases where we cannot collapse, but we should just let
             // mesh sort that out, right?

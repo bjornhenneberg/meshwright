@@ -13,14 +13,25 @@ public sealed class DegenerateTriangleDetector : IMeshDetector
 
     public string Category => "DegenerateTriangle";
 
+    /// <summary>
+    /// The area below which this detector calls a triangle degenerate on <paramref name="mesh"/>.
+    /// Exposed so anything that has to avoid *creating* a degenerate triangle can ask the detector
+    /// that would report it rather than keeping a second copy of the threshold — the two
+    /// disagreeing is exactly how an operation ends up adding a defect it believes it avoided.
+    /// </summary>
+    public static double AreaEpsilonFor(DMesh3 mesh) => Math.Max(
+        AbsoluteAreaEpsilon,
+        RelativeAreaEpsilonFactor * ComputeAverageEdgeLengthSquared(mesh));
+
+    /// <summary>Area of a triangle given by its three corners, in the same terms as the scan below.</summary>
+    public static double AreaOf(Vector3d v0, Vector3d v1, Vector3d v2) =>
+        0.5 * (v1 - v0).Cross(v2 - v0).Length;
+
     public IReadOnlyList<MeshIssue> Detect(DMesh3 mesh)
     {
         var issues = new List<MeshIssue>();
 
-        double averageEdgeLengthSquared = ComputeAverageEdgeLengthSquared(mesh);
-        double areaEpsilon = Math.Max(
-            AbsoluteAreaEpsilon,
-            RelativeAreaEpsilonFactor * averageEdgeLengthSquared);
+        double areaEpsilon = AreaEpsilonFor(mesh);
 
         foreach (int tid in mesh.TriangleIndices())
         {
@@ -29,7 +40,7 @@ public sealed class DegenerateTriangleDetector : IMeshDetector
             Vector3d v1 = mesh.GetVertex(tri.b);
             Vector3d v2 = mesh.GetVertex(tri.c);
 
-            double area = 0.5 * (v1 - v0).Cross(v2 - v0).Length;
+            double area = AreaOf(v0, v1, v2);
 
             if (area < areaEpsilon)
             {

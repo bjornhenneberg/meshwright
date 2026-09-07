@@ -101,12 +101,16 @@ public static class SelfIntersectionSearch
     private static bool IsDegenerate(DMesh3 mesh, int triangleId)
     {
         Index3i tri = mesh.GetTriangle(triangleId);
-        Vector3d v0 = mesh.GetVertex(tri.a);
-        Vector3d v1 = mesh.GetVertex(tri.b);
-        Vector3d v2 = mesh.GetVertex(tri.c);
-
-        return 0.5 * (v1 - v0).Cross(v2 - v0).Length < DegenerateAreaEpsilon;
+        return IsExcludedAsDegenerate(mesh.GetVertex(tri.a), mesh.GetVertex(tri.b), mesh.GetVertex(tri.c));
     }
+
+    /// <summary>
+    /// True for a triangle this search will never report an intersection for. Public so a caller
+    /// trying to avoid creating a self-intersection tests the same triangles this search tests —
+    /// rejecting a collapse over a pair that would never be reported costs reduction for nothing.
+    /// </summary>
+    public static bool IsExcludedAsDegenerate(Vector3d v0, Vector3d v1, Vector3d v2) =>
+        0.5 * (v1 - v0).Cross(v2 - v0).Length < DegenerateAreaEpsilon;
 
     /// <summary>
     /// Absolute zero-area floor. Deliberately far tighter than
