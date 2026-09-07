@@ -7,16 +7,27 @@ cross-platform desktop tool for repairing meshes for 3D printing (C# /
 **Read `SPECIFICATION.md` first.** §5.1 is v1.0 scope, §7 narrates each
 milestone batch, §11 is a dated decision log (read the last ~15 rows — they are
 the most useful pages in the repo), and "Immediate next steps" at the end is
-the backlog. Items 1–21 and 23–27 are done; **22, 28 and 29 are open**. Two
-landed 2026-09-07: **item 26** (`fix/split-separate-halves`,
-`reports/M4/20260907T000000Z-split-separate-halves/report.md`) and **item 24**
-(`fix/hole-fill-seams`, `reports/M4/20260907T020000Z-hole-fill-seams/report.md`),
-with the docs and the site updated in the same pass.
+the backlog. Items 1–27 are done; **28 and 29 are open**, and both are
+platform/rendering work. Three landed 2026-09-07: **item 26**
+(`fix/split-separate-halves`,
+`reports/M4/20260907T000000Z-split-separate-halves/report.md`), **item 24**
+(`fix/hole-fill-seams`, `reports/M4/20260907T020000Z-hole-fill-seams/report.md`)
+and **item 22** (`fix/decimate-validity`,
+`reports/M4/20260907T210000Z-decimate-validity/report.md`), each with the docs
+and the site updated in the same pass.
 
-**Nothing is queued.** Pick from the backlog — **22 is the obvious next one**:
-it is the last correctness gap of the three, it is real geometry, and it is the
-same shape as the two just closed (the app telling the user something untrue
-about geometry it just made). 28 and 29 are both platform/rendering work.
+**Nothing is queued.** The three correctness gaps are closed. What is left on
+the backlog is **28** (capping the cross-section face, which needs an offscreen
+target because Avalonia's framebuffer has no stencil) and **29** (an XDND
+receiver so drag-and-drop works on Linux) — both platform/rendering work with
+real risk, both their own slice.
+
+A fourth candidate came out of item 22 and is not on the backlog yet:
+**decimation is now 25x slower on a large mesh** (23 s to halve the
+139,989-triangle Eiffel tower, against 1.3 s before), because every collapse is
+checked against the whole mesh. It is correct and it runs off the UI thread, but
+it is a real cost. The obvious lever is parallelising the per-collapse candidate
+tests; the guard's state is all per-instance and the tests are independent.
 
 ## How to work
 
@@ -57,7 +68,7 @@ wrong**. §11 is largely a catalogue of it. Treat a success message — includin
 your own — as a claim to check.
 
 1. Build and run `dotnet test tests/Meshwright.Tests -c Release`. Baseline is
-   **830 passing, 0 skipped**. Never accept a newly skipped test without a
+   **844 passing, 0 skipped**. Never accept a newly skipped test without a
    stated reason.
 2. The GPU suite is `tests/Meshwright.Tests.Gpu` (28 tests, ~0.5 s). **Always
    run it under `timeout`** — it used to hang past ten minutes, and a hang
@@ -171,8 +182,10 @@ drain-hole gizmo placed every hole at a hard-coded 2 mm behind a green suite.
 
 ## State
 
-`main` carries the split-separation slice (item 26) and the hole-fill seam fix
-(item 24). **830 tests passing, 0 skipped**; GPU suite **28** passing, both re-run on the merge commit.
+`main` carries the split-separation slice (item 26), the hole-fill seam fix
+(item 24) and the decimation validity fix (item 22). **844 tests passing, 0
+skipped**; GPU suite **28** passing, both re-run on the merge commit, and **CI
+was green on all three platforms** for that merge.
 
 **That merge went red on Windows CI** and needed a follow-up
 (`fix/settings-tests-windows-paths`). Four `AppSettingsTests` asserted on
@@ -356,12 +369,37 @@ slices inherit:
 - A corpus-wide agreement test needs a **second assertion that the corpus still
   contains the case** — otherwise it passes vacuously the day the corpus thins.
 
-**22. Decimation introduces the invalid geometry it says it declined to
-create.** Reducing the clean Menger sponge to 734 triangles produced 67
-self-intersections while the panel said further collapses "would have created
-invalid geometry" — and the status bar reported the 67 in the same frame. The
-local validity test each edge collapse passes has to be checked against
-whole-mesh invariants afterwards. Real geometry work, and self-contained.
+**22. ~~Decimation introduces the invalid geometry it says it declined to
+create.~~ — done 2026-09-07.** Report:
+`reports/M4/20260907T210000Z-decimate-validity/report.md`. The figures in the old
+entry here were wrong: the measured case is **736 triangles and 32
+self-intersections**, not 734 and 67 (corrected in the spec's item 22, its
+2026-09-06 §11 row, and `docs/usage.html`; §5 of usage.html had it right all
+along). Things the next slices inherit:
+
+- **`Reducer` has a veto hook now.** `CollapseIsGloballyValid(keepVid, removeVid,
+  ref newPos, t0, t1)` is a documented vendor deviation, defaulting to `true` =
+  upstream, and `ValidatingReducer` is its only implementor. Anything else that
+  wants to reject a collapse for a reason the one-ring cannot see goes there
+  rather than reimplementing `CollapseEdge`.
+- **A guard must ask the detector, not keep its own copy of the rule.**
+  `DegenerateTriangleDetector.AreaEpsilonFor`,
+  `DuplicateVertexDetector.IsCoincident` and
+  `SelfIntersectionSearch.IsExcludedAsDegenerate` are public for exactly this.
+  Same lesson as item 24 the same day: two rules is the bug.
+- **"No more defects than before" is half a test.** Refusing more collapses
+  passes it perfectly, so the suite also pins that a reachable target is still
+  reached *exactly*, and that the bare reducer still breaks the fixture — without
+  the last one the validity tests go vacuous the day the fixture stops
+  reproducing the bug.
+- **The broadphase is deliberately stale.** A collapse only moves the vertex it
+  keeps, so untouched triangles still match the tree's stored boxes exactly and
+  only the moved ones need separate treatment. Any future per-step spatial query
+  inside a mutation loop can use the same shape instead of rebuilding a tree.
+- The guard refuses only **new** defects, so on an already-broken mesh it can
+  leave a *higher* count than the unguarded reducer, which bulldozed some bad
+  geometry away along with everything else. That is deliberate: it is not a
+  repair.
 
 **24. Hole filling and hole detection disagree about import seams.**
 `BoundaryHoleDetector` excludes seams via `PositionTopology.SeamEdges`;
@@ -398,7 +436,9 @@ grep -n "\[FAIL\]" /tmp/run.txt      # only if the tail says Failed
 ```
 
 Both sightings were on a run that had just built. That may be a coincidence of
-two data points, and it is the only pattern there is.
+two data points, and it is the only pattern there is. Two more full runs on
+2026-09-07 during the item 22 slice — one after a build, one `--no-build` — were
+clean, so it stands at eleven consecutive clean runs since the second sighting.
 
 ## Researching on the web
 
