@@ -1,5 +1,6 @@
 using g3;
 using Meshwright.Core;
+using Meshwright.Geometry.Repair;
 using Meshwright.IO;
 using Xunit;
 using Xunit.Abstractions;
@@ -134,6 +135,50 @@ public class CorpusGroundTruthTests
         Assert.True(failures.Count == 0,
             $"Detectors reported defects on geometry the reference calls clean ({lossless.Count} completely-imported files checked):\n"
             + string.Join("\n", failures));
+    }
+
+    /// <summary>
+    /// Backlog item 24: what Inspect reports as a hole and what Fill Holes fills must be the same
+    /// set. They were derived separately — the detector excluded import seams by position, the
+    /// filler walked <see cref="MeshBoundaryLoops"/> by vertex index and did not — so a repair could
+    /// add geometry across a junction Inspect had correctly called closed. This is not a corner
+    /// case in the corpus: twenty of these files carry seam-only loops, one of them 13,348 of them
+    /// on a mesh with no holes at all.
+    /// </summary>
+    [Fact]
+    public void HoleFillingFillsExactlyTheHolesInspectReports()
+    {
+        List<Loaded> loaded = LoadAll();
+        if (loaded.Count == 0)
+        {
+            _output.WriteLine("Corpus not fetched - run scripts/fetch-corpus.sh. Skipping.");
+            return;
+        }
+
+        var failures = new List<string>();
+        int filesWithSeamOnlyLoops = 0;
+
+        foreach (Loaded l in loaded)
+        {
+            DMesh3 mesh = new DMesh3(l.Import.Mesh);
+            int reported = Count(l, "BoundaryHole");
+            int rawLoops = new MeshBoundaryLoops(mesh).Loops.Count;
+            if (rawLoops > reported)
+            {
+                filesWithSeamOnlyLoops++;
+            }
+
+            HoleFillResult result = HoleFillRepair.Fill(mesh, HoleFillMode.Planar);
+            if (result.HolesFilled != reported)
+            {
+                failures.Add($"{l.Entry.FileName}: Inspect reports {reported} holes, hole filling filled {result.HolesFilled} ({rawLoops} raw boundary loops).");
+            }
+        }
+
+        _output.WriteLine($"{filesWithSeamOnlyLoops} of {loaded.Count} corpus files carry boundary loops that are import seams rather than holes.");
+        Assert.True(filesWithSeamOnlyLoops > 0, "This test proves nothing if no corpus file has a seam-only loop.");
+        Assert.True(failures.Count == 0,
+            "Hole filling and hole detection disagree about what a hole is:\n" + string.Join("\n", failures));
     }
 
     [Fact]

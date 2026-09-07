@@ -85,6 +85,31 @@ public static class PositionTopology
     }
 
     /// <summary>
+    /// The boundary loops that bound a <b>genuine hole</b>: every loop <see cref="MeshBoundaryLoops"/>
+    /// finds, minus those made entirely of <see cref="SeamEdges"/>.
+    ///
+    /// <para>
+    /// This is one method rather than two because detection and repair disagreeing about what a
+    /// hole is has a name and a cost: <see cref="Diagnostics.BoundaryHoleDetector"/> excluded seams
+    /// and <see cref="Repair.HoleFillRepair"/> did not, so Inspect could correctly report zero holes
+    /// on a file whose Auto Repair then draped a second surface over a seam (backlog item 24). A
+    /// loop with any genuinely open edge stays a hole and is returned whole, seam edges included —
+    /// what the surface is missing there is bounded by the whole loop.
+    /// </para>
+    /// </summary>
+    public static IReadOnlyList<EdgeLoop> OpenBoundaryLoops(DMesh3 mesh)
+    {
+        var boundaryLoops = new MeshBoundaryLoops(mesh);
+        if (boundaryLoops.Loops.Count == 0)
+        {
+            return Array.Empty<EdgeLoop>();
+        }
+
+        HashSet<int> seams = SeamEdges(mesh);
+        return boundaryLoops.Loops.Where(loop => !loop.Edges.All(seams.Contains)).ToArray();
+    }
+
+    /// <summary>
     /// Connected components of triangles, joined across coincident edge positions as well as shared
     /// edges — so a surface cut by vertex duplication still counts as one shell.
     /// </summary>
