@@ -381,10 +381,24 @@ own display connection, handling `XdndEnter`/`Position`/`Drop` and
 viewport's input path, so its own slice. Watch upstream first.
 
 
-**An unexplained flake**: one full unit run during the camera slice reported a
-single failure and the name was lost to a grep filter; five consecutive clean
-runs since, and no reproduction. If you see it, capture the whole output rather
-than grepping it away as I did.
+**An unexplained flake, seen twice now.** One full unit run during the camera
+slice reported a single failure; one full unit run on 2026-09-07, immediately
+after the `fix/hole-fill-seams` merge commit was built, reported `Failed: 1,
+Passed: 829`. **Both times the name was lost** — the first to a grep filter, the
+second to a `tail -2`. Nine consecutive clean runs followed the second (six
+`--no-build`, three with a forced rebuild), and the GPU suite was clean in the
+same breath, so there is still no reproduction and no candidate.
+
+Do not repeat the mistake: **redirect the whole run to a file** and read the tail
+from there, so a failure that happens once still has a name:
+
+```bash
+timeout 1800 dotnet test tests/Meshwright.Tests -c Release > /tmp/run.txt 2>&1; tail -3 /tmp/run.txt
+grep -n "\[FAIL\]" /tmp/run.txt      # only if the tail says Failed
+```
+
+Both sightings were on a run that had just built. That may be a coincidence of
+two data points, and it is the only pattern there is.
 
 ## Researching on the web
 
