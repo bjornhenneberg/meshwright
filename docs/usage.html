@@ -555,8 +555,33 @@
     <ul>
       <li><strong>Keep Positive Side</strong> — keeps the half the plane normal points toward.</li>
       <li><strong>Discard Positive Side</strong> — keeps the other half.</li>
-      <li><strong>Split</strong> — keeps <em>both</em> halves, each capped, as separate shells. This is the mode for cutting a model too tall for the printer into parts.</li>
+      <li><strong>Split</strong> — keeps <em>both</em> halves, each capped, and moves them apart so they are two separate solids. This is the mode for cutting a model too tall for the printer into parts.</li>
     </ul>
+    <p>
+      Split moves the two halves apart along the cut normal &mdash; by a
+      millimetre or 5% of the model's size along that axis, whichever is larger,
+      plus the length of a registration peg if there is one. Left exactly where
+      the cut leaves them the two cap faces occupy the same plane over the same
+      area, which Inspect correctly reports as thousands of self-intersections
+      and which a slicer fuses straight back into the model you just cut up. The
+      distance is stated in the panel's result message, the movement is a
+      translation along the cut normal alone &mdash; so the halves still line up,
+      pins and all &mdash; and Undo puts the model back.
+    </p>
+
+    <figure>
+      <img src="images/plane-cut-split.png" width="1740" height="1032"
+           alt="Meshwright after a Split-mode plane cut: the Menger sponge stands as two separate
+                halves one above the other, the status line reads 0 issues found, and the diagnostics
+                panel reports two shells, unchanged volume, and bounds grown from 2 x 2 x 2 to
+                2 x 2 x 3.">
+      <figcaption>
+        Split at the middle: two shells, volume unchanged at 4.39, no issues, and
+        bounds grown from 2 × 2 × 2 to 2 × 2 × 3 &mdash; the extra millimetre is
+        the gap. The diagnostics panel notes the second half as a separate part
+        rather than as a defect.
+      </figcaption>
+    </figure>
     <p>
       Set the plane numerically, or press <strong>Set Plane Via Gizmo</strong> and
       drag it in the viewport. Once the gizmo has been dragged its values win over
@@ -657,8 +682,17 @@
     <p>
       <strong>Export…</strong> writes the current mesh to STL or OBJ, chosen by the
       extension you give it. Check the diagnostics panel first: <em>No issues
-      found</em> and a single shell is what you want before handing the file to a
-      slicer.
+      found</em> is what you want before handing the file to a slicer.
+    </p>
+    <p>
+      <strong>Export Parts…</strong> writes one file per separate part instead of
+      one file for the model. Give it a name and it numbers from that:
+      <code>model.stl</code> becomes <code>model-part1.stl</code>,
+      <code>model-part2.stl</code>, and so on, largest part first. This is what to
+      use after a <strong>Split</strong> &mdash; the two halves live in one
+      document until you export them, and this is the step that turns them into
+      the two files a printer wants. On a model that is a single connected part it
+      says so and writes nothing.
     </p>
   </section>
 
@@ -676,6 +710,16 @@
         that arrived in pieces. On a model with legitimately small separate
         parts, lower the threshold or run the steps individually. Watch the
         bounds in the diagnostics panel: if they shrink, something was deleted.
+      </li>
+      <li>
+        <strong>Aggressive decimation can add the defects it says it refused to
+        create.</strong> Reducing a mesh with many holes and thin walls stalls
+        short of an aggressive target, because each edge collapse that would make
+        the geometry invalid is refused &mdash; and yet the result can carry
+        self-intersections the model did not have before, because that check is
+        made one collapse at a time and not against the whole mesh afterwards.
+        The clean Menger sponge reduced to 734 triangles gains 67 of them. Run
+        Inspect after decimating, and back off the target if the count moves.
       </li>
       <li>
         <strong>Boolean uses the secondary mesh's own file coordinates, with no

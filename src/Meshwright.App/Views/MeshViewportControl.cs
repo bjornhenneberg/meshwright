@@ -305,19 +305,34 @@ public sealed class MeshViewportControl : OpenGlControlBase
 
     private void UploadCurrentMesh(g3.DMesh3 mesh)
     {
-        var flaggedTriangleIds = new HashSet<int>();
-        var flaggedEdges = new List<g3.Index2i>();
-        foreach (MeshIssue issue in _report?.Issues ?? Array.Empty<MeshIssue>())
+        (HashSet<int> flaggedTriangleIds, List<g3.Index2i> flaggedEdges) = Highlights(_report);
+        _renderer!.UploadMesh(mesh, flaggedTriangleIds, flaggedEdges);
+    }
+
+    /// <summary>
+    /// The triangles and edges the viewport paints in the defect colour, taken from
+    /// <see cref="MeshDiagnosticsReport.Defects"/> and <b>not</b> from every finding. The red
+    /// highlight means "this is what is wrong with your model", so an
+    /// <see cref="MeshIssueSeverity.Info"/> finding must not paint anything: after a split the
+    /// second half is a <c>SeparatePart</c> note covering half the triangles, and flagging those
+    /// turned a model the status line correctly called "0 issues found" entirely red (backlog
+    /// item 26). Public so a test can assert it without a GL context.
+    /// </summary>
+    public static (HashSet<int> Triangles, List<g3.Index2i> Edges) Highlights(MeshDiagnosticsReport? report)
+    {
+        var triangles = new HashSet<int>();
+        var edges = new List<g3.Index2i>();
+        foreach (MeshIssue issue in report?.Defects ?? Array.Empty<MeshIssue>())
         {
             foreach (int triangleId in issue.TriangleIds)
             {
-                flaggedTriangleIds.Add(triangleId);
+                triangles.Add(triangleId);
             }
 
-            flaggedEdges.AddRange(issue.EdgeIds);
+            edges.AddRange(issue.EdgeIds);
         }
 
-        _renderer!.UploadMesh(mesh, flaggedTriangleIds, flaggedEdges);
+        return (triangles, edges);
     }
 
     protected override void OnOpenGlDeinit(GlInterface gl)

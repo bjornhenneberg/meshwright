@@ -7,6 +7,10 @@ using Meshwright.Core.Operations;
 using Meshwright.Geometry.Diagnostics;
 using Meshwright.Geometry.Edit;
 using Meshwright.Geometry.Repair;
+using Meshwright.App.Views;
+using Meshwright.IO.Stl;
+using System.IO;
+using System.Runtime.CompilerServices;
 using Xunit;
 
 namespace Meshwright.Tests.Edit;
@@ -14,9 +18,10 @@ namespace Meshwright.Tests.Edit;
 /// <summary>
 /// Backlog item 26: a split used to leave both halves in one mesh with their caps in exactly the
 /// same plane, over exactly the same area. Every cap triangle overlapped its opposite number, so
-/// the clean Menger sponge came out of a centre split reporting <b>1,640</b> issues — 1,304
-/// self-intersections, 208 non-manifold edges and 128 duplicate vertex locations — on a model whose
-/// two halves, measured on their own, were each closed, single-shell and issue-free.
+/// the clean Menger sponge came out of a centre split reporting <b>1,640</b> issues on this
+/// generated fixture — 1,304 self-intersections, 208 non-manifold edges and 128 duplicate vertex
+/// locations — and <b>1,808</b> on <c>Menger_sponge_sample.stl</c> in the running app, on a model
+/// whose two halves, measured on their own, were each closed, single-shell and issue-free.
 ///
 /// <para>
 /// The assertions here are deliberately about <em>each half</em> rather than about the issue count
@@ -276,6 +281,41 @@ public class PlaneCutSplitSeparationTests
         Assert.NotSame(mesh, only);
         Assert.Equal(mesh.TriangleCount, only.TriangleCount);
     }
+
+    /// <summary>
+    /// The viewport paints defects red. It used to paint every finding, so the split model the
+    /// status line called "0 issues found" arrived with its whole second half in the defect colour —
+    /// the picture contradicting the words beside it.
+    /// </summary>
+    [Fact]
+    public void TheViewportHighlightsNothingOnASplitModel()
+    {
+        var document = new MeshDocument();
+        document.Load(MengerSponge.BuildLevel2());
+        document.Apply(new PlaneCutSplitOperation(Vector3d.Zero, Normal));
+
+        Assert.Contains(document.Report!.Issues, issue => issue.TriangleIds.Count > 0);
+
+        (HashSet<int> triangles, List<Index2i> edges) = MeshViewportControl.Highlights(document.Report);
+
+        Assert.Empty(triangles);
+        Assert.Empty(edges);
+    }
+
+    /// <summary>The control: a mesh with real defects must still light up.</summary>
+    [Fact]
+    public void TheViewportStillHighlightsRealDefects()
+    {
+        var document = new MeshDocument();
+        document.Load(StlReader.ReadFile(FixturePath("BrokenSample.stl")));
+
+        (HashSet<int> triangles, List<Index2i> edges) = MeshViewportControl.Highlights(document.Report);
+
+        Assert.NotEmpty(triangles);
+    }
+
+    private static string FixturePath(string fileName, [CallerFilePath] string sourceFile = "") =>
+        Path.Combine(Path.GetDirectoryName(sourceFile)!, "..", "Fixtures", fileName);
 
     private static (Interval1d Positive, Interval1d Negative) HalfExtentsAlongNormal(DMesh3 mesh)
     {
