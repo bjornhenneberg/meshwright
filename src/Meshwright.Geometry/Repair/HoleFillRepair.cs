@@ -23,18 +23,27 @@ public sealed record HoleFillResult(int HolesFilled, int TrianglesAdded);
 
 /// <summary>
 /// Closes open boundary loops (holes) in a mesh by triangulating them (SPECIFICATION.md §5.1).
-/// The repair counterpart to <see cref="Diagnostics.BoundaryHoleDetector"/>: that finds the
-/// loops via <see cref="MeshBoundaryLoops"/>, this fills them the same way.
+/// The repair counterpart to <see cref="Diagnostics.BoundaryHoleDetector"/>: both ask
+/// <see cref="Mesh.PositionTopology.OpenBoundaryLoops"/> which loops are holes, so what Inspect
+/// reports and what this fills are the same set by construction.
+///
+/// <para>
+/// It used to walk <see cref="MeshBoundaryLoops"/> directly, which is vertex-index based and knows
+/// nothing about seams. Import cuts connectivity to represent non-manifold geometry, and every cut
+/// leaves a pair of boundary loops that sit on top of each other, so Auto Repair added a second
+/// surface across a seam that Inspect had correctly reported as no hole at all — a repair inventing
+/// the geometry the diagnostics said was not missing (backlog item 24).
+/// </para>
 /// </summary>
 public static class HoleFillRepair
 {
     /// <summary>Finds every boundary loop in <paramref name="mesh"/> and fills each one in place.</summary>
     public static HoleFillResult Fill(DMesh3 mesh, HoleFillMode mode)
     {
-        var boundaryLoops = new MeshBoundaryLoops(mesh);
+        IReadOnlyList<EdgeLoop> holes = Mesh.PositionTopology.OpenBoundaryLoops(mesh);
         int trianglesAdded = 0;
 
-        foreach (EdgeLoop loop in boundaryLoops.Loops)
+        foreach (EdgeLoop loop in holes)
         {
             trianglesAdded += mode switch
             {
@@ -44,7 +53,7 @@ public static class HoleFillRepair
             };
         }
 
-        return new HoleFillResult(boundaryLoops.Loops.Count, trianglesAdded);
+        return new HoleFillResult(holes.Count, trianglesAdded);
     }
 
     /// <summary>

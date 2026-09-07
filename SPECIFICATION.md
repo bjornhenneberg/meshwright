@@ -11,7 +11,7 @@ truth), M4-7 (non-manifold import fix), M4-3 (CI + packaging,
 all three platforms), M4-4
 (docs/release), M4-8 (make the app do what it says) and M4-9 (correctness
 gaps closed) are complete; see the M4 entry in
-§11 and §7. As of 2026-09-07 the unit suite is 824 passing, 0 skipped, and the GPU
+§11 and §7. As of 2026-09-07 the unit suite is 830 passing, 0 skipped, and the GPU
 suite is 28 passing (always run under `timeout` — see §11).
 
 **Caveat on "complete":** M4-8 found that M2's repair operations and M3's
@@ -727,6 +727,8 @@ source, and matches how this audience already buys tools.
 | 2026-09-07 | The viewport highlights **defects**, not findings. With the count fixed, the status line said "0 issues found" while `MeshViewportControl` painted the entire lower half in the defect colour, because it flagged every issue's triangles and the `SeparatePart` note covers half the mesh — the picture contradicting the words beside it. Found by running the app after the suite was green, the fourth time in five slices that the only evidence was on screen. The collection is now a `Highlights(report)` static that a unit test can call without a GL context, asserted empty on a split model and non-empty on `BrokenSample.stl` as the control |
 | 2026-09-07 | **Export Parts writes one file per shell**, `<base>-part1.stl`, `-part2.stl`, largest part first, and refuses on a single-part model rather than writing one misleadingly-named file. It is what makes separating the halves a complete answer instead of handing the user one file to take apart somewhere else: every slicer can split a multi-body STL, but that is a step this app already has the answer to, and OBJ carries no notion of the separation at all. The decomposition is `MeshShells.Separate`, shared with the tests that measure each half on its own, so the export and the assertions cannot disagree about what a part is |
 | 2026-09-07 | The invariant for a split is measured on **each half individually**, never on the issue count. "Fewer issues than before" and `TriangleCount > 0` both pass for a fix that quietly drops one half — the failure this log records for the plane cut twice already — so the tests decompose the result and require of each half that it is closed, one shell and defect-free, that the two volumes sum to the original to six decimal places, and that each is 40–60% of it. The merged mesh is separately asserted to carry no `SelfIntersection`, `NonManifoldEdge` or `DuplicateVertex`, naming the three categories the 1,808 were made of |
+| 2026-09-07 | **Detection and repair ask one method which loops are holes** (item 24). `BoundaryHoleDetector` excluded import seams by comparing edge positions; `HoleFillRepair` walked `MeshBoundaryLoops` by vertex index and did not, so Inspect could correctly report zero holes on a file whose Fill Holes then draped new geometry across every seam the importer's connectivity cut had left. Measured on `thingi10k-92067.stl`, a mesh Inspect reports 15,012 issues in and **not one hole**: Fill Holes filled 511 of them, added 505 triangles and took the issue count to 29,735. Both sides now call `PositionTopology.OpenBoundaryLoops`, so the two sets are equal by construction rather than by two implementations agreeing — the bug was not that either rule was wrong, it was that there were two of them. A loop with any genuinely open edge is still a hole and is returned **whole**, seam edges included: what the surface is missing there is bounded by the entire loop |
+| 2026-09-07 | Seam-only boundary loops are **common, not a corner case**: 14 of the 24 corpus files carrying Thingi10K ground truth have them, and `thingi10k-204394.stl` has 13,348 on a mesh with no holes at all. The corpus test therefore asserts that hole filling fills exactly the number of holes Inspect reports across every one of those files, and separately that at least one file *has* a seam-only loop — without the second assertion the first goes quietly vacuous the day the corpus is thinned, which is the same "green because it tested nothing" failure this log records for the `DMesh3.Copy` and cap-triangulation cases |
 
 ## 12. Development environment
 
@@ -916,9 +918,12 @@ M0.
     wherever the user clicks on the plane gizmo; clearance goes on the socket
     alone, radially and axially. A pin that does not fit refuses the whole cut
     with the mesh untouched. See §11.
-24. **Hole filling and hole detection disagree about import seams** — see §11,
-    2026-09-06. `BoundaryHoleDetector` excludes seams by position;
-    `HoleFillRepair` finds loops by vertex index and does not.
+24. ~~**Hole filling and hole detection disagree about import seams.**~~ — done
+    2026-09-07, see `reports/M4/20260907T020000Z-hole-fill-seams/report.md`.
+    Both now ask `PositionTopology.OpenBoundaryLoops` which boundary loops are
+    holes, so the reported set and the filled set are equal by construction. The
+    measured case: `thingi10k-92067.stl`, no holes reported, 511 "filled" and the
+    issue count taken from 15,012 to 29,735. See §11.
 
 26. ~~**A split leaves both halves in one mesh with coincident cut faces.**~~ —
     done 2026-09-07, see

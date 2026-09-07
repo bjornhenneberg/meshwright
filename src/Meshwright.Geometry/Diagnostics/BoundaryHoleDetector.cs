@@ -7,7 +7,9 @@ namespace Meshwright.Geometry.Diagnostics;
 /// Detects open boundary loops (holes) in a mesh.
 ///
 /// <para>
-/// Loops made entirely of seam edges are ignored. Where a file contains non-manifold geometry,
+/// Loops made entirely of seam edges are ignored, via <see cref="PositionTopology.OpenBoundaryLoops"/>
+/// — the same call <see cref="Repair.HoleFillRepair"/> uses, so what is reported and what is filled
+/// cannot disagree. Where a file contains non-manifold geometry,
 /// <see cref="NonManifoldMeshBuilder"/> keeps it by cutting the connectivity, which leaves edges
 /// that <see cref="DMesh3"/> calls boundaries even though another edge sits at the same two
 /// positions and the surface plainly continues. Counting those would report thousands of holes in a
@@ -21,17 +23,10 @@ public sealed class BoundaryHoleDetector : IMeshDetector
 
     public IReadOnlyList<MeshIssue> Detect(DMesh3 mesh)
     {
-        var boundaryLoops = new MeshBoundaryLoops(mesh);
-        HashSet<int> seams = PositionTopology.SeamEdges(mesh);
         var issues = new List<MeshIssue>();
 
-        foreach (EdgeLoop loop in boundaryLoops.Loops)
+        foreach (EdgeLoop loop in PositionTopology.OpenBoundaryLoops(mesh))
         {
-            if (loop.Edges.All(seams.Contains))
-            {
-                continue;
-            }
-
             var edgeIds = new List<Index2i>(loop.Edges.Length);
             foreach (int edgeId in loop.Edges)
             {

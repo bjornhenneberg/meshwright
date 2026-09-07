@@ -800,12 +800,12 @@
         surface stays complete, but the seam is now cut where it used to be
         joined. The status bar only warns when triangles are dropped outright,
         which is expected to stay at zero; a file that was split loads with no
-        warning at all. Inspect still reports the junction correctly — its
-        detectors compare vertex positions rather than indices, so they see
-        through the split — but repair operations that walk raw connectivity do
-        not. Hole filling finds its boundary loops by vertex index, so an import
-        seam looks to it exactly like an open hole, and it can add geometry
-        across a junction Inspect correctly reported as no hole at all.
+        warning at all. Inspect reports the junction correctly &mdash; it compares
+        vertex positions rather than indices, so it sees through the split &mdash;
+        and hole filling now asks the same question, so it no longer fills a seam
+        as though it were a hole. What remains is that the seam is there at all:
+        nothing stitches it back up, and Inspect goes on reporting the
+        non-manifold junction underneath it, which is genuinely in the file.
       </li>
       <li>
         <strong>Packaging exists for Linux, Windows and macOS; nothing is signed

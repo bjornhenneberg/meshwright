@@ -7,13 +7,16 @@ cross-platform desktop tool for repairing meshes for 3D printing (C# /
 **Read `SPECIFICATION.md` first.** §5.1 is v1.0 scope, §7 narrates each
 milestone batch, §11 is a dated decision log (read the last ~15 rows — they are
 the most useful pages in the repo), and "Immediate next steps" at the end is
-the backlog. Items 1–21, 23, 25, 26 and 27 are done; **22, 24, 28 and 29 are
-open**. **Item 26 landed 2026-09-07** (`fix/split-separate-halves`, report in
-`reports/M4/20260907T000000Z-split-separate-halves/report.md`), with the docs
-and the site updated in the same pass.
+the backlog. Items 1–21 and 23–27 are done; **22, 28 and 29 are open**. Two
+landed 2026-09-07: **item 26** (`fix/split-separate-halves`,
+`reports/M4/20260907T000000Z-split-separate-halves/report.md`) and **item 24**
+(`fix/hole-fill-seams`, `reports/M4/20260907T020000Z-hole-fill-seams/report.md`),
+with the docs and the site updated in the same pass.
 
-**Nothing is queued.** Pick from the backlog — 24 is the smallest and sharpest,
-22 is the most real geometry.
+**Nothing is queued.** Pick from the backlog — **22 is the obvious next one**:
+it is the last correctness gap of the three, it is real geometry, and it is the
+same shape as the two just closed (the app telling the user something untrue
+about geometry it just made). 28 and 29 are both platform/rendering work.
 
 ## How to work
 
@@ -54,7 +57,7 @@ wrong**. §11 is largely a catalogue of it. Treat a success message — includin
 your own — as a claim to check.
 
 1. Build and run `dotnet test tests/Meshwright.Tests -c Release`. Baseline is
-   **824 passing, 0 skipped**. Never accept a newly skipped test without a
+   **830 passing, 0 skipped**. Never accept a newly skipped test without a
    stated reason.
 2. The GPU suite is `tests/Meshwright.Tests.Gpu` (28 tests, ~0.5 s). **Always
    run it under `timeout`** — it used to hang past ten minutes, and a hang
@@ -168,8 +171,8 @@ drain-hole gizmo placed every hole at a hard-coded 2 mm behind a green suite.
 
 ## State
 
-`main` carries the split-separation slice (item 26). **824 tests passing, 0
-skipped**; GPU suite **28** passing, both re-run on the merge commit.
+`main` carries the split-separation slice (item 26) and the hole-fill seam fix
+(item 24). **830 tests passing, 0 skipped**; GPU suite **28** passing, both re-run on the merge commit.
 
 **That merge went red on Windows CI** and needed a follow-up
 (`fix/settings-tests-windows-paths`). Four `AppSettingsTests` asserted on
@@ -184,7 +187,7 @@ asserting against `Path.GetFullPath(input)` rather than a literal is usually the
 whole fix. Do not merge and walk away — wait for the run.
 
 `README.md`, `docs/index.html` and `docs/usage.html` are current as of the
-split-separation slice. `README.md` was rewritten on 2026-09-06: it had become an
+hole-fill seam fix. `README.md` was rewritten on 2026-09-06: it had become an
 index into `SPECIFICATION.md` (milestone codes as the status, "see §8" for the
 licence, `reports/M4/` for the platform split), and now answers what a stranger
 opens a repo to find out. **Keep it that way** — when you finish a slice, update
@@ -337,6 +340,21 @@ slices inherit:
 - The pre-fix build was rebuilt in a throwaway `git worktree` to capture the
   "before" screenshot. Cheap, and worth doing whenever a fix's evidence is a
   before/after pair.
+
+**24. ~~Hole filling and hole detection disagree about import seams.~~ — done
+2026-09-07.** Both sides now call `PositionTopology.OpenBoundaryLoops`. Report:
+`reports/M4/20260907T020000Z-hole-fill-seams/report.md`. Worth knowing:
+
+- **`tests/corpus/files/` is fetched on this machine** (87 files; the directory
+  is gitignored, so CI skips the corpus tests). It is the fastest way to find
+  out whether a defect is a corner case or the norm — 14 of the 24 files with
+  ground truth carry seam-only boundary loops. Scan it with a throwaway test
+  before assuming a bug is rare.
+- **`thingi10k-92067.stl` is a good adversarial fixture**: 1,386 triangles,
+  1,037 shells, 15,012 issues, and not one hole. Small enough to open instantly,
+  broken enough that almost any repair defect shows up on it.
+- A corpus-wide agreement test needs a **second assertion that the corpus still
+  contains the case** — otherwise it passes vacuously the day the corpus thins.
 
 **22. Decimation introduces the invalid geometry it says it declined to
 create.** Reducing the clean Menger sponge to 734 triangles produced 67
