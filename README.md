@@ -30,8 +30,9 @@ right listing every problem found](docs/images/overview.png)
   separate solids you can export as two files, and a cut can generate
   registration pins, so a model split to fit the bed goes back together aligned.
 - **Simplify** — quadric edge-collapse decimation to a triangle count or a
-  percentage, which says when it cannot reach the target instead of reporting a
-  shortfall as success.
+  percentage. It will not break the model to hit a number: every collapse is
+  checked against the whole mesh, so a clean model comes back clean, and when the
+  target is out of reach it says so instead of reporting a shortfall as success.
 - **See it on the bed** — a build plate sized to your printer, with a warning
   naming any side the model hangs over and by how much. Orthographic or
   perspective, seven view presets, wireframe and x-ray.
