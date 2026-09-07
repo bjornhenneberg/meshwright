@@ -725,6 +725,84 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// Writes one file per separate part. A split leaves the model as two solids in one document
+    /// (see <see cref="PlaneCutSplitOperation"/>), and this is the step that turns them into the
+    /// two files a printer wants, without the user going hunting for a "split to objects" button in
+    /// their slicer. Refuses up front when the model is a single part, rather than asking for a
+    /// filename and then writing one file with a misleading <c>-part1</c> in its name.
+    /// </summary>
+    private async void OnExportPartsClick(object? sender, RoutedEventArgs e)
+    {
+        if (_document.IsBusy)
+        {
+            return;
+        }
+
+        if (_document.Mesh is not { } mesh)
+        {
+            StatusText.Text = "Nothing to export";
+            return;
+        }
+
+        if (_document.Report is { Statistics.ShellCount: < 2 })
+        {
+            StatusText.Text = "This model is a single part — use File → Export.";
+            return;
+        }
+
+        var topLevel = TopLevel.GetTopLevel(this);
+        if (topLevel?.StorageProvider is not { } storageProvider)
+        {
+            return;
+        }
+
+        var file = await storageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "Export parts — one file per part, numbered from this name",
+            FileTypeChoices = new[]
+            {
+                new FilePickerFileType("STL files") { Patterns = new[] { "*.stl" } },
+                new FilePickerFileType("OBJ files") { Patterns = new[] { "*.obj" } },
+            },
+        });
+
+        if (file?.Path.LocalPath is not { Length: > 0 } basePath)
+        {
+            return;
+        }
+
+        ExportPartsTo(basePath);
+    }
+
+    /// <summary>Exports one file per part to a base path through the real export pipeline,
+    /// bypassing the save-file picker dialog; used by integration tests that can't drive an OS
+    /// file picker headlessly.</summary>
+    public IReadOnlyList<string> ExportPartsForTesting(string basePath) => ExportPartsTo(basePath);
+
+    private IReadOnlyList<string> ExportPartsTo(string basePath)
+    {
+        if (_document.Mesh is not { } mesh)
+        {
+            StatusText.Text = "Nothing to export";
+            return Array.Empty<string>();
+        }
+
+        try
+        {
+            IReadOnlyList<string> written = MeshExporter.ExportParts(basePath, mesh);
+            StatusText.Text = written.Count == 1
+                ? $"Exported 1 part: {Path.GetFileName(written[0])}"
+                : $"Exported {written.Count} parts: {string.Join(", ", written.Select(Path.GetFileName))}";
+            return written;
+        }
+        catch (Exception ex)
+        {
+            StatusText.Text = $"Failed to export parts: {ex.Message}";
+            return Array.Empty<string>();
+        }
+    }
+
     /// <summary>Exports the current mesh to a path through the real export pipeline, bypassing the
     /// save-file picker dialog; used by integration tests that can't drive an OS file picker
     /// headlessly.</summary>
@@ -876,7 +954,10 @@ public partial class MainWindow : Window
         RefreshCrossSection();
     }
 
-    /// <summary>Sets the status line to "&lt;what just happened&gt; (N triangles) — N issues found".</summary>
+    /// <summary>Sets the status line to "&lt;what just happened&gt; (N triangles) — N issues found".
+    /// The count is <see cref="MeshDiagnosticsReport.DefectCount"/>, not every finding: after a
+    /// split the model legitimately holds two parts, and reporting that as an issue would say the
+    /// operation broke something it did not.</summary>
     private void SetStatus(string prefix)
     {
         if (_document.Mesh is not { } mesh || _document.Report is not { } report)
@@ -885,7 +966,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        StatusText.Text = $"{prefix} ({mesh.TriangleCount} triangles) — {report.Issues.Count} issues found";
+        StatusText.Text = $"{prefix} ({mesh.TriangleCount} triangles) — {report.DefectCount} issues found";
     }
 
     private void RefreshUndoRedoState()
@@ -920,6 +1001,7 @@ public partial class MainWindow : Window
         EditTabControl.IsEnabled = !busy;
         OpenMenuItem.IsEnabled = !busy;
         ExportMenuItem.IsEnabled = !busy;
+        ExportPartsMenuItem.IsEnabled = !busy;
         OpenFileButton.IsEnabled = !busy;
         ExportFileButton.IsEnabled = !busy;
         RefreshUndoRedoState();

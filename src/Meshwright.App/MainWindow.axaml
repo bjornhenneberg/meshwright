@@ -14,6 +14,8 @@
         <!-- Filled in code from AppSettings.RecentFiles; see RefreshRecentFilesMenu. -->
         <MenuItem Name="RecentFilesMenuItem" Header="Open _Recent" />
         <MenuItem Name="ExportMenuItem" Header="_Export..." Click="OnExportFileClick" />
+        <MenuItem Name="ExportPartsMenuItem" Header="Export _Parts..." Click="OnExportPartsClick"
+                  ToolTip.Tip="Write one file per separate part, e.g. after a split" />
         <Separator />
         <MenuItem Header="E_xit" Click="OnExitClick" />
       </MenuItem>
